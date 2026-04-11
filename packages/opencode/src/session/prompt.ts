@@ -49,6 +49,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
+import { SessionDebug } from "./debug"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -66,6 +67,54 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   const elog = EffectLogger.create({ service: "session.prompt" })
+
+  function part(input: MessageV2.Part) {
+    switch (input.type) {
+      case "text":
+        return {
+          id: input.id,
+          type: input.type,
+          synthetic: input.synthetic ?? false,
+          text: input.text.slice(0, 400),
+        }
+      case "file":
+        return {
+          id: input.id,
+          type: input.type,
+          filename: input.filename,
+          mime: input.mime,
+          source: input.source?.type,
+        }
+      case "agent":
+        return {
+          id: input.id,
+          type: input.type,
+          name: input.name,
+        }
+      case "tool":
+        return {
+          id: input.id,
+          type: input.type,
+          tool: input.tool,
+          status: input.state.status,
+        }
+      default:
+        return {
+          id: input.id,
+          type: input.type,
+        }
+    }
+  }
+
+  function message(input: MessageV2.WithParts) {
+    return {
+      id: input.info.id,
+      role: input.info.role,
+      agent: "agent" in input.info ? input.info.agent : undefined,
+      summary: "summary" in input.info ? input.info.summary : undefined,
+      parts: input.parts.map(part),
+    }
+  }
 
   export interface Interface {
     readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
@@ -108,6 +157,14 @@ export namespace SessionPrompt {
           Effect.runPromise(effect.pipe(Effect.provide(EffectLogger.layer))),
         fork: <A, E>(effect: Effect.Effect<A, E>) => Effect.runFork(effect.pipe(Effect.provide(EffectLogger.layer))),
       }
+      const trace = (input: {
+        sessionID: SessionID
+        stage: string
+        title: string
+        data?: Record<string, any>
+        force?: boolean
+      }) =>
+        Effect.promise(() => SessionDebug.trace(input)).pipe(Effect.ignore, Effect.forkIn(scope))
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
         yield* elog.info("cancel", { sessionID })
@@ -1261,6 +1318,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
         yield* sessions.updateMessage(info)
         for (const part of parts) yield* sessions.updatePart(part)
+        yield* trace({
+          sessionID: input.sessionID,
+          stage: "prompt.received",
+          title: "Prompt received",
+          data: {
+            messageID: info.id,
+            agent: info.agent,
+            model: info.model,
+            format: info.format,
+            system: info.system,
+            parts: parts.map(part),
+          },
+        })
 
         return { info, parts }
       }, Effect.scoped)
@@ -1378,6 +1448,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               lastFinished.summary !== true &&
               (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
             ) {
+              yield* trace({
+                  sessionID,
+                  stage: "overflow.detected",
+                  title: "Context overflow detected",
+                  data: {
+                    messageID: lastFinished.id,
+                  tokens: lastFinished.tokens,
+                  model: {
+                    providerID: model.providerID,
+                      modelID: model.id,
+                    },
+                  },
+                })
               yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
               continue
             }
@@ -1393,6 +1476,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const maxSteps = agent.steps ?? Infinity
             const isLastStep = step >= maxSteps
             msgs = yield* insertReminders({ messages: msgs, agent, session })
+            yield* trace({
+              sessionID,
+              stage: "loop.step",
+              title: "Loop step started",
+              data: {
+                step,
+                agent: agent.name,
+                sessionID,
+                messageCount: msgs.length,
+                lastUserID: lastUser.id,
+              },
+            })
 
             const msg: MessageV2.Assistant = {
               id: MessageID.ascending(),
@@ -1460,6 +1555,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }
 
               yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+              yield* trace({
+                sessionID,
+                stage: "hook.messages",
+                title: "Messages transformed",
+                data: {
+                  hook: "experimental.chat.messages.transform",
+                  messages: msgs.map(message),
+                },
+              })
 
               const [skills, env, instructions, modelMsgs] = yield* Effect.all([
                 Effect.promise(() => SystemPrompt.skills(agent)),
@@ -1470,6 +1574,49 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               const system = [...env, ...(skills ? [skills] : []), ...instructions]
               const format = lastUser.format ?? { type: "text" as const }
               if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+              yield* trace({
+                sessionID,
+                stage: "context.assembled",
+                title: "Context assembled",
+                data: {
+                  step,
+                  assistantMessageID: msg.id,
+                  userMessageID: lastUser.id,
+                  agent: agent.name,
+                  model: {
+                    id: model.id,
+                    providerID: model.providerID,
+                  },
+                  format,
+                  system,
+                  tools: Object.entries(tools).map(([id, item]) => ({
+                    id,
+                    description: item.description,
+                  })),
+                  messages: msgs.map(message),
+                  modelMessages: modelMsgs.map((item, index) => ({
+                    index,
+                    role: item.role,
+                    content:
+                      typeof item.content === "string"
+                        ? item.content.slice(0, 800)
+                        : JSON.stringify(item.content).slice(0, 800),
+                  })),
+                },
+              })
+              yield* trace({
+                sessionID,
+                stage: "model.started",
+                title: "Model started",
+                data: {
+                  step,
+                  assistantMessageID: msg.id,
+                  agent: agent.name,
+                  providerID: model.providerID,
+                  modelID: model.id,
+                  toolChoice: format.type === "json_schema" ? "required" : undefined,
+                },
+              })
               const result = yield* handle.process({
                 user: lastUser,
                 agent,
@@ -1487,6 +1634,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 handle.message.structured = structured
                 handle.message.finish = handle.message.finish ?? "stop"
                 yield* sessions.updateMessage(handle.message)
+                yield* trace({
+                  sessionID,
+                  stage: "answer.finalized",
+                  title: "Answer finalized",
+                  data: {
+                    assistantMessageID: handle.message.id,
+                    finish: handle.message.finish,
+                    structured: true,
+                    error: handle.message.error,
+                  },
+                })
                 return "break" as const
               }
 
@@ -1510,6 +1668,20 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   model: lastUser.model,
                   auto: true,
                   overflow: !handle.message.finish,
+                })
+              }
+              if (handle.message.finish || handle.message.error) {
+                yield* trace({
+                  sessionID,
+                  stage: "answer.finalized",
+                  title: "Answer finalized",
+                  data: {
+                    assistantMessageID: handle.message.id,
+                    finish: handle.message.finish,
+                    error: handle.message.error,
+                    tokens: handle.message.tokens,
+                    cost: handle.message.cost,
+                  },
                 })
               }
               return "continue" as const

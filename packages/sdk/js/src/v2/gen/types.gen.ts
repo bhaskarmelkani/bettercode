@@ -439,6 +439,32 @@ export type EventSessionIdle = {
   }
 }
 
+export type SessionDebugToggle = {
+  sessionID: string
+  enabled: boolean
+}
+
+export type EventSessionDebugUpdated = {
+  type: "session.debug.updated"
+  properties: SessionDebugToggle
+}
+
+export type SessionDebugEntry = {
+  id: string
+  sessionID: string
+  time: number
+  stage: string
+  title: string
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type EventSessionDebugTrace = {
+  type: "session.debug.trace"
+  properties: SessionDebugEntry
+}
+
 export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
@@ -1003,6 +1029,8 @@ export type Event =
   | EventQuestionRejected
   | EventSessionStatus
   | EventSessionIdle
+  | EventSessionDebugUpdated
+  | EventSessionDebugTrace
   | EventSessionCompacted
   | EventTodoUpdated
   | EventWorktreeReady
@@ -3834,6 +3862,68 @@ export type PartUpdateResponses = {
 }
 
 export type PartUpdateResponse = PartUpdateResponses[keyof PartUpdateResponses]
+
+export type SessionDebugGetData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/debug"
+}
+
+export type SessionDebugGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SessionDebugGetError = SessionDebugGetErrors[keyof SessionDebugGetErrors]
+
+export type SessionDebugGetResponses = {
+  /**
+   * Session debug state
+   */
+  200: SessionDebugToggle
+}
+
+export type SessionDebugGetResponse = SessionDebugGetResponses[keyof SessionDebugGetResponses]
+
+export type SessionDebugUpdateData = {
+  body?: {
+    enabled: boolean
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/debug"
+}
+
+export type SessionDebugUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SessionDebugUpdateError = SessionDebugUpdateErrors[keyof SessionDebugUpdateErrors]
+
+export type SessionDebugUpdateResponses = {
+  /**
+   * Updated session debug state
+   */
+  200: SessionDebugToggle
+}
+
+export type SessionDebugUpdateResponse = SessionDebugUpdateResponses[keyof SessionDebugUpdateResponses]
 
 export type SessionPromptAsyncData = {
   body?: {

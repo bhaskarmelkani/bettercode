@@ -11,12 +11,56 @@ import type {
   SnapshotFileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
-import type { State, VcsCache } from "./types"
+import type { DebugEntry, DebugRaw, State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
+const DEBUG_LIMIT = 500
+
+const makeID = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+const entry = (sessionID: string, stage: string, title: string, data: Record<string, any> = {}): DebugEntry => ({
+  id: makeID(),
+  sessionID,
+  time: Date.now(),
+  stage,
+  title,
+  data,
+})
+
+function appendTrace(setStore: SetStoreFunction<State>, sessionID: string, item: DebugEntry) {
+  setStore(
+    "debug_trace",
+    sessionID,
+    produce((draft = []) => {
+      draft.push(item)
+      if (draft.length > DEBUG_LIMIT) draft.splice(0, draft.length - DEBUG_LIMIT)
+      return draft
+    }),
+  )
+}
+
+function appendRaw(setStore: SetStoreFunction<State>, sessionID: string, item: DebugRaw) {
+  setStore(
+    "debug_raw",
+    sessionID,
+    produce((draft = []) => {
+      draft.push(item)
+      if (draft.length > DEBUG_LIMIT) draft.splice(0, draft.length - DEBUG_LIMIT)
+      return draft
+    }),
+  )
+}
+
+function sessionID(event: { type: string; properties?: unknown }) {
+  const props = event.properties as Record<string, any> | undefined
+  if (!props) return
+  if (typeof props.sessionID === "string") return props.sessionID
+  if (typeof props.info?.sessionID === "string") return props.info.sessionID
+  if (typeof props.part?.sessionID === "string") return props.part.sessionID
+}
 
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
@@ -97,6 +141,21 @@ export function applyDirectoryEvent(input: {
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
 }) {
   const event = input.event
+  const debugSessionID = sessionID(event)
+  const debugEnabled = input.store.debug_enabled ?? {}
+  if (
+    debugSessionID &&
+    (debugEnabled[debugSessionID] ||
+      event.type === "session.debug.updated" ||
+      event.type === "session.debug.trace")
+  ) {
+    appendRaw(input.setStore, debugSessionID, {
+      id: makeID(),
+      time: Date.now(),
+      type: event.type,
+      properties: event.properties,
+    })
+  }
   switch (event.type) {
     case "server.instance.disposed": {
       input.push(input.directory)
@@ -182,20 +241,31 @@ export function applyDirectoryEvent(input: {
       const messages = input.store.message[info.sessionID]
       if (!messages) {
         input.setStore("message", info.sessionID, [info])
-        break
+      } else {
+        const result = Binary.search(messages, info.id, (m) => m.id)
+        if (result.found) {
+          input.setStore("message", info.sessionID, result.index, reconcile(info))
+        } else {
+          input.setStore(
+            "message",
+            info.sessionID,
+            produce((draft) => {
+              draft.splice(result.index, 0, info)
+            }),
+          )
+        }
       }
-      const result = Binary.search(messages, info.id, (m) => m.id)
-      if (result.found) {
-        input.setStore("message", info.sessionID, result.index, reconcile(info))
-        break
+      if (info.role === "assistant" && debugEnabled[info.sessionID]) {
+        appendTrace(
+          input.setStore,
+          info.sessionID,
+          entry(info.sessionID, "answer.finalized", "Answer finalized", {
+            assistantMessageID: info.id,
+            finish: info.finish,
+            error: info.error,
+          }),
+        )
       }
-      input.setStore(
-        "message",
-        info.sessionID,
-        produce((draft) => {
-          draft.splice(result.index, 0, info)
-        }),
-      )
       break
     }
     case "message.removed": {
@@ -214,24 +284,65 @@ export function applyDirectoryEvent(input: {
     }
     case "message.part.updated": {
       const part = (event.properties as { part: Part }).part
-      if (SKIP_PARTS.has(part.type)) break
-      const parts = input.store.part[part.messageID]
-      if (!parts) {
-        input.setStore("part", part.messageID, [part])
-        break
+      if (!SKIP_PARTS.has(part.type)) {
+        const parts = input.store.part[part.messageID]
+        if (!parts) {
+          input.setStore("part", part.messageID, [part])
+        } else {
+          const result = Binary.search(parts, part.id, (p) => p.id)
+          if (result.found) {
+            input.setStore("part", part.messageID, result.index, reconcile(part))
+          } else {
+            input.setStore(
+              "part",
+              part.messageID,
+              produce((draft) => {
+                draft.splice(result.index, 0, part)
+              }),
+            )
+          }
+        }
       }
-      const result = Binary.search(parts, part.id, (p) => p.id)
-      if (result.found) {
-        input.setStore("part", part.messageID, result.index, reconcile(part))
-        break
+      if (debugEnabled[part.sessionID]) {
+        if (part.type === "reasoning") {
+          appendTrace(
+            input.setStore,
+            part.sessionID,
+            entry(part.sessionID, "reasoning", "Reasoning", {
+              messageID: part.messageID,
+              partID: part.id,
+              text: part.text.slice(0, 400),
+            }),
+          )
+        }
+        if (part.type === "tool") {
+          appendTrace(
+            input.setStore,
+            part.sessionID,
+            entry(
+              part.sessionID,
+              `tool.${part.state.status}`,
+              part.state.status === "pending"
+                ? "Tool selected"
+                : part.state.status === "running"
+                  ? "Tool running"
+                  : part.state.status === "completed"
+                    ? "Tool completed"
+                    : "Tool failed",
+              {
+                messageID: part.messageID,
+                partID: part.id,
+                tool: part.tool,
+                callID: part.callID,
+                state: part.state,
+                files: Object.values(part.state.input ?? {}).filter(
+                  (value) => typeof value === "string" && /[./\\]/.test(value),
+                ),
+              },
+            ),
+          )
+        }
       }
-      input.setStore(
-        "part",
-        part.messageID,
-        produce((draft) => {
-          draft.splice(result.index, 0, part)
-        }),
-      )
       break
     }
     case "message.part.removed": {
@@ -284,20 +395,31 @@ export function applyDirectoryEvent(input: {
       const permissions = input.store.permission[permission.sessionID]
       if (!permissions) {
         input.setStore("permission", permission.sessionID, [permission])
-        break
+      } else {
+        const result = Binary.search(permissions, permission.id, (p) => p.id)
+        if (result.found) {
+          input.setStore("permission", permission.sessionID, result.index, reconcile(permission))
+        } else {
+          input.setStore(
+            "permission",
+            permission.sessionID,
+            produce((draft) => {
+              draft.splice(result.index, 0, permission)
+            }),
+          )
+        }
       }
-      const result = Binary.search(permissions, permission.id, (p) => p.id)
-      if (result.found) {
-        input.setStore("permission", permission.sessionID, result.index, reconcile(permission))
-        break
+      if (debugEnabled[permission.sessionID]) {
+        appendTrace(
+          input.setStore,
+          permission.sessionID,
+          entry(permission.sessionID, "permission.asked", "Permission requested", {
+            permission: permission.permission,
+            patterns: permission.patterns,
+            metadata: permission.metadata,
+          }),
+        )
       }
-      input.setStore(
-        "permission",
-        permission.sessionID,
-        produce((draft) => {
-          draft.splice(result.index, 0, permission)
-        }),
-      )
       break
     }
     case "permission.replied": {
@@ -320,20 +442,27 @@ export function applyDirectoryEvent(input: {
       const questions = input.store.question[question.sessionID]
       if (!questions) {
         input.setStore("question", question.sessionID, [question])
-        break
+      } else {
+        const result = Binary.search(questions, question.id, (q) => q.id)
+        if (result.found) {
+          input.setStore("question", question.sessionID, result.index, reconcile(question))
+        } else {
+          input.setStore(
+            "question",
+            question.sessionID,
+            produce((draft) => {
+              draft.splice(result.index, 0, question)
+            }),
+          )
+        }
       }
-      const result = Binary.search(questions, question.id, (q) => q.id)
-      if (result.found) {
-        input.setStore("question", question.sessionID, result.index, reconcile(question))
-        break
+      if (debugEnabled[question.sessionID]) {
+        appendTrace(
+          input.setStore,
+          question.sessionID,
+          entry(question.sessionID, "question.asked", "Question asked", { question }),
+        )
       }
-      input.setStore(
-        "question",
-        question.sessionID,
-        produce((draft) => {
-          draft.splice(result.index, 0, question)
-        }),
-      )
       break
     }
     case "question.replied":
@@ -350,6 +479,22 @@ export function applyDirectoryEvent(input: {
           draft.splice(result.index, 1)
         }),
       )
+      break
+    }
+    case "session.debug.updated": {
+      const props = event.properties as { sessionID: string; enabled: boolean }
+      input.setStore("debug_enabled", props.sessionID, props.enabled)
+      break
+    }
+    case "session.debug.trace": {
+      const props = event.properties as DebugEntry
+      appendTrace(input.setStore, props.sessionID, props)
+      break
+    }
+    case "session.error": {
+      const props = event.properties as { sessionID?: string; error: unknown }
+      if (!props.sessionID || !debugEnabled[props.sessionID]) break
+      appendTrace(input.setStore, props.sessionID, entry(props.sessionID, "session.error", "Session error", { error: props.error }))
       break
     }
     case "lsp.updated": {

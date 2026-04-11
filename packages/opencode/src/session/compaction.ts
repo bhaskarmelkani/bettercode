@@ -15,10 +15,11 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/db"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Scope } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow } from "./overflow"
+import { SessionDebug } from "./debug"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -80,6 +81,14 @@ export namespace SessionCompaction {
       const plugin = yield* Plugin.Service
       const processors = yield* SessionProcessor.Service
       const provider = yield* Provider.Service
+      const scope = yield* Scope.Scope
+      const trace = (input: {
+        sessionID: SessionID
+        stage: string
+        title: string
+        data?: Record<string, any>
+        force?: boolean
+      }) => Effect.promise(() => SessionDebug.trace(input)).pipe(Effect.ignore, Effect.forkIn(scope))
 
       const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
         tokens: MessageV2.Assistant["tokens"]
@@ -135,6 +144,16 @@ export namespace SessionCompaction {
             }
           }
           log.info("pruned", { count: toPrune.length })
+          yield* trace({
+            sessionID: input.sessionID,
+            stage: "compaction.pruned",
+            title: "Tool output pruned",
+            data: {
+              count: toPrune.length,
+              pruned,
+              total,
+            },
+          })
         }
       })
 
@@ -159,6 +178,14 @@ export namespace SessionCompaction {
             }
           | undefined
         if (input.overflow) {
+          yield* trace({
+            sessionID: input.sessionID,
+            stage: "overflow.detected",
+            title: "Context overflow detected",
+            data: {
+              parentID: input.parentID,
+            },
+          })
           const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
           for (let i = idx - 1; i >= 0; i--) {
             const msg = input.messages[i]
@@ -217,6 +244,18 @@ When constructing the summary, try to stick to this template:
 ---`
 
         const prompt = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+        yield* trace({
+          sessionID: input.sessionID,
+          stage: "compaction.started",
+          title: "Compaction started",
+          data: {
+            auto: input.auto,
+            overflow: input.overflow ?? false,
+            prompt: prompt.slice(0, 4000),
+            context: compacting.context,
+            replaced: Boolean(compacting.prompt),
+          },
+        })
         const msgs = structuredClone(messages)
         yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
         const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, { stripMedia: true })
@@ -339,7 +378,19 @@ When constructing the summary, try to stick to this template:
         }
 
         if (processor.message.error) return "stop"
-        if (result === "continue") yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+        if (result === "continue") {
+          yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+          yield* trace({
+            sessionID: input.sessionID,
+            stage: "session.compacted",
+            title: "Session compacted",
+            data: {
+              messageID: processor.message.id,
+              auto: input.auto,
+              overflow: input.overflow ?? false,
+            },
+          })
+        }
         return result
       })
 
@@ -365,6 +416,18 @@ When constructing the summary, try to stick to this template:
           type: "compaction",
           auto: input.auto,
           overflow: input.overflow,
+        })
+        yield* trace({
+          sessionID: input.sessionID,
+          stage: "compaction.queued",
+          title: "Compaction queued",
+          data: {
+            messageID: msg.id,
+            auto: input.auto,
+            overflow: input.overflow ?? false,
+            agent: input.agent,
+            model: input.model,
+          },
         })
       })
 

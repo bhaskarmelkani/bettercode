@@ -119,6 +119,10 @@ import type {
   SessionCommandResponses,
   SessionCreateErrors,
   SessionCreateResponses,
+  SessionDebugGetErrors,
+  SessionDebugGetResponses,
+  SessionDebugUpdateErrors,
+  SessionDebugUpdateResponses,
   SessionDeleteErrors,
   SessionDeleteMessageErrors,
   SessionDeleteMessageResponses,
@@ -2241,6 +2245,77 @@ export class Session2 extends HeyApiClient {
       url: "/session/{sessionID}/message/{messageID}",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Get session debug state
+   *
+   * Retrieve whether live session debugging is enabled for a session.
+   */
+  public debugGet<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionDebugGetResponses, SessionDebugGetErrors, ThrowOnError>({
+      url: "/session/{sessionID}/debug",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update session debug state
+   *
+   * Enable or disable live session debugging for a session.
+   */
+  public debugUpdate<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      enabled?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "enabled" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<SessionDebugUpdateResponses, SessionDebugUpdateErrors, ThrowOnError>({
+      url: "/session/{sessionID}/debug",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

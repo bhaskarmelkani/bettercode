@@ -24,6 +24,7 @@ import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { SessionDebugPanel } from "@/pages/session/session-debug-panel"
 
 export function SessionSidePanel(props: {
   canReview: () => boolean
@@ -43,7 +44,7 @@ export function SessionSidePanel(props: {
   const language = useLanguage()
   const command = useCommand()
   const dialog = useDialog()
-  const { sessionKey, tabs, view } = useSessionLayout()
+  const { params, sessionKey, tabs, view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
@@ -266,6 +267,11 @@ export function SessionSidePanel(props: {
                           </div>
                         </Tabs.Trigger>
                       </Show>
+                      <Tabs.Trigger value="debug">
+                        <div class="flex items-center gap-1.5">
+                          <div>Debug</div>
+                        </div>
+                      </Tabs.Trigger>
                       <SortableProvider ids={openedTabs()}>
                         <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
                       </SortableProvider>
@@ -320,6 +326,14 @@ export function SessionSidePanel(props: {
                       </Show>
                     </Tabs.Content>
                   </Show>
+
+                  <Tabs.Content value="debug" class="flex flex-col h-full overflow-hidden contain-strict">
+                    <Show when={activeTab() === "debug"}>
+                      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                        <SessionDebugPanel sessionID={() => params.id} />
+                      </div>
+                    </Show>
+                  </Tabs.Content>
 
                   <Show when={activeFileTab()} keyed>
                     {(tab) => <FileTabContent tab={tab} />}

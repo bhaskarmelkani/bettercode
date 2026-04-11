@@ -18,11 +18,17 @@ type SessionCache = {
   part: Record<string, Part[] | undefined>
   permission: Record<string, PermissionRequest[] | undefined>
   question: Record<string, QuestionRequest[] | undefined>
+  debug_enabled: Record<string, boolean | undefined>
+  debug_trace: Record<string, unknown[] | undefined>
+  debug_raw: Record<string, unknown[] | undefined>
 }
 
 export function dropSessionCaches(store: SessionCache, sessionIDs: Iterable<string>) {
   const stale = new Set(Array.from(sessionIDs).filter(Boolean))
   if (stale.size === 0) return
+  store.debug_enabled ??= {}
+  store.debug_trace ??= {}
+  store.debug_raw ??= {}
 
   for (const key of Object.keys(store.part)) {
     const parts = store.part[key]
@@ -37,6 +43,9 @@ export function dropSessionCaches(store: SessionCache, sessionIDs: Iterable<stri
     delete store.session_status[sessionID]
     delete store.permission[sessionID]
     delete store.question[sessionID]
+    delete store.debug_enabled[sessionID]
+    delete store.debug_trace[sessionID]
+    delete store.debug_raw[sessionID]
   }
 }
 

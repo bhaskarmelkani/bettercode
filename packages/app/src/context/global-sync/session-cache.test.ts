@@ -39,6 +39,9 @@ describe("app session cache", () => {
       part: Record<string, Part[] | undefined>
       permission: Record<string, PermissionRequest[] | undefined>
       question: Record<string, QuestionRequest[] | undefined>
+      debug_enabled: Record<string, boolean | undefined>
+      debug_trace: Record<string, unknown[] | undefined>
+      debug_raw: Record<string, unknown[] | undefined>
     } = {
       session_status: { ses_1: { type: "busy" } as SessionStatus },
       session_diff: { ses_1: [] },
@@ -47,6 +50,9 @@ describe("app session cache", () => {
       part: { msg_1: [part("prt_1", "ses_1", "msg_1")] },
       permission: { ses_1: [] as PermissionRequest[] },
       question: { ses_1: [] as QuestionRequest[] },
+      debug_enabled: { ses_1: true },
+      debug_trace: { ses_1: [{}] },
+      debug_raw: { ses_1: [{}] },
     }
 
     dropSessionCaches(store, ["ses_1"])
@@ -58,6 +64,9 @@ describe("app session cache", () => {
     expect(store.session_status.ses_1).toBeUndefined()
     expect(store.permission.ses_1).toBeUndefined()
     expect(store.question.ses_1).toBeUndefined()
+    expect(store.debug_enabled.ses_1).toBeUndefined()
+    expect(store.debug_trace.ses_1).toBeUndefined()
+    expect(store.debug_raw.ses_1).toBeUndefined()
   })
 
   test("dropSessionCaches clears message-backed parts", () => {
@@ -70,6 +79,9 @@ describe("app session cache", () => {
       part: Record<string, Part[] | undefined>
       permission: Record<string, PermissionRequest[] | undefined>
       question: Record<string, QuestionRequest[] | undefined>
+      debug_enabled: Record<string, boolean | undefined>
+      debug_trace: Record<string, unknown[] | undefined>
+      debug_raw: Record<string, unknown[] | undefined>
     } = {
       session_status: {},
       session_diff: {},
@@ -78,6 +90,9 @@ describe("app session cache", () => {
       part: { [m.id]: [part("prt_1", "ses_1", m.id)] },
       permission: {},
       question: {},
+      debug_enabled: {},
+      debug_trace: {},
+      debug_raw: {},
     }
 
     dropSessionCaches(store, ["ses_1"])

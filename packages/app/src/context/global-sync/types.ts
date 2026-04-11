@@ -31,6 +31,22 @@ export type ProjectMeta = {
   }
 }
 
+export type DebugEntry = {
+  id: string
+  sessionID: string
+  time: number
+  stage: string
+  title: string
+  data: Record<string, any>
+}
+
+export type DebugRaw = {
+  id: string
+  time: number
+  type: string
+  properties?: unknown
+}
+
 export type State = {
   status: "loading" | "partial" | "complete"
   agent: Agent[]
@@ -58,6 +74,15 @@ export type State = {
   }
   question: {
     [sessionID: string]: QuestionRequest[]
+  }
+  debug_enabled: {
+    [sessionID: string]: boolean
+  }
+  debug_trace: {
+    [sessionID: string]: DebugEntry[]
+  }
+  debug_raw: {
+    [sessionID: string]: DebugRaw[]
   }
   mcp_ready: boolean
   mcp: {

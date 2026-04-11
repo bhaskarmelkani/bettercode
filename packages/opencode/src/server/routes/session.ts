@@ -12,6 +12,7 @@ import { SessionRevert } from "../../session/revert"
 import { SessionShare } from "@/share/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
+import { SessionDebug } from "@/session/debug"
 import { Todo } from "../../session/todo"
 import { AppRuntime } from "../../effect/app-runtime"
 import { Agent } from "../../agent/agent"
@@ -795,6 +796,75 @@ export const SessionRoutes = lazy(() =>
         }
         const part = await Session.updatePart(body)
         return c.json(part)
+      },
+    )
+    .get(
+      "/:sessionID/debug",
+      describeRoute({
+        summary: "Get session debug state",
+        description: "Retrieve whether live session debugging is enabled for a session.",
+        operationId: "session.debug_get",
+        responses: {
+          200: {
+            description: "Session debug state",
+            content: {
+              "application/json": {
+                schema: resolver(SessionDebug.Toggle),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        return c.json({
+          sessionID,
+          enabled: await AppRuntime.runPromise(SessionDebug.Service.use((svc) => svc.enabled(sessionID))),
+        })
+      },
+    )
+    .put(
+      "/:sessionID/debug",
+      describeRoute({
+        summary: "Update session debug state",
+        description: "Enable or disable live session debugging for a session.",
+        operationId: "session.debug_update",
+        responses: {
+          200: {
+            description: "Updated session debug state",
+            content: {
+              "application/json": {
+                schema: resolver(SessionDebug.Toggle),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          enabled: z.boolean(),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        await AppRuntime.runPromise(SessionDebug.Service.use((svc) => svc.set(sessionID, body.enabled)))
+        return c.json({ sessionID, enabled: body.enabled })
       },
     )
     .post(

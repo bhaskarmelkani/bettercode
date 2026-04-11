@@ -21,6 +21,7 @@ import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
+import { SessionDebug } from "./debug"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -100,6 +101,7 @@ export namespace LLM {
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
     ])
+    const traced = await SessionDebug.enabled(SessionID.make(input.sessionID))
     // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
 
@@ -123,6 +125,17 @@ export namespace LLM {
       { sessionID: input.sessionID, model: input.model },
       { system },
     )
+    if (traced) {
+      await SessionDebug.trace({
+        sessionID: SessionID.make(input.sessionID),
+        stage: "hook.system",
+        title: "System prompt transformed",
+        data: {
+          hook: "experimental.chat.system.transform",
+          system,
+        },
+      })
+    }
     // rejoin to maintain 2-part structure for caching if header unchanged
     if (system.length > 2 && system[0] === header) {
       const rest = system.slice(1)
@@ -185,6 +198,21 @@ export namespace LLM {
         options,
       },
     )
+    if (traced) {
+      await SessionDebug.trace({
+        sessionID: SessionID.make(input.sessionID),
+        stage: "hook.params",
+        title: "Model params prepared",
+        data: {
+          hook: "chat.params",
+          temperature: params.temperature,
+          topP: params.topP,
+          topK: params.topK,
+          maxOutputTokens: params.maxOutputTokens,
+          optionKeys: Object.keys(params.options ?? {}),
+        },
+      })
+    }
 
     const { headers } = await Plugin.trigger(
       "chat.headers",
@@ -199,8 +227,30 @@ export namespace LLM {
         headers: {},
       },
     )
+    if (traced) {
+      await SessionDebug.trace({
+        sessionID: SessionID.make(input.sessionID),
+        stage: "hook.headers",
+        title: "Request headers prepared",
+        data: {
+          hook: "chat.headers",
+          headerKeys: Object.keys(headers),
+        },
+      })
+    }
 
     const tools = await resolveTools(input)
+    if (traced) {
+      await SessionDebug.trace({
+        sessionID: SessionID.make(input.sessionID),
+        stage: "tools.exposed",
+        title: "Tool registry exposed",
+        data: {
+          activeTools: Object.keys(tools),
+          disabledTools: Object.keys(input.tools).filter((item) => !(item in tools)),
+        },
+      })
+    }
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.
@@ -312,6 +362,29 @@ export namespace LLM {
         } finally {
           unsub?.()
         }
+      })
+    }
+
+    if (traced) {
+      await SessionDebug.trace({
+        sessionID: SessionID.make(input.sessionID),
+        stage: "provider.request",
+        title: "Provider request prepared",
+        data: {
+          providerID: input.model.providerID,
+          modelID: input.model.id,
+          activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+          toolChoice: input.toolChoice,
+          maxRetries: input.retries ?? 0,
+          temperature: params.temperature,
+          topP: params.topP,
+          topK: params.topK,
+          maxOutputTokens: params.maxOutputTokens,
+          headerKeys: [
+            ...Object.keys(input.model.headers ?? {}),
+            ...Object.keys(headers),
+          ],
+        },
       })
     }
 
