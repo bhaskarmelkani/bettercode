@@ -221,6 +221,9 @@ for (const item of targets) {
     },
   })
 
+  await fs.promises.copyFile(path.join(dir, "bin", "bettercode"), path.join(dir, "dist", name, "bin", "bettercode"))
+  await fs.promises.chmod(path.join(dir, "dist", name, "bin", "bettercode"), 0o755)
+
   // Smoke test: only run if binary is for current platform
   if (item.os === process.platform && item.arch === process.arch && !item.abi) {
     const binaryPath = `dist/${name}/bin/opencode`

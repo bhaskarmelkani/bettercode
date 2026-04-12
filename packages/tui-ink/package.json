@@ -9,13 +9,16 @@
   },
   "scripts": {
     "dev": "bun run src/index.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test test/",
+    "test:watch": "bun test --watch test/"
   },
   "dependencies": {
+    "@inkjs/ui": "^2.0.0",
+    "@opencode-ai/sdk": "workspace:*",
     "ink": "^5.0.0",
     "react": "^18.2.0",
-    "zustand": "^5.0.0",
-    "@opencode-ai/sdk": "workspace:*"
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.1",

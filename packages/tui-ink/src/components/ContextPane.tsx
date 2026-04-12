@@ -1,6 +1,6 @@
 import React from "react"
 import { Box, Text } from "ink"
-import { theme } from "../theme"
+import { useTheme } from "../theme-context"
 
 interface ContextPaneProps {
   files: string[]
@@ -9,6 +9,7 @@ interface ContextPaneProps {
 }
 
 export function ContextPane({ files, width, height }: ContextPaneProps) {
+  const theme = useTheme()
   return (
     <Box flexDirection="column" width={width} height={height} paddingLeft={1}>
       <Text color={theme.subtext} bold>

@@ -1,7 +1,7 @@
 import React from "react"
 import { Box, Text } from "ink"
 import { Spinner } from "./Spinner"
-import { theme } from "../theme"
+import { useTheme } from "../theme-context"
 
 interface HeaderProps {
   projectName: string
@@ -10,6 +10,7 @@ interface HeaderProps {
 }
 
 export function Header({ projectName, gitBranch, status }: HeaderProps) {
+  const theme = useTheme()
   const statusColor = status === "generating" ? theme.yellow : status === "error" ? theme.red : theme.green
 
   return (

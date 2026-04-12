@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react"
-import { Box, Text, useStdout, useInput } from "ink"
-import { Header } from "./components/Header"
-import { ChatPane } from "./components/ChatPane"
-import { ContextPane } from "./components/ContextPane"
-import { InputBar } from "./components/InputBar"
-import { StatusBar } from "./components/StatusBar"
+import { Box, useStdout, useInput } from "ink"
 import { useAppStore } from "./store"
 import { useSDK } from "./hooks/useSDK"
-import { theme } from "./theme"
+import { useHostCommands } from "./commands/useHostCommands"
+import { HomeScreen } from "./screens/HomeScreen"
+import { SessionScreen } from "./screens/SessionScreen"
+import { PluginScreen } from "./screens/PluginScreen"
+import { DialogOverlay } from "./components/DialogOverlay"
+import { ThemeProvider } from "./theme-context"
 
 interface AppProps {
   onExit?: () => void
@@ -15,13 +15,13 @@ interface AppProps {
 
 export function App({ onExit }: AppProps) {
   const { stdout } = useStdout()
-  const [columns, setColumns] = useState(stdout?.columns ?? 80)
+  const [cols, setCols] = useState(stdout?.columns ?? 80)
   const [rows, setRows] = useState(stdout?.rows ?? 24)
 
   useEffect(() => {
     if (!stdout) return
     const resize = () => {
-      setColumns(stdout.columns ?? 80)
+      setCols(stdout.columns ?? 80)
       setRows(stdout.rows ?? 24)
     }
     stdout.on("resize", resize)
@@ -30,70 +30,84 @@ export function App({ onExit }: AppProps) {
     }
   }, [stdout])
 
-  const status = useAppStore((s) => s.status)
-  const chatHistory = useAppStore((s) => s.chatHistory)
-  const activeContext = useAppStore((s) => s.activeContext)
-  const projectName = useAppStore((s) => s.projectName)
-  const gitBranch = useAppStore((s) => s.gitBranch)
   const serverUrl = useAppStore((s) => s.serverUrl)
   const directory = useAppStore((s) => s.directory)
   const serverHeaders = useAppStore((s) => s.serverHeaders)
-  const currentSessionID = useAppStore((s) => s.currentSessionID)
-  const addMessage = useAppStore((s) => s.addMessage)
-  const sendMessage = useAppStore((s) => s.sendMessage)
+  const route = useAppStore((s) => s.route)
+  const dialogs = useAppStore((s) => s.dialogs)
+  const navigate = useAppStore((s) => s.navigate)
+  const pushDialog = useAppStore((s) => s.pushDialog)
+  const popDialog = useAppStore((s) => s.popDialog)
 
   useSDK({ url: serverUrl, directory, headers: serverHeaders })
 
+  // Register all host commands into the registry
+  useHostCommands()
+
+  const hasDialog = dialogs.length > 0
+  const top = dialogs[dialogs.length - 1]
+
+  // Global keys — always active regardless of screen
   useInput((input, key) => {
     if (key.ctrl && input === "c") {
       onExit?.()
       process.exit(0)
     }
+    // Ctrl+K → command palette
+    if (key.ctrl && input === "k") {
+      if (hasDialog) {
+        popDialog()
+      } else {
+        pushDialog({ type: "command-palette" })
+      }
+      return
+    }
+    // Ctrl+N → go home (start fresh session)
     if (key.ctrl && input === "n") {
-      useAppStore.getState().clearHistory()
-      useAppStore.getState().setStatus("idle")
+      navigate({ type: "home" })
+      return
+    }
+    // Ctrl+S → session list dialog
+    if (key.ctrl && input === "s") {
+      if (hasDialog) {
+        popDialog()
+      } else {
+        pushDialog({ type: "session-list" })
+      }
+      return
+    }
+    // Escape → close top dialog
+    if (key.escape && hasDialog) {
+      popDialog()
     }
   })
 
-  // Reserve rows: 1 header + 1 statusbar + 3 inputbar = 5
-  const workspaceHeight = rows - 5
-
-  // 1-column divider: chat 70% of (columns - 1), context 30%
-  const chatWidth = Math.floor((columns - 1) * 0.7)
-  const contextWidth = columns - 1 - chatWidth
-
-  const handleSubmit = async (text: string) => {
-    addMessage("user", text)
-    let sid = currentSessionID
-    if (!sid) {
-      const client = useAppStore.getState().sdkClient
-      if (!client) return
-      const res = await client.session.create().catch(() => undefined)
-      if (!res || res.error) return
-      sid = res.data.id
-      useAppStore.setState({ currentSessionID: sid })
-    }
-    await sendMessage(sid, text)
-  }
-
+  // Render a single stable tree: screen always mounted (deactivated when dialog open),
+  // dialog absolutely overlaid. This prevents screen unmount/remount on dialog transitions,
+  // which is the primary cause of terminal flickering.
   return (
-    <Box flexDirection="column" height={rows} width={columns}>
-      <Header projectName={projectName} gitBranch={gitBranch} status={status} />
+    <ThemeProvider>
+      <Box width={cols} height={rows} flexDirection="column">
+        {route.type === "home" && (
+          <HomeScreen rows={rows} columns={cols} active={!hasDialog} />
+        )}
+        {route.type === "plugin" && (
+          <PluginScreen name={route.name} params={route.params} rows={rows} columns={cols} active={!hasDialog} />
+        )}
+        {route.type === "session" && (
+          <SessionScreen sessionID={route.sessionID} rows={rows} columns={cols} active={!hasDialog} />
+        )}
 
-      <Box flexDirection="row" flexGrow={1} height={workspaceHeight}>
-        <ChatPane messages={chatHistory} width={chatWidth} height={workspaceHeight} />
-        <Box width={1} height={workspaceHeight} flexDirection="column">
-          {Array.from({ length: workspaceHeight }).map((_, i) => (
-            <Text key={i} color={theme.surface1}>
-              │
-            </Text>
-          ))}
-        </Box>
-        <ContextPane files={activeContext} width={contextWidth} height={workspaceHeight} />
+        {/* Dialog absolutely positioned over the current screen.
+            Yoga positions absolute elements at 0,0 of their parent by default,
+            so this covers the screen without needing explicit top/left props.
+            The screen stays mounted (just inactive) — eliminating dialog-open flicker. */}
+        {top && (
+          <Box position="absolute" width={cols} height={rows} flexDirection="column">
+            <DialogOverlay dialog={top} rows={rows} columns={cols} />
+          </Box>
+        )}
       </Box>
-
-      <StatusBar />
-      <InputBar onSubmit={handleSubmit} />
-    </Box>
+    </ThemeProvider>
   )
 }

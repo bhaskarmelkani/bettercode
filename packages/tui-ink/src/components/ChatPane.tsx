@@ -1,6 +1,6 @@
 import React from "react"
 import { Box, Text } from "ink"
-import { theme } from "../theme"
+import { useTheme } from "../theme-context"
 
 interface Message {
   id: string
@@ -15,6 +15,7 @@ interface ChatPaneProps {
 }
 
 export function ChatPane({ messages, width, height }: ChatPaneProps) {
+  const theme = useTheme()
   return (
     <Box flexDirection="column" width={width} height={height} overflowY="hidden">
       {messages.map((msg) => (
