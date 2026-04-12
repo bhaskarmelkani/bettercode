@@ -22,6 +22,7 @@ import { Skill } from "../skill"
 import { Effect, Context, Layer } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { Brand } from "@/fork/brand"
 
 export namespace Agent {
   export const Info = z
@@ -134,7 +135,7 @@ export namespace Agent {
                   },
                   edit: {
                     "*": "deny",
-                    [path.join(".opencode", "plans", "*.md")]: "allow",
+                    [path.join(Brand.dir, "plans", "*.md")]: "allow",
                     [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]:
                       "allow",
                   },

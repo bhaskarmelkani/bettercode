@@ -5,6 +5,15 @@ import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/dialog-model"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
+import { useLocal } from "../../context/local"
+import { Brand } from "@/fork/brand"
+import type { AssistantMessage } from "@opencode-ai/sdk/v2"
+
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 4,
+})
 
 export function Footer() {
   const { theme } = useTheme()
@@ -19,6 +28,46 @@ export function Footer() {
   })
   const directory = useDirectory()
   const connected = useConnected()
+
+  if (Brand.slug !== Brand.legacySlug) {
+    const local = useLocal()
+    const modelName = createMemo(() => local.model.parsed().model)
+    const cost = createMemo(() => {
+      if (route.data.type !== "session") return 0
+      const msgs = sync.data.message[route.data.sessionID] ?? []
+      return msgs.reduce((sum, item) => sum + (item.role === "assistant" ? (item as AssistantMessage).cost : 0), 0)
+    })
+
+    return (
+      <box flexDirection="row" justifyContent="space-between" gap={1} flexShrink={0}>
+        <text fg={theme.textMuted}>{directory()}</text>
+        <box gap={2} flexDirection="row" flexShrink={0}>
+          <text fg={theme.textMuted}>{modelName()}</text>
+          <Show when={cost() > 0}>
+            <text fg={theme.textMuted}>{money.format(cost())}</text>
+          </Show>
+          <Show when={lsp().length > 0}>
+            <text fg={theme.textMuted}>
+              <span style={{ fg: theme.success }}>•</span> {lsp().length} LSP
+            </text>
+          </Show>
+          <Show when={mcp() > 0}>
+            <text fg={theme.textMuted}>
+              <Switch>
+                <Match when={mcpError()}>
+                  <span style={{ fg: theme.error }}>⊙ </span>
+                </Match>
+                <Match when={true}>
+                  <span style={{ fg: theme.success }}>⊙ </span>
+                </Match>
+              </Switch>
+              {mcp()} MCP
+            </text>
+          </Show>
+        </box>
+      </box>
+    )
+  }
 
   const [store, setStore] = createStore({
     welcome: false,

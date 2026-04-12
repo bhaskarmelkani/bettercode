@@ -78,6 +78,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Global } from "@/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
+import { Brand } from "@/fork/brand"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
@@ -87,6 +88,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { TuiPluginRuntime } from "../../plugin"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { SessionRetry } from "@/session/retry"
+import { Surface } from "@tui/fork/surface"
 
 addDefaultParsers(parsers.parsers)
 
@@ -106,6 +108,8 @@ const context = createContext<{
   providers: () => ReadonlyMap<string, Provider>
   sync: ReturnType<typeof useSync>
   tui: ReturnType<typeof useTuiConfig>
+  expandedTools: () => Set<string>
+  toggleTool: (callID: string) => void
 }>()
 
 function use() {
@@ -163,11 +167,21 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [expandedTools, setExpandedTools] = createSignal(new Set<string>())
+  function toggleTool(callID: string) {
+    setExpandedTools((prev) => {
+      const next = new Set(prev)
+      if (next.has(callID)) next.delete(callID)
+      else next.add(callID)
+      return next
+    })
+  }
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
     if (sidebarOpen()) return true
+    if (Brand.slug !== Brand.legacySlug) return false  // fork: hidden by default, toggle with keybind
     if (sidebar() === "auto" && wide()) return true
     return false
   })
@@ -264,7 +278,7 @@ export function Session() {
         `${logo[3] ?? ""}`,
         ``,
         `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
-        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}${Brand.bin} -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
         ``,
       ].join("\n"),
     )
@@ -985,6 +999,33 @@ export function Session() {
         dialog.clear()
       }),
     },
+    ...(Brand.slug !== Brand.legacySlug
+      ? [
+          {
+            title: "Expand all tools",
+            value: "session.tools.expand_all",
+            category: "Session",
+            onSelect: (dialog: any) => {
+              const allCallIDs = messages().flatMap((m) =>
+                (sync.data.part[m.id] ?? [])
+                  .filter((p): p is ToolPart => p.type === "tool" && p.state.status === "completed")
+                  .map((p) => p.callID),
+              )
+              setExpandedTools(new Set(allCallIDs))
+              dialog.clear()
+            },
+          },
+          {
+            title: "Collapse all tools",
+            value: "session.tools.collapse_all",
+            category: "Session",
+            onSelect: (dialog: any) => {
+              setExpandedTools(new Set<string>())
+              dialog.clear()
+            },
+          },
+        ]
+      : []),
   ])
 
   const revertInfo = createMemo(() => session()?.revert)
@@ -1053,183 +1094,172 @@ export function Session() {
         providers,
         sync,
         tui: tuiConfig,
+        expandedTools,
+        toggleTool,
       }}
     >
-      <box flexDirection="row">
-        <box flexGrow={1} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
-          <Show when={session()}>
-            <scrollbox
-              ref={(r) => (scroll = r)}
-              viewportOptions={{
-                paddingRight: showScrollbar() ? 1 : 0,
-              }}
-              verticalScrollbarOptions={{
-                paddingLeft: 1,
-                visible: showScrollbar(),
-                trackOptions: {
-                  backgroundColor: theme.backgroundElement,
-                  foregroundColor: theme.border,
-                },
-              }}
-              stickyScroll={true}
-              stickyStart="bottom"
-              flexGrow={1}
-              scrollAcceleration={scrollAcceleration()}
-            >
-              <box height={1} />
-              <For each={messages()}>
-                {(message, index) => (
-                  <Switch>
-                    <Match when={message.id === revert()?.messageID}>
-                      {(function () {
-                        const command = useCommandDialog()
-                        const [hover, setHover] = createSignal(false)
-                        const dialog = useDialog()
-
-                        const handleUnrevert = async () => {
-                          const confirmed = await DialogConfirm.show(
-                            dialog,
-                            "Confirm Redo",
-                            "Are you sure you want to restore the reverted messages?",
-                          )
-                          if (confirmed) {
-                            command.trigger("session.redo")
-                          }
-                        }
-
-                        return (
-                          <box
-                            onMouseOver={() => setHover(true)}
-                            onMouseOut={() => setHover(false)}
-                            onMouseUp={handleUnrevert}
-                            marginTop={1}
-                            flexShrink={0}
-                            border={["left"]}
-                            customBorderChars={SplitBorder.customBorderChars}
-                            borderColor={theme.backgroundPanel}
-                          >
-                            <box
-                              paddingTop={1}
-                              paddingBottom={1}
-                              paddingLeft={2}
-                              backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
-                            >
-                              <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
-                              <text fg={theme.textMuted}>
-                                <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
-                                restore
-                              </text>
-                              <Show when={revert()!.diffFiles?.length}>
-                                <box marginTop={1}>
-                                  <For each={revert()!.diffFiles}>
-                                    {(file) => (
-                                      <text fg={theme.text}>
-                                        {file.filename}
-                                        <Show when={file.additions > 0}>
-                                          <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
-                                        </Show>
-                                        <Show when={file.deletions > 0}>
-                                          <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
-                                        </Show>
-                                      </text>
-                                    )}
-                                  </For>
-                                </box>
-                              </Show>
-                            </box>
-                          </box>
-                        )
-                      })()}
-                    </Match>
-                    <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
-                      <></>
-                    </Match>
-                    <Match when={message.role === "user"}>
-                      <UserMessage
-                        index={index()}
-                        onMouseUp={() => {
-                          if (renderer.getSelection()?.getSelectedText()) return
-                          dialog.replace(() => (
-                            <DialogMessage
-                              messageID={message.id}
-                              sessionID={route.sessionID}
-                              setPrompt={(promptInfo) => prompt?.set(promptInfo)}
-                            />
-                          ))
-                        }}
-                        message={message as UserMessage}
-                        parts={sync.data.part[message.id] ?? []}
-                        pending={pending()}
-                      />
-                    </Match>
-                    <Match when={message.role === "assistant"}>
-                      <AssistantMessage
-                        last={lastAssistant()?.id === message.id}
-                        message={message as AssistantMessage}
-                        parts={sync.data.part[message.id] ?? []}
-                      />
-                    </Match>
-                  </Switch>
-                )}
-              </For>
-            </scrollbox>
-            <box flexShrink={0}>
-              <Show when={permissions().length > 0}>
-                <PermissionPrompt request={permissions()[0]} />
-              </Show>
-              <Show when={permissions().length === 0 && questions().length > 0}>
-                <QuestionPrompt request={questions()[0]} />
-              </Show>
-              <Show when={session()?.parentID}>
-                <SubagentFooter />
-              </Show>
-              <Show when={visible()}>
-                <TuiPluginRuntime.Slot
-                  name="session_prompt"
-                  mode="replace"
-                  session_id={route.sessionID}
-                  visible={visible()}
-                  disabled={disabled()}
-                  on_submit={toBottom}
-                  ref={bind}
+      <Surface.layout
+        sidebar={sidebarVisible()}
+        wide={wide()}
+        main={
+          <Surface.body
+            timeline={
+              <Show when={session()}>
+                <Surface.timeline
+                  ref={(r) => (scroll = r)}
+                  right={showScrollbar() ? 1 : 0}
+                  scrollbar={showScrollbar()}
+                  track={theme.backgroundElement}
+                  border={theme.border}
+                  accel={scrollAcceleration()}
                 >
-                  <Prompt
-                    visible={visible()}
-                    ref={bind}
-                    disabled={disabled()}
-                    onSubmit={() => {
-                      toBottom()
-                    }}
-                    sessionID={route.sessionID}
-                    right={<TuiPluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
-                  />
-                </TuiPluginRuntime.Slot>
+                  <box height={1} />
+                  <For each={messages()}>
+                    {(message, index) => (
+                      <Switch>
+                        <Match when={message.id === revert()?.messageID}>
+                          {(function () {
+                            const command = useCommandDialog()
+                            const [hover, setHover] = createSignal(false)
+                            const dialog = useDialog()
+
+                            const handleUnrevert = async () => {
+                              const confirmed = await DialogConfirm.show(
+                                dialog,
+                                "Confirm Redo",
+                                "Are you sure you want to restore the reverted messages?",
+                              )
+                              if (confirmed) {
+                                command.trigger("session.redo")
+                              }
+                            }
+
+                            return (
+                              <box
+                                onMouseOver={() => setHover(true)}
+                                onMouseOut={() => setHover(false)}
+                                onMouseUp={handleUnrevert}
+                                marginTop={1}
+                                flexShrink={0}
+                                border={["left"]}
+                                customBorderChars={SplitBorder.customBorderChars}
+                                borderColor={theme.backgroundPanel}
+                              >
+                                <box
+                                  paddingTop={1}
+                                  paddingBottom={1}
+                                  paddingLeft={2}
+                                  backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+                                >
+                                  <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
+                                  <text fg={theme.textMuted}>
+                                    <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
+                                    restore
+                                  </text>
+                                  <Show when={revert()!.diffFiles?.length}>
+                                    <box marginTop={1}>
+                                      <For each={revert()!.diffFiles}>
+                                        {(file) => (
+                                          <text fg={theme.text}>
+                                            {file.filename}
+                                            <Show when={file.additions > 0}>
+                                              <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
+                                            </Show>
+                                            <Show when={file.deletions > 0}>
+                                              <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
+                                            </Show>
+                                          </text>
+                                        )}
+                                      </For>
+                                    </box>
+                                  </Show>
+                                </box>
+                              </box>
+                            )
+                          })()}
+                        </Match>
+                        <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
+                          <></>
+                        </Match>
+                        <Match when={message.role === "user"}>
+                          <UserMessage
+                            index={index()}
+                            onMouseUp={() => {
+                              if (renderer.getSelection()?.getSelectedText()) return
+                              dialog.replace(() => (
+                                <DialogMessage
+                                  messageID={message.id}
+                                  sessionID={route.sessionID}
+                                  setPrompt={(promptInfo) => prompt?.set(promptInfo)}
+                                />
+                              ))
+                            }}
+                            message={message as UserMessage}
+                            parts={sync.data.part[message.id] ?? []}
+                            pending={pending()}
+                          />
+                        </Match>
+                        <Match when={message.role === "assistant"}>
+                          <AssistantMessage
+                            last={lastAssistant()?.id === message.id}
+                            message={message as AssistantMessage}
+                            parts={sync.data.part[message.id] ?? []}
+                          />
+                        </Match>
+                      </Switch>
+                    )}
+                  </For>
+                </Surface.timeline>
               </Show>
-            </box>
-          </Show>
-          <Toast />
-        </box>
-        <Show when={sidebarVisible()}>
-          <Switch>
-            <Match when={wide()}>
+            }
+            footer={
+              <Show when={session()}>
+                <box flexShrink={0}>
+                  <Show when={permissions().length > 0}>
+                    <PermissionPrompt request={permissions()[0]} />
+                  </Show>
+                  <Show when={permissions().length === 0 && questions().length > 0}>
+                    <QuestionPrompt request={questions()[0]} />
+                  </Show>
+                  <Show when={session()?.parentID}>
+                    <SubagentFooter />
+                  </Show>
+                  <Show when={visible()}>
+                    <TuiPluginRuntime.Slot
+                      name="session_prompt"
+                      mode="replace"
+                      session_id={route.sessionID}
+                      visible={visible()}
+                      disabled={disabled()}
+                      on_submit={toBottom}
+                      ref={bind}
+                    >
+                      <Prompt
+                        visible={visible()}
+                        ref={bind}
+                        disabled={disabled()}
+                        onSubmit={() => {
+                          toBottom()
+                        }}
+                        sessionID={route.sessionID}
+                        right={<TuiPluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                      />
+                    </TuiPluginRuntime.Slot>
+                  </Show>
+                </box>
+              </Show>
+            }
+            toast={<Toast />}
+          />
+        }
+        side={
+          <Show when={session()}>
+            <Surface.side wide={wide()} bg={RGBA.fromInts(0, 0, 0, 70)}>
               <Sidebar sessionID={route.sessionID} />
-            </Match>
-            <Match when={!wide()}>
-              <box
-                position="absolute"
-                top={0}
-                left={0}
-                right={0}
-                bottom={0}
-                alignItems="flex-end"
-                backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
-              >
-                <Sidebar sessionID={route.sessionID} />
-              </box>
-            </Match>
-          </Switch>
-        </Show>
-      </box>
+            </Surface.side>
+          </Show>
+        }
+      />
     </context.Provider>
   )
 }
@@ -1404,26 +1434,41 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       <Switch>
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
           <box paddingLeft={3}>
-            <text marginTop={1}>
-              <span
-                style={{
-                  fg:
-                    props.message.error?.name === "MessageAbortedError"
-                      ? theme.textMuted
-                      : local.agent.color(props.message.agent),
-                }}
-              >
-                ▣{" "}
-              </span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {model()}</span>
-              <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
-              </Show>
-              <Show when={props.message.error?.name === "MessageAbortedError"}>
-                <span style={{ fg: theme.textMuted }}> · interrupted</span>
-              </Show>
-            </text>
+            <Show
+              when={Brand.slug !== Brand.legacySlug}
+              fallback={
+                <text marginTop={1}>
+                  <span
+                    style={{
+                      fg:
+                        props.message.error?.name === "MessageAbortedError"
+                          ? theme.textMuted
+                          : local.agent.color(props.message.agent),
+                    }}
+                  >
+                    ▣{" "}
+                  </span>{" "}
+                  <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
+                  <span style={{ fg: theme.textMuted }}> · {model()}</span>
+                  <Show when={duration()}>
+                    <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+                  </Show>
+                  <Show when={props.message.error?.name === "MessageAbortedError"}>
+                    <span style={{ fg: theme.textMuted }}> · interrupted</span>
+                  </Show>
+                </text>
+              }
+            >
+              <text marginTop={1} fg={theme.textMuted}>
+                {model()}
+                <Show when={duration()}>
+                  <span> · {Locale.duration(duration())}</span>
+                </Show>
+                <Show when={props.message.error?.name === "MessageAbortedError"}>
+                  <span> · interrupted</span>
+                </Show>
+              </text>
+            </Show>
           </box>
         </Match>
       </Switch>
@@ -1517,6 +1562,13 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     return true
   })
 
+  // Fork: completed tools are collapsed by default; expanded only when in expandedTools set
+  const collapsed = createMemo(() => {
+    if (Brand.slug === Brand.legacySlug) return false
+    if (props.part.state.status !== "completed") return false
+    return !ctx.expandedTools().has(props.part.callID)
+  })
+
   const toolprops = {
     get metadata() {
       return props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
@@ -1537,6 +1589,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     },
     get part() {
       return props.part
+    },
+    get collapsed() {
+      return collapsed()
     },
   }
 
@@ -1603,6 +1658,7 @@ type ToolProps<T> = {
   tool: string
   output?: string
   part: ToolPart
+  collapsed?: boolean
 }
 function GenericTool(props: ToolProps<any>) {
   const { theme } = useTheme()
@@ -1722,6 +1778,9 @@ function InlineTool(props: {
         <Match when={true}>
           <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
             <Show fallback={<>~ {props.pending}</>} when={props.complete}>
+              <Show when={props.onClick && Brand.slug !== Brand.legacySlug}>
+                <span style={{ fg: theme.textMuted }}>{hover() ? "▾ " : "▸ "}</span>
+              </Show>
               <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
             </Show>
           </text>
@@ -1745,17 +1804,18 @@ function BlockTool(props: {
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+  const isFork = Brand.slug !== Brand.legacySlug
   return (
     <box
       border={["left"]}
-      paddingTop={1}
-      paddingBottom={1}
-      paddingLeft={2}
+      paddingTop={isFork ? 0 : 1}
+      paddingBottom={isFork ? 0 : 1}
+      paddingLeft={isFork ? 1 : 2}
       marginTop={1}
       gap={1}
-      backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
+      backgroundColor={isFork ? (hover() ? theme.backgroundElement : undefined) : (hover() ? theme.backgroundMenu : theme.backgroundPanel)}
       customBorderChars={SplitBorder.customBorderChars}
-      borderColor={theme.background}
+      borderColor={isFork ? theme.border : theme.background}
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -1819,8 +1879,16 @@ function Bash(props: ToolProps<typeof BashTool>) {
     return `# ${desc} in ${wd}`
   })
 
+  const ctx = use()
+  const toggleExpand = () => ctx.toggleTool(props.part.callID)
+
   return (
     <Switch>
+      <Match when={props.collapsed}>
+        <InlineTool icon="$" pending="Writing command..." complete={props.input.command} part={props.part} onClick={toggleExpand}>
+          {props.input.command}
+        </InlineTool>
+      </Match>
       <Match when={props.metadata.output !== undefined}>
         <BlockTool
           title={title()}
@@ -1850,13 +1918,20 @@ function Bash(props: ToolProps<typeof BashTool>) {
 
 function Write(props: ToolProps<typeof WriteTool>) {
   const { theme, syntax } = useTheme()
+  const ctx = use()
   const code = createMemo(() => {
     if (!props.input.content) return ""
     return props.input.content
   })
+  const toggleExpand = () => ctx.toggleTool(props.part.callID)
 
   return (
     <Switch>
+      <Match when={props.collapsed}>
+        <InlineTool icon="←" pending="Preparing write..." complete={props.input.filePath} part={props.part} onClick={toggleExpand}>
+          Write {normalizePath(props.input.filePath!)}
+        </InlineTool>
+      </Match>
       <Match when={props.metadata.diagnostics !== undefined}>
         <BlockTool title={"# Wrote " + normalizePath(props.input.filePath!)} part={props.part}>
           <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
@@ -2046,6 +2121,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
 function Edit(props: ToolProps<typeof EditTool>) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const toggleExpand = () => ctx.toggleTool(props.part.callID)
 
   const view = createMemo(() => {
     const diffStyle = ctx.tui.diff_style
@@ -2060,6 +2136,11 @@ function Edit(props: ToolProps<typeof EditTool>) {
 
   return (
     <Switch>
+      <Match when={props.collapsed}>
+        <InlineTool icon="←" pending="Preparing edit..." complete={props.input.filePath} part={props.part} onClick={toggleExpand}>
+          Edit {normalizePath(props.input.filePath!)} {input({ replaceAll: props.input.replaceAll })}
+        </InlineTool>
+      </Match>
       <Match when={props.metadata.diff !== undefined}>
         <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part}>
           <box paddingLeft={1}>
@@ -2098,6 +2179,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
 function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const toggleExpand = () => ctx.toggleTool(props.part.callID)
 
   const files = createMemo(() => props.metadata.files ?? [])
 
@@ -2142,6 +2224,11 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
 
   return (
     <Switch>
+      <Match when={props.collapsed}>
+        <InlineTool icon="%" pending="Preparing patch..." complete={files().length > 0} part={props.part} onClick={toggleExpand}>
+          Patch {files().map((f) => normalizePath(f.relativePath)).join(", ")}
+        </InlineTool>
+      </Match>
       <Match when={files().length > 0}>
         <For each={files()}>
           {(file) => (
@@ -2171,8 +2258,15 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
 }
 
 function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
+  const ctx = use()
+  const toggleExpand = () => ctx.toggleTool(props.part.callID)
   return (
     <Switch>
+      <Match when={props.collapsed}>
+        <InlineTool icon="⚙" pending="Updating todos..." complete={props.metadata.todos?.length} part={props.part} onClick={toggleExpand}>
+          Todos updated ({props.metadata.todos?.length ?? 0} items)
+        </InlineTool>
+      </Match>
       <Match when={props.metadata.todos?.length}>
         <BlockTool title="# Todos" part={props.part}>
           <box>
@@ -2193,6 +2287,8 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
 
 function Question(props: ToolProps<typeof QuestionTool>) {
   const { theme } = useTheme()
+  const ctx = use()
+  const toggleExpand = () => ctx.toggleTool(props.part.callID)
   const count = createMemo(() => props.input.questions?.length ?? 0)
 
   function format(answer?: string[]) {
@@ -2202,6 +2298,11 @@ function Question(props: ToolProps<typeof QuestionTool>) {
 
   return (
     <Switch>
+      <Match when={props.collapsed}>
+        <InlineTool icon="→" pending="Asking questions..." complete={count()} part={props.part} onClick={toggleExpand}>
+          Asked {count()} question{count() !== 1 ? "s" : ""}
+        </InlineTool>
+      </Match>
       <Match when={props.metadata.answers}>
         <BlockTool title="# Questions" part={props.part}>
           <box gap={1}>

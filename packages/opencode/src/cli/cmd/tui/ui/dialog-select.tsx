@@ -8,6 +8,7 @@ import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
+import { Brand } from "@/fork/brand"
 import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 import { getScrollAcceleration } from "../util/scroll"
@@ -299,7 +300,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                     <Show
                       when={options[0]?.categoryView}
                       fallback={
-                        <text fg={theme.accent} attributes={TextAttributes.BOLD}>
+                        <text fg={Brand.slug !== Brand.legacySlug ? theme.textMuted : theme.accent} attributes={TextAttributes.BOLD}>
                           {category}
                         </text>
                       }

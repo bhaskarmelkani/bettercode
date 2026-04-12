@@ -4,6 +4,7 @@ import { AppRuntime } from "@/effect/app-runtime"
 import { Git } from "@/git"
 import { Instance } from "@/project/instance"
 import { Process } from "@/util/process"
+import { Brand } from "@/fork/brand"
 
 export const PrCommand = cmd({
   command: "pr <number>",
@@ -120,18 +121,18 @@ export const PrCommand = cmd({
 
         UI.println(`Successfully checked out PR #${prNumber} as branch '${localBranchName}'`)
         UI.println()
-        UI.println("Starting opencode...")
+        UI.println(`Starting ${Brand.bin}...`)
         UI.println()
 
         const opencodeArgs = sessionId ? ["-s", sessionId] : []
-        const opencodeProcess = Process.spawn(["opencode", ...opencodeArgs], {
+        const opencodeProcess = Process.spawn([Brand.bin, ...opencodeArgs], {
           stdin: "inherit",
           stdout: "inherit",
           stderr: "inherit",
           cwd: process.cwd(),
         })
         const code = await opencodeProcess.exited
-        if (code !== 0) throw new Error(`opencode exited with code ${code}`)
+        if (code !== 0) throw new Error(`${Brand.bin} exited with code ${code}`)
       },
     })
   },

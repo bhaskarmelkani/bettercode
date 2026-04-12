@@ -42,6 +42,7 @@ import { Flock } from "@/util/flock"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
 import { Npm } from "@/npm"
 import { InstanceRef } from "@/effect/instance-ref"
+import { Brand } from "@/fork/brand"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -64,11 +65,11 @@ export namespace Config {
   function systemManagedConfigDir(): string {
     switch (process.platform) {
       case "darwin":
-        return "/Library/Application Support/opencode"
+        return `/Library/Application Support/${Brand.slug}`
       case "win32":
-        return path.join(process.env.ProgramData || "C:\\ProgramData", "opencode")
+        return path.join(process.env.ProgramData || "C:\\ProgramData", Brand.slug)
       default:
-        return "/etc/opencode"
+        return `/etc/${Brand.slug}`
     }
   }
 
@@ -78,7 +79,7 @@ export namespace Config {
 
   const managedDir = managedConfigDir()
 
-  const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
+  const MANAGED_PLIST_DOMAIN = `ai.${Brand.slug}.managed`
 
   // Keys injected by macOS/MDM into the managed plist that are not OpenCode config
   const PLIST_META = new Set([
@@ -1130,7 +1131,7 @@ export namespace Config {
   export class Service extends Context.Service<Service, Interface>()("@opencode/Config") {}
 
   function globalConfigFile() {
-    const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
+    const candidates = [...Brand.cfg("opencode").flatMap((name) => [`${name}.jsonc`, `${name}.json`]), "config.json"].map((file) =>
       path.join(Global.Path.config, file),
     )
     for (const file of candidates) {
@@ -1281,12 +1282,14 @@ export namespace Config {
         })
 
         const loadGlobal = Effect.fnUntraced(function* () {
-          let result: Info = pipe(
-            {},
-            mergeDeep(yield* loadFile(path.join(Global.Path.config, "config.json"))),
-            mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.json"))),
-            mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
-          )
+          let result: Info = pipe({}, mergeDeep(yield* loadFile(path.join(Global.Path.config, "config.json"))))
+          for (const name of Brand.cfg("opencode")) {
+            result = pipe(
+              result,
+              mergeDeep(yield* loadFile(path.join(Global.Path.config, `${name}.json`))),
+              mergeDeep(yield* loadFile(path.join(Global.Path.config, `${name}.jsonc`))),
+            )
+          }
 
           const legacy = path.join(Global.Path.config, "config")
           if (existsSync(legacy)) {
@@ -1387,7 +1390,7 @@ export namespace Config {
 
           if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
             for (const file of yield* Effect.promise(() =>
-              ConfigPaths.projectFiles("opencode", ctx.directory, ctx.worktree),
+              ConfigPaths.projectFiles(Brand.cfg("opencode"), ctx.directory, ctx.worktree),
             )) {
               yield* merge(file, yield* loadFile(file), "local")
             }
@@ -1406,9 +1409,8 @@ export namespace Config {
           const deps: Promise<void>[] = []
 
           for (const dir of unique(directories)) {
-            if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-              for (const file of ["opencode.json", "opencode.jsonc"]) {
-                const source = path.join(dir, file)
+            if (ConfigPaths.isConfigDir(dir)) {
+              for (const source of ConfigPaths.fileInDirectory(dir, Brand.cfg("opencode"))) {
                 log.debug(`loading config from ${source}`)
                 yield* merge(source, yield* loadFile(source))
                 result.agent ??= {}
@@ -1480,8 +1482,7 @@ export namespace Config {
           }
 
           if (existsSync(managedDir)) {
-            for (const file of ["opencode.json", "opencode.jsonc"]) {
-              const source = path.join(managedDir, file)
+            for (const source of ConfigPaths.fileInDirectory(managedDir, Brand.cfg("opencode"))) {
               yield* merge(source, yield* loadFile(source), "global")
             }
           }

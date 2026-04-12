@@ -1,6 +1,7 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { createMemo, Show } from "solid-js"
 import { Global } from "@/global"
+import { Brand } from "@/fork/brand"
 
 const id = "internal:sidebar-footer"
 
@@ -23,6 +24,20 @@ function View(props: { api: TuiPluginApi }) {
       name: list.at(-1) ?? "",
     }
   })
+
+  if (Brand.slug !== Brand.legacySlug) {
+    return (
+      <box gap={1}>
+        <text>
+          <span style={{ fg: theme().textMuted }}>{path().parent}/</span>
+          <span style={{ fg: theme().text }}>{path().name}</span>
+        </text>
+        <text fg={theme().textMuted}>
+          {Brand.app} {props.api.app.version}
+        </text>
+      </box>
+    )
+  }
 
   return (
     <box gap={1}>
@@ -48,7 +63,7 @@ function View(props: { api: TuiPluginApi }) {
                 ✕
               </text>
             </box>
-            <text fg={theme().textMuted}>OpenCode includes free models so you can start immediately.</text>
+            <text fg={theme().textMuted}>{Brand.app} includes free models so you can start immediately.</text>
             <text fg={theme().textMuted}>
               Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
             </text>
@@ -64,11 +79,7 @@ function View(props: { api: TuiPluginApi }) {
         <span style={{ fg: theme().text }}>{path().name}</span>
       </text>
       <text fg={theme().textMuted}>
-        <span style={{ fg: theme().success }}>•</span> <b>Open</b>
-        <span style={{ fg: theme().text }}>
-          <b>Code</b>
-        </span>{" "}
-        <span>{props.api.app.version}</span>
+        <span style={{ fg: theme().success }}>•</span> <b>{Brand.app}</b> <span>{props.api.app.version}</span>
       </text>
     </box>
   )
