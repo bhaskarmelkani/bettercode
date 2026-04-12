@@ -1,0 +1,9 @@
+#!/usr/bin/env node
+
+process.env.OPENCODE_BRAND_SLUG ??= "bettercode"
+process.env.OPENCODE_BRAND_NAME ??= "BetterCode"
+process.env.OPENCODE_BRAND_COMMAND ??= "bettercode"
+process.env.OPENCODE_BRAND_DOTDIR ??= ".bettercode"
+process.env.OPENCODE_BRAND_PROTOCOL ??= "bettercode"
+
+require("./opencode")

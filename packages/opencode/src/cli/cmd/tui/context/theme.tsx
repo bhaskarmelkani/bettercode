@@ -44,6 +44,7 @@ import { Filesystem } from "@/util/filesystem"
 import { useTuiConfig } from "./tui-config"
 import { isRecord } from "@/util/record"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
+import { Brand } from "@/fork/brand"
 
 type Theme = TuiThemeCurrent & {
   _hasSelectedListItemText: boolean
@@ -155,7 +156,7 @@ const [store, setStore] = createStore<State>({
   themes: listThemes(),
   mode: "dark",
   lock: undefined,
-  active: "opencode",
+  active: Brand.slug === Brand.legacySlug ? "opencode" : "system",
   ready: false,
 })
 
@@ -360,7 +361,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
             }
             return
           }
-          systemTheme = generateSystem(colors, mode)
+          systemTheme = generateSystem(colors, mode, Brand.slug !== Brand.legacySlug)
           syncThemes()
         })
         .catch(() => {
@@ -481,7 +482,7 @@ async function getCustomThemes() {
     Global.Path.config,
     ...(await Array.fromAsync(
       Filesystem.up({
-        targets: [".opencode"],
+        targets: Brand.dirs(),
         start: process.cwd(),
       }),
     )),
@@ -509,7 +510,7 @@ export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
   return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
 }
 
-function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
+function generateSystem(colors: TerminalColors, mode: "dark" | "light", minimal = false): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
   const transparent = RGBA.fromValues(bg.r, bg.g, bg.b, 0)
@@ -565,9 +566,9 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
 
       // Background colors - use transparent to respect terminal transparency
       background: transparent,
-      backgroundPanel: grays[2],
-      backgroundElement: grays[3],
-      backgroundMenu: grays[3],
+      backgroundPanel: minimal ? transparent : grays[2],
+      backgroundElement: minimal ? tint(bg, fg, isDark ? 0.06 : 0.04) : grays[3],
+      backgroundMenu: minimal ? tint(bg, fg, isDark ? 0.09 : 0.06) : grays[3],
 
       // Border colors
       borderSubtle: grays[6],

@@ -4,6 +4,7 @@ import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../context/tui-config"
 import { Installation } from "@/installation"
 import { TuiPluginRuntime } from "../../plugin"
+import { Brand } from "@/fork/brand"
 
 import { getScrollAcceleration } from "../../util/scroll"
 
@@ -14,16 +15,18 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const session = createMemo(() => sync.session.get(props.sessionID))
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
+  const isFork = Brand.slug !== Brand.legacySlug
+
   return (
     <Show when={session()}>
       <box
-        backgroundColor={theme.backgroundPanel}
+        backgroundColor={isFork ? undefined : theme.backgroundPanel}
         width={42}
         height="100%"
         paddingTop={1}
         paddingBottom={1}
-        paddingLeft={2}
-        paddingRight={2}
+        paddingLeft={isFork ? 1 : 2}
+        paddingRight={isFork ? 1 : 2}
         position={props.overlay ? "absolute" : "relative"}
       >
         <scrollbox

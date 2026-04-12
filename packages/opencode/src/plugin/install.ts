@@ -12,6 +12,7 @@ import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@/util/flock"
 import { isRecord } from "@/util/record"
+import { Brand } from "@/fork/brand"
 
 import { parsePluginSpecifier, readPackageThemes, readPluginPackage, resolvePluginTarget } from "./shared"
 
@@ -334,7 +335,7 @@ function patchDir(input: PatchInput) {
   if (input.global) return input.config ?? Global.Path.config
   const git = input.vcs === "git" && input.worktree !== "/"
   const root = git ? input.worktree : input.directory
-  return path.join(root, ".opencode")
+  return path.join(root, Brand.dir)
 }
 
 function patchName(kind: Kind): "opencode" | "tui" {

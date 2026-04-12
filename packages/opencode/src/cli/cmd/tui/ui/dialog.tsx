@@ -6,6 +6,7 @@ import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
 import { Flag } from "@/flag/flag"
 import { Selection } from "@tui/util/selection"
+import { Brand } from "@/fork/brand"
 
 export function Dialog(
   props: ParentProps<{
@@ -44,7 +45,7 @@ export function Dialog(
       paddingTop={dimensions().height / 4}
       left={0}
       top={0}
-      backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
+      backgroundColor={RGBA.fromInts(0, 0, 0, Brand.slug !== Brand.legacySlug ? 100 : 150)}
     >
       <box
         onMouseUp={(e) => {

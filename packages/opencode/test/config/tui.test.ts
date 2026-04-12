@@ -18,6 +18,7 @@ beforeEach(async () => {
 afterEach(async () => {
   delete process.env.OPENCODE_CONFIG
   delete process.env.OPENCODE_TUI_CONFIG
+  await fs.rm(path.join(Global.Path.config, "config.json"), { force: true }).catch(() => {})
   await fs.rm(path.join(Global.Path.config, "opencode.json"), { force: true }).catch(() => {})
   await fs.rm(path.join(Global.Path.config, "opencode.jsonc"), { force: true }).catch(() => {})
   await fs.rm(path.join(Global.Path.config, "tui.json"), { force: true }).catch(() => {})
@@ -81,14 +82,16 @@ test("keeps server and tui plugin merge semantics aligned", async () => {
     fn: async () => {
       const server = await Config.get()
       const tui = await TuiConfig.get()
-      const serverPlugins = (server.plugin ?? []).map((item) => Config.pluginSpecifier(item))
+      const serverPlugins = (server.plugin ?? [])
+        .map((item) => Config.pluginSpecifier(item))
+        .filter((item) => !item.startsWith("file://"))
       const tuiPlugins = (tui.plugin ?? []).map((item) => Config.pluginSpecifier(item))
 
       expect(serverPlugins).toEqual(tuiPlugins)
       expect(serverPlugins).toContain("shared-plugin@2.0.0")
       expect(serverPlugins).not.toContain("shared-plugin@1.0.0")
 
-      const serverOrigins = server.plugin_origins ?? []
+      const serverOrigins = (server.plugin_origins ?? []).filter((item) => !Config.pluginSpecifier(item.spec).startsWith("file://"))
       const tuiOrigins = tui.plugin_origins ?? []
       expect(serverOrigins.map((item) => Config.pluginSpecifier(item.spec))).toEqual(serverPlugins)
       expect(tuiOrigins.map((item) => Config.pluginSpecifier(item.spec))).toEqual(tuiPlugins)

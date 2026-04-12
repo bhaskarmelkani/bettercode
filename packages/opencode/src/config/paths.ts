@@ -6,19 +6,23 @@ import { NamedError } from "@opencode-ai/util/error"
 import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
+import { Brand } from "@/fork/brand"
 
 export namespace ConfigPaths {
-  export async function projectFiles(name: string, directory: string, worktree: string) {
-    return Filesystem.findUp([`${name}.json`, `${name}.jsonc`], directory, worktree, { rootFirst: true })
+  export async function projectFiles(name: string | string[], directory: string, worktree: string) {
+    const list = Array.isArray(name) ? name : [name]
+    const files = list.flatMap((item) => [`${item}.json`, `${item}.jsonc`])
+    return Filesystem.findUp(files, directory, worktree, { rootFirst: true })
   }
 
   export async function directories(directory: string, worktree: string) {
+    const targets = Brand.dirs()
     return [
       Global.Path.config,
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
-              targets: [".opencode"],
+              targets,
               start: directory,
               stop: worktree,
             }),
@@ -26,7 +30,7 @@ export namespace ConfigPaths {
         : []),
       ...(await Array.fromAsync(
         Filesystem.up({
-          targets: [".opencode"],
+          targets,
           start: Global.Path.home,
           stop: Global.Path.home,
         }),
@@ -35,8 +39,13 @@ export namespace ConfigPaths {
     ]
   }
 
-  export function fileInDirectory(dir: string, name: string) {
-    return [path.join(dir, `${name}.json`), path.join(dir, `${name}.jsonc`)]
+  export function fileInDirectory(dir: string, name: string | string[]) {
+    const list = Array.isArray(name) ? name : [name]
+    return list.flatMap((item) => [path.join(dir, `${item}.json`), path.join(dir, `${item}.jsonc`)])
+  }
+
+  export function isConfigDir(dir: string) {
+    return dir === Flag.OPENCODE_CONFIG_DIR || Brand.isDir(dir)
   }
 
   export const JsonError = NamedError.create(

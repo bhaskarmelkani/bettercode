@@ -20,6 +20,7 @@ import { text } from "node:stream/consumers"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
+import { Brand } from "@/fork/brand"
 
 export namespace Ripgrep {
   const log = Log.create({ service: "ripgrep" })
@@ -362,7 +363,7 @@ export namespace Ripgrep {
 
     const root: Node = { name: "", children: new Map() }
     for (const file of files) {
-      if (file.includes(".opencode")) continue
+      if (Brand.dirs().some((item) => file.includes(item))) continue
       const parts = file.split(path.sep)
       if (parts.length < 2) continue
       let node = root

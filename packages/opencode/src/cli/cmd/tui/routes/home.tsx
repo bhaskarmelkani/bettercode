@@ -9,6 +9,8 @@ import { useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { TuiPluginRuntime } from "../plugin"
+import { useTheme } from "../context/theme"
+import { Surface } from "../fork/surface"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -25,6 +27,7 @@ export function Home() {
   const [ref, setRef] = createSignal<PromptRef | undefined>()
   const args = useArgs()
   const local = useLocal()
+  const { theme } = useTheme()
   let sent = false
 
   const bind = (r: PromptRef | undefined) => {
@@ -54,16 +57,19 @@ export function Home() {
   })
 
   return (
-    <>
-      <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
-        <box flexGrow={1} minHeight={0} />
-        <box height={4} minHeight={0} flexShrink={1} />
+    <Surface.home
+      text={theme.text}
+      muted={theme.textMuted}
+      panel={theme.backgroundPanel}
+      border={theme.border}
+      logo={
         <box flexShrink={0}>
           <TuiPluginRuntime.Slot name="home_logo" mode="replace">
             <Logo />
           </TuiPluginRuntime.Slot>
         </box>
-        <box height={1} minHeight={0} flexShrink={1} />
+      }
+      prompt={
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
           <TuiPluginRuntime.Slot
             name="home_prompt"
@@ -79,13 +85,12 @@ export function Home() {
             />
           </TuiPluginRuntime.Slot>
         </box>
-        <TuiPluginRuntime.Slot name="home_bottom" />
-        <box flexGrow={1} minHeight={0} />
-        <Toast />
-      </box>
-      <box width="100%" flexShrink={0}>
+      }
+      bottom={<TuiPluginRuntime.Slot name="home_bottom" />}
+      toast={<Toast />}
+      footer={
         <TuiPluginRuntime.Slot name="home_footer" mode="single_winner" />
-      </box>
-    </>
+      }
+    />
   )
 }

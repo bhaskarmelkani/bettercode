@@ -2,6 +2,7 @@ import { TextAttributes, RGBA } from "@opentui/core"
 import { For, type JSX } from "solid-js"
 import { useTheme, tint } from "@tui/context/theme"
 import { logo, marks } from "@/cli/logo"
+import { Brand } from "@/fork/brand"
 
 // Shadow markers (rendered chars in parens):
 // _ = full shadow cell (space with bg=shadow)
@@ -72,11 +73,20 @@ export function Logo() {
 
   return (
     <box>
-      <For each={logo.left}>
+      <For each={Brand.slug === Brand.legacySlug ? logo.left : []}>
         {(line, index) => (
           <box flexDirection="row" gap={1}>
             <box flexDirection="row">{renderLine(line, theme.textMuted, false)}</box>
             <box flexDirection="row">{renderLine(logo.right[index()], theme.text, true)}</box>
+          </box>
+        )}
+      </For>
+      <For each={Brand.slug === Brand.legacySlug ? [] : [Brand.app]}>
+        {(name) => (
+          <box justifyContent="center" width="100%">
+            <text fg={theme.text} attributes={TextAttributes.BOLD} selectable={false}>
+              {name}
+            </text>
           </box>
         )}
       </For>

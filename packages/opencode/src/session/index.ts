@@ -31,6 +31,7 @@ import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { Effect, Layer, Option, Context } from "effect"
 import { makeRuntime } from "@/effect/run-service"
+import { Brand } from "@/fork/brand"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -233,7 +234,7 @@ export namespace Session {
 
   export function plan(input: { slug: string; time: { created: number } }) {
     const base = Instance.project.vcs
-      ? path.join(Instance.worktree, ".opencode", "plans")
+      ? path.join(Instance.worktree, Brand.dir, "plans")
       : path.join(Global.Path.data, "plans")
     return path.join(base, [input.time.created, input.slug].join("-") + ".md")
   }

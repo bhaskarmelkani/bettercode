@@ -122,6 +122,8 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
+import { Surface } from "./fork/surface"
+import { Brand } from "@/fork/brand"
 
 function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
   const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
@@ -353,24 +355,24 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("OpenCode")
+      renderer.setTerminalTitle(Brand.app)
       return
     }
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("OpenCode")
+        renderer.setTerminalTitle(Brand.app)
         return
       }
 
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      renderer.setTerminalTitle(`${Brand.app} | ${title}`)
       return
     }
 
     if (route.data.type === "plugin") {
-      renderer.setTerminalTitle(`OC | ${route.data.id}`)
+      renderer.setTerminalTitle(`${Brand.app} | ${route.data.id}`)
     }
   })
 
@@ -873,7 +875,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     await DialogAlert.show(
       dialog,
       "Update Complete",
-      `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,
+      `Successfully updated to ${Brand.app} v${result.data.version}. Please restart the application.`,
     )
 
     exit()
@@ -888,11 +890,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   })
 
   return (
-    <box
+    <Surface.app
       width={dimensions().width}
       height={dimensions().height}
-      backgroundColor={theme.background}
-      onMouseDown={(evt) => {
+      bg={theme.background}
+      onMouseDown={(evt: { button: number; preventDefault: () => void; stopPropagation: () => void }) => {
         if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return
 
@@ -918,6 +920,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       {plugin()}
       <TuiPluginRuntime.Slot name="app" />
       <StartupLoading ready={ready} />
-    </box>
+    </Surface.app>
   )
 }
