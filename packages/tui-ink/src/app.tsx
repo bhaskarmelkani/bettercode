@@ -68,8 +68,8 @@ export function App({ onExit }: AppProps) {
     if (!sid) {
       const client = useAppStore.getState().sdkClient
       if (!client) return
-      const res = await client.session.create({}).catch(() => undefined)
-      if (!res?.data?.id) return
+      const res = await client.session.create().catch(() => undefined)
+      if (!res || res.error) return
       sid = res.data.id
       useAppStore.setState({ currentSessionID: sid })
     }

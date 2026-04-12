@@ -1,13 +1,6 @@
 import { cmd } from "./cmd"
-
-type TuiInkMod = {
-  startTuiInk: (opts: {
-    url: string
-    directory?: string
-    headers?: Record<string, string>
-    sessionID?: string
-  }) => Promise<void>
-}
+import { spawnSync } from "child_process"
+import path from "path"
 
 export const TuiInkCommand = cmd({
   command: "tui-ink [url]",
@@ -45,22 +38,29 @@ export const TuiInkCommand = cmd({
       }
     })()
 
-    const headers = (() => {
-      const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
-      if (!password) return undefined
-      const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
-      return { Authorization: auth }
-    })()
+    const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
 
-    // Use a variable to avoid tsgo statically following JSX module types
-    const pkg = "@opencode-ai/tui-ink" as string
-    const mod = (await import(/* @vite-ignore */ pkg)) as TuiInkMod
+    // Resolve the tui-ink entry point relative to this file.
+    // We spawn a fresh bun process (no --conditions=browser) so that React /
+    // react-reconciler / ink all resolve to the same module instance and the
+    // React dispatcher is set up correctly before any hook fires.
+    const tuiEntry = path.resolve(import.meta.dirname, "../../../../tui-ink/src/index.tsx")
 
-    await mod.startTuiInk({
-      url: args.url as string,
-      directory,
-      headers,
-      sessionID: args.session,
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      OPENCODE_TUI_URL: args.url as string,
+    }
+    if (directory) env.OPENCODE_TUI_DIR = directory
+    if (args.session) env.OPENCODE_TUI_SESSION = args.session
+    if (password) env.OPENCODE_TUI_PASSWORD = password
+
+    const result = spawnSync("bun", ["run", tuiEntry], {
+      stdio: "inherit",
+      env,
     })
+
+    if (result.error) {
+      throw result.error
+    }
   },
 })

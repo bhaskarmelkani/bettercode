@@ -1,6 +1,6 @@
 import React from "react"
 import { Box, Text } from "ink"
-import { Spinner } from "@inkjs/ui"
+import { Spinner } from "./Spinner"
 import { theme } from "../theme"
 
 interface HeaderProps {

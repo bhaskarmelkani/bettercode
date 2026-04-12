@@ -82,7 +82,8 @@ export const useAppStore = create<AppState>((set) => ({
     if (!client) return
     useAppStore.getState().setStatus("generating")
     try {
-      await client.session.prompt({
+      // promptAsync returns immediately; the AI response arrives via SSE stream
+      await client.session.promptAsync({
         sessionID,
         parts: [{ type: "text", text }],
       })
