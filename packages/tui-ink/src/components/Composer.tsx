@@ -22,9 +22,10 @@ interface Props {
   onAbort: () => void
   active: boolean
   generating: boolean
+  width: number
 }
 
-export function Composer({ onSubmit, onAbort, active, generating }: Props) {
+export function Composer({ onSubmit, onAbort, active, generating, width }: Props) {
   const theme = useTheme()
   const [value, setValue] = useState("")
   const [draft, setDraft] = useState("")
@@ -52,6 +53,8 @@ export function Composer({ onSubmit, onAbort, active, generating }: Props) {
   const setShowThinking = useAppStore((s) => s.setShowThinking)
   const showThinking = useAppStore((s) => s.showThinking)
   const composerAppend = useAppStore((s) => s.composerAppend)
+  const setMode = useAppStore((s) => s.setMode)
+  const mode = useAppStore((s) => s.mode)
   const regCmds = useCommands()
 
   // Animate spinner while generating
@@ -114,7 +117,7 @@ export function Composer({ onSubmit, onAbort, active, generating }: Props) {
       .map((c) => ({ name: c.name, description: c.description ?? "" })),
   ]
 
-  const slashOptions = isSlash ? allSlash.filter((c) => c.name.startsWith(query)) : []
+  const slashOptions = isSlash ? allSlash.filter((c) => c.name.startsWith(query)).slice(0, 5) : []
   const slashVisible = slashOptions.length > 0 && !mentionActive
   const mentionVisible = mentionActive && mentionResults.length > 0
 
@@ -216,6 +219,12 @@ export function Composer({ onSubmit, onAbort, active, generating }: Props) {
           setValue((v) => v + stash)
           setPromptStash(null)
         }
+        return
+      }
+
+      // Shift+Tab → cycle plan/build mode
+      if (key.shift && key.tab) {
+        setMode(mode === "plan" ? "build" : "plan")
         return
       }
 
@@ -323,6 +332,9 @@ export function Composer({ onSubmit, onAbort, active, generating }: Props) {
 
       if (key.ctrl || key.meta) return
 
+      // Filter out terminal mouse escape sequences (SGR/X10 format, ESC stripped by Ink)
+      if (input && (input.startsWith("[<") || input.startsWith("[M"))) return
+
       if (input) {
         const next = value + input
         setValue(next)
@@ -363,6 +375,7 @@ export function Composer({ onSubmit, onAbort, active, generating }: Props) {
 
   return (
     <Box flexDirection="column" flexShrink={0}>
+      {/* Suggestions area — above the separator line */}
       {slashVisible && (
         <SlashMenu query={query} options={slashOptions} focused={slashIdx} onSelect={handleSlashSelect} />
       )}
@@ -401,6 +414,14 @@ export function Composer({ onSubmit, onAbort, active, generating }: Props) {
           </Text>
         </Box>
       )}
+
+      {/* Blank line above separator for breathing space */}
+      <Text> </Text>
+
+      {/* Separator — between suggestions and input */}
+      <Text color={theme.surface1}>{"─".repeat(width)}</Text>
+
+      {/* Input row */}
       <Box flexDirection="row">
         <Text color={generating ? theme.yellow : theme.cyan}>
           {generating ? SPIN_FRAMES[spinFrame] + " " : "› "}
@@ -415,13 +436,7 @@ export function Composer({ onSubmit, onAbort, active, generating }: Props) {
           </>
         )}
       </Box>
-      <Box marginTop={0}>
-        <Text color={theme.surface2} dimColor>
-          {generating
-            ? "ctrl+c abort · ↑↓ scroll messages · shift+↑↓ scroll 3x"
-            : "enter submit · ↑↓ history · ctrl+u clear · ctrl+x stash · ctrl+y pop · / commands · @ files"}
-        </Text>
-      </Box>
+
     </Box>
   )
 }

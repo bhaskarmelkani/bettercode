@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react"
 import { Box, Text, useInput } from "ink"
 import { useShallow } from "zustand/shallow"
 import { useAppStore } from "../store"
-import { useTheme } from "../theme-context"
 import { Header } from "../components/Header"
 import { MessageList } from "../components/MessageList"
 import { Composer } from "../components/Composer"
@@ -20,7 +19,6 @@ interface Props {
 }
 
 export function SessionScreen({ sessionID, rows, columns, active }: Props) {
-  const theme = useTheme()
   const syncStatus = useAppStore((s) => s.syncStatus)
   const sessions = useAppStore((s) => s.sessions)
   const vcs = useAppStore((s) => s.vcs)
@@ -70,12 +68,12 @@ export function SessionScreen({ sessionID, rows, columns, active }: Props) {
 
   const SIDEBAR_WIDTH = 32
 
-  // Layout: 1 header + 1 separator + 2 composer (input+hint) + 1 statusbar = 5 rows reserved
+  // Layout: 1 header + 3 composer (blank+separator+input) + 1 statusbar = 5 rows reserved
   // Plus permission/question prompts if visible
-  const promptHeight = 2 // composer rows: input + hint
+  const promptHeight = 3 // composer rows: blank + separator + input
   const permHeight = permissions.length > 0 ? 6 : 0
   const qHeight = questions.length > 0 && permissions.length === 0 ? 8 : 0
-  const listHeight = Math.max(1, rows - 1 - 1 - 1 - promptHeight - permHeight - qHeight)
+  const listHeight = Math.max(1, rows - 1 - 1 - promptHeight - permHeight - qHeight)
   const mainWidth = sidebarOpen ? columns - SIDEBAR_WIDTH : columns
 
   const project = dir?.split("/").pop() ?? "bettercode"
@@ -130,16 +128,12 @@ export function SessionScreen({ sessionID, rows, columns, active }: Props) {
 
           <ToastOverlay />
 
-          {/* Separator between content and input — mirrors Claude Code's divider */}
-          <Box flexShrink={0}>
-            <Text color={theme.surface1}>{"─".repeat(mainWidth)}</Text>
-          </Box>
-
           <Composer
             onSubmit={handleSubmit}
             onAbort={handleAbort}
             active={active && permissions.length === 0 && questions.length === 0}
             generating={generating}
+            width={mainWidth}
           />
         </Box>
 

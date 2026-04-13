@@ -4,6 +4,7 @@ import type { Message, Part } from "@opencode-ai/sdk/v2"
 import { UserMessage } from "./UserMessage"
 import { AssistantMessage } from "./AssistantMessage"
 import { useAppStore } from "../store"
+import { mouseScrollEvents } from "../mouseScrollEvents"
 
 const EMPTY_MESSAGES: Message[] = []
 const EMPTY_PARTS: Record<string, Part[]> = {}
@@ -75,6 +76,7 @@ function useSessionParts(sessionID: string): Record<string, Part[]> {
 // Scroll step in rows
 // ---------------------------------------------------------------------------
 const SCROLL_STEP = 5
+const MOUSE_SCROLL_STEP = 3
 
 export const MessageList = React.memo(function MessageList({ sessionID, height, width, active, generating }: Props) {
   const messages = useAppStore((s) => s.messages[sessionID] ?? EMPTY_MESSAGES)
@@ -82,6 +84,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const showThinking = useAppStore((s) => s.showThinking)
   const savedPos = useAppStore((s) => s.scrollPos[sessionID] ?? 0)
   const setScrollPos = useAppStore((s) => s.setScrollPos)
+  const activeRef = useRef(active)
 
   const pending = useMemo(
     () => messages.findLast((m) => m.role === "assistant" && !(m as any).time?.completed)?.id,
@@ -94,14 +97,20 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const sticky = rowOffset === 0
   const prevMsgCount = useRef(messages.length)
 
-  // Total estimated height of all messages
+  // Total estimated height of all messages (+2 safety buffer to prevent bottom clip)
   const totalHeight = useMemo(() => {
-    return messages.reduce((acc, msg) => acc + estimateHeight(msg, parts[msg.id] ?? [], width), 0)
+    const base = messages.reduce((acc, msg) => acc + estimateHeight(msg, parts[msg.id] ?? [], width), 0)
+    return base + 2
   }, [messages, parts, width])
 
   // Max rows we can scroll up before reaching the very top
   const maxRowOffset = Math.max(0, totalHeight - height)
   const clampedOffset = Math.min(rowOffset, maxRowOffset)
+
+  // Keep refs stable for subscriptions
+  activeRef.current = active
+  const maxRowOffsetRef = useRef(maxRowOffset)
+  maxRowOffsetRef.current = maxRowOffset
 
   // Absolute top position of the content box inside the clipping container.
   // rowOffset=0  → absoluteTop = -(totalHeight-height)  → shows BOTTOM of content
@@ -126,11 +135,23 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
     prevMsgCount.current = messages.length
   }, [messages.length, sticky])
 
+  // Mouse wheel scroll — stable subscription, uses refs to avoid re-subscribing
+  useEffect(() => {
+    return mouseScrollEvents.on((direction) => {
+      if (!activeRef.current) return
+      if (direction === "up") {
+        setRowOffset((o) => Math.min(o + MOUSE_SCROLL_STEP, maxRowOffsetRef.current))
+      } else {
+        setRowOffset((o) => Math.max(0, o - MOUSE_SCROLL_STEP))
+      }
+    })
+  }, [])
+
   useInput(
     (_input, key) => {
-      // While generating the composer releases arrow keys so plain ↑↓ scrolls.
-      // When idle, plain ↑↓ is used for composer history — require shift.
+      // Scroll up: PageUp, Shift+↑, or plain ↑ while generating
       const scrollUp = key.pageUp || (key.upArrow && key.shift) || (key.upArrow && generating)
+      // Scroll down: PageDown, Shift+↓, or plain ↓ while generating
       const scrollDown = key.pageDown || (key.downArrow && key.shift) || (key.downArrow && generating)
       if (scrollUp) {
         setRowOffset((o) => Math.min(o + SCROLL_STEP, maxRowOffset))

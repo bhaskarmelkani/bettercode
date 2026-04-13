@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react"
 import { Box, useStdout, useInput } from "ink"
 import { useAppStore } from "./store"
 import { useSDK } from "./hooks/useSDK"
+import { useMouse } from "./hooks/useMouse"
 import { useHostCommands } from "./commands/useHostCommands"
 import { HomeScreen } from "./screens/HomeScreen"
 import { SessionScreen } from "./screens/SessionScreen"
@@ -40,6 +41,7 @@ export function App({ onExit }: AppProps) {
   const popDialog = useAppStore((s) => s.popDialog)
 
   useSDK({ url: serverUrl, directory, headers: serverHeaders })
+  useMouse()
 
   // Register all host commands into the registry
   useHostCommands()

@@ -103,6 +103,10 @@ export interface AppState {
   // Display toggles
   showThinking: boolean
 
+  // Composer mode
+  mode: "plan" | "build"
+  setMode: (mode: "plan" | "build") => void
+
   // Theme
   currentThemeName: string
 
@@ -236,6 +240,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   questions: {},
   composerStatus: "idle",
   showThinking: false,
+  mode: "build",
   currentThemeName: DEFAULT_THEME,
   toasts: [],
   composerAppend: "",
@@ -278,6 +283,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { currentModel: m, recentModels: recent }
     }),
   setCurrentAgent: (a) => set({ currentAgent: a }),
+  setMode: (m) => set({ mode: m }),
 
   navigate: (r) => set({ route: r }),
   pushDialog: (d) => set((prev) => ({ dialogs: [...prev.dialogs, d] })),

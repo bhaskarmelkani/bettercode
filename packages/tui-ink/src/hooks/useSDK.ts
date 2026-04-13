@@ -192,6 +192,16 @@ async function bootstrap(client: ReturnType<typeof createOpencodeClient>, direct
     vcs,
     syncStatus: "complete",
   })
+
+  // Auto-select a default model if none has been chosen yet
+  const state = useAppStore.getState()
+  if (!state.currentModel) {
+    const firstConnected = providerList.connected[0]
+    const defaultModelID = firstConnected ? providerList.default[firstConnected] : undefined
+    if (firstConnected && defaultModelID) {
+      state.setCurrentModel({ providerID: firstConnected, modelID: defaultModelID })
+    }
+  }
 }
 
 export function useSDK({ url, directory, headers }: Opts) {

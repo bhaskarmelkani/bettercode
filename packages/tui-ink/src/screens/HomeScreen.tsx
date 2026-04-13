@@ -3,6 +3,8 @@ import { Box, Text } from "ink"
 import { useAppStore } from "../store"
 import { InputBar } from "../components/InputBar"
 import { Spinner } from "../components/Spinner"
+import { Header } from "../components/Header"
+import { StatusBar } from "../components/StatusBar"
 import { useTheme } from "../theme-context"
 
 interface Props {
@@ -31,7 +33,7 @@ export function HomeScreen({ rows, columns, active }: Props) {
 
   const dir = useAppStore((s) => s.directory)
   const project = dir?.split("/").pop() ?? "bettercode"
-  const branch = vcs?.branch
+  const branch = vcs?.branch ?? "—"
 
   const handleSubmit = async (text: string) => {
     const client = useAppStore.getState().client
@@ -50,13 +52,12 @@ export function HomeScreen({ rows, columns, active }: Props) {
 
   return (
     <Box height={rows} width={columns} flexDirection="column">
-      {/* ── Top: scrollable content area ── */}
+      {/* ── Header — same as SessionScreen ── */}
+      <Header projectName={project} gitBranch={branch} status="idle" />
+
+      {/* ── Content area ── */}
       <Box flexGrow={1} flexDirection="column" justifyContent="center" alignItems="center">
-        {isLoading && (
-          <>
-            <Spinner label=" connecting to server..." />
-          </>
-        )}
+        {isLoading && <Spinner label=" connecting to server..." />}
 
         {isPartial && (
           <>
@@ -79,7 +80,7 @@ export function HomeScreen({ rows, columns, active }: Props) {
             {/* project + branch */}
             <Box marginTop={1} justifyContent="center">
               <Text color={theme.subtext}>{project}</Text>
-              {branch && <Text color={theme.overlay}> {branch}</Text>}
+              {vcs?.branch && <Text color={theme.overlay}> {vcs.branch}</Text>}
               <Text color={theme.overlay}>
                 {" "}
                 {providers.length} provider{providers.length !== 1 ? "s" : ""}
@@ -110,18 +111,11 @@ export function HomeScreen({ rows, columns, active }: Props) {
         )}
       </Box>
 
-      {/* ── Separator ── */}
-      <Box flexShrink={0}>
-        <Text color={theme.surface1}>{"─".repeat(columns)}</Text>
-      </Box>
+      {/* ── Input — same separator+input structure as SessionScreen ── */}
+      <InputBar onSubmit={handleSubmit} active={active && !isLoading && !isPartial} columns={columns} />
 
-      {/* ── Bottom: fixed input area ── */}
-      <Box flexShrink={0} flexDirection="column" paddingX={2} paddingTop={0}>
-        <InputBar onSubmit={handleSubmit} active={active && !isLoading && !isPartial} />
-        <Text color={theme.surface2} dimColor>
-          enter submit · ctrl+s sessions · ctrl+k commands · ctrl+c exit
-        </Text>
-      </Box>
+      {/* ── StatusBar — same as SessionScreen ── */}
+      <StatusBar />
     </Box>
   )
 }

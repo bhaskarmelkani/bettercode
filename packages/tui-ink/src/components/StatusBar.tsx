@@ -6,20 +6,18 @@ import { useAppStore } from "../store"
 export function StatusBar() {
   const theme = useTheme()
   const currentModel = useAppStore((s) => s.currentModel)
-  const currentAgent = useAppStore((s) => s.currentAgent)
+  const mode = useAppStore((s) => s.mode)
+
+  const modelDisplay = currentModel ? currentModel.modelID : "no model"
 
   return (
     <Box height={1} justifyContent="space-between">
-      <Text color={theme.subtext}> ctrl+c exit ctrl+n new ctrl+k commands </Text>
-      <Box>
-        {currentAgent && <Text color={theme.lavender}>{currentAgent} </Text>}
-        {currentModel && (
-          <Text color={theme.cyan}>
-            {currentModel.providerID}/{currentModel.modelID}{" "}
-          </Text>
-        )}
-        <Text color={theme.overlay}>bettercode v0.0.1 </Text>
+      <Box flexDirection="row">
+        <Text color={theme.cyan}>{">>"} </Text>
+        <Text color={mode === "plan" ? theme.yellow : theme.green}>{mode}</Text>
+        <Text color={theme.overlay}>{"  (shift+tab to cycle)"}</Text>
       </Box>
+      <Text color={theme.cyan}>[{modelDisplay}]</Text>
     </Box>
   )
 }
