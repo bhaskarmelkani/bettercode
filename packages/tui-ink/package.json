@@ -1,0 +1,27 @@
+{
+  "name": "@opencode-ai/tui-ink",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.tsx",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "scripts": {
+    "dev": "bun run src/index.tsx",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test test/",
+    "test:watch": "bun test --watch test/"
+  },
+  "dependencies": {
+    "@inkjs/ui": "^2.0.0",
+    "@opencode-ai/sdk": "workspace:*",
+    "ink": "^5.0.0",
+    "react": "^18.2.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "typescript": "^5.6.0"
+  }
+}

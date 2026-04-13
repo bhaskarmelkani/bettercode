@@ -23,6 +23,8 @@ import { ExportCommand } from "./cli/cmd/export"
 import { ImportCommand } from "./cli/cmd/import"
 import { AttachCommand } from "./cli/cmd/tui/attach"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
+import { TuiInkCommand } from "./cli/cmd/tui-ink"
+import { BettercodeCommand } from "./cli/cmd/bettercode"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
@@ -152,6 +154,8 @@ const cli = yargs(args)
   .command(McpCommand)
   .command(TuiThreadCommand)
   .command(AttachCommand)
+  .command(TuiInkCommand)
+  .command(BettercodeCommand)
   .command(RunCommand)
   .command(GenerateCommand)
   .command(DebugCommand)
