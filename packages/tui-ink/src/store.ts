@@ -105,7 +105,7 @@ export interface AppState {
   // Display toggles
   showThinking: boolean
 
-  // Composer mode
+  // Active primary agent
   mode: "plan" | "build"
   setMode: (mode: "plan" | "build") => void
 
@@ -446,7 +446,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   sendPrompt: async (sessionID, text, files) => {
-    const { client, currentModel, currentAgent } = get()
+    const { client, currentModel, currentAgent, mode } = get()
     if (!client) return
     set({ composerStatus: "generating" })
     const parts = [{ type: "text" as const, text }, ...(files ?? [])]
@@ -455,7 +455,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         sessionID,
         parts,
         ...(currentModel ? { model: currentModel } : {}),
-        ...(currentAgent ? { agent: currentAgent } : {}),
+        agent: currentAgent ?? mode,
       })
     } catch {
       set({ composerStatus: "error" })

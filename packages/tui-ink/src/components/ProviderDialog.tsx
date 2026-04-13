@@ -22,20 +22,22 @@ type Step =
   | { type: "list" }
   | { type: "method-select"; provider: Provider; methods: ProviderAuthMethod[] }
   | {
-      type: "prompts"
-      provider: Provider
-      method: ProviderAuthMethod
-      methodIndex: number
-      idx: number
-      collected: Record<string, string>
-      input: string
-    }
+    type: "prompts"
+    provider: Provider
+    method: ProviderAuthMethod
+    methodIndex: number
+    idx: number
+    collected: Record<string, string>
+    input: string
+    cursor: number
+  }
   | {
       type: "api-key"
       provider: Provider
       methodIndex: number
       metadata?: Record<string, string>
       input: string
+      cursor: number
       error: string | null
     }
   | { type: "oauth-auto"; provider: Provider; methodIndex: number; auth: ProviderAuthAuthorization; waiting: boolean }
@@ -45,6 +47,7 @@ type Step =
       methodIndex: number
       auth: ProviderAuthAuthorization
       input: string
+      cursor: number
       error: boolean
     }
 
@@ -88,9 +91,9 @@ export function ProviderDialog({ rows, columns }: Props) {
     const method = methods[idx]
     if (!method) return
     if (method.prompts?.length) {
-      setStep({ type: "prompts", provider, method, methodIndex: idx, idx: 0, collected: {}, input: "" })
+      setStep({ type: "prompts", provider, method, methodIndex: idx, idx: 0, collected: {}, input: "", cursor: 0 })
     } else if (method.type === "api") {
-      setStep({ type: "api-key", provider, methodIndex: idx, input: "", error: null })
+      setStep({ type: "api-key", provider, methodIndex: idx, input: "", cursor: 0, error: null })
     } else {
       // OAuth with no prompts
       startOAuth(provider, idx, {})
@@ -107,7 +110,7 @@ export function ProviderDialog({ rows, columns }: Props) {
     if (auth.method === "auto") {
       setStep({ type: "oauth-auto", provider, methodIndex, auth, waiting: true })
     } else {
-      setStep({ type: "oauth-code", provider, methodIndex, auth, input: "", error: false })
+      setStep({ type: "oauth-code", provider, methodIndex, auth, input: "", cursor: 0, error: false })
     }
   }
 
@@ -181,6 +184,38 @@ export function ProviderDialog({ rows, columns }: Props) {
         const prompt = prompts[step.idx]
         if (!prompt) return
 
+        if (key.leftArrow) {
+          setStep({ ...step, cursor: Math.max(0, step.cursor - 1) })
+          return
+        }
+        if (key.rightArrow) {
+          setStep({ ...step, cursor: Math.min(step.input.length, step.cursor + 1) })
+          return
+        }
+        if (key.ctrl && input === "a") {
+          setStep({ ...step, cursor: 0 })
+          return
+        }
+        if (key.ctrl && input === "e") {
+          setStep({ ...step, cursor: step.input.length })
+          return
+        }
+        if (key.backspace) {
+          if (step.cursor === 0) return
+          setStep({
+            ...step,
+            input: step.input.slice(0, step.cursor - 1) + step.input.slice(step.cursor),
+            cursor: step.cursor - 1,
+          })
+          return
+        }
+        if (key.delete) {
+          setStep({
+            ...step,
+            input: step.input.slice(0, step.cursor) + step.input.slice(step.cursor + 1),
+          })
+          return
+        }
         if (key.return) {
           const val = step.input.trim()
           if (!val) return
@@ -195,6 +230,7 @@ export function ProviderDialog({ rows, columns }: Props) {
                 methodIndex: step.methodIndex,
                 metadata: next,
                 input: "",
+                cursor: 0,
                 error: null,
               })
             } else {
@@ -205,18 +241,34 @@ export function ProviderDialog({ rows, columns }: Props) {
           }
           return
         }
-        if (key.backspace || key.delete) {
-          setStep({ ...step, input: step.input.slice(0, -1) })
-          return
-        }
         if (!key.ctrl && !key.meta && input) {
-          setStep({ ...step, input: step.input + input })
+          setStep({
+            ...step,
+            input: step.input.slice(0, step.cursor) + input + step.input.slice(step.cursor),
+            cursor: step.cursor + input.length,
+          })
         }
         return
       }
 
       // ── api-key ──
       if (step.type === "api-key") {
+        if (key.leftArrow) {
+          setStep({ ...step, cursor: Math.max(0, step.cursor - 1), error: null })
+          return
+        }
+        if (key.rightArrow) {
+          setStep({ ...step, cursor: Math.min(step.input.length, step.cursor + 1), error: null })
+          return
+        }
+        if (key.ctrl && input === "a") {
+          setStep({ ...step, cursor: 0, error: null })
+          return
+        }
+        if (key.ctrl && input === "e") {
+          setStep({ ...step, cursor: step.input.length, error: null })
+          return
+        }
         if (key.return) {
           const val = step.input.trim()
           if (!val) return
@@ -227,21 +279,56 @@ export function ProviderDialog({ rows, columns }: Props) {
             })
             .catch(() => {
               setStep({ ...step, error: "Failed to save key" })
-            })
+          })
           return
         }
-        if (key.backspace || key.delete) {
-          setStep({ ...step, input: step.input.slice(0, -1) })
+        if (key.backspace) {
+          if (step.cursor === 0) return
+          setStep({
+            ...step,
+            input: step.input.slice(0, step.cursor - 1) + step.input.slice(step.cursor),
+            cursor: step.cursor - 1,
+            error: null,
+          })
+          return
+        }
+        if (key.delete) {
+          setStep({
+            ...step,
+            input: step.input.slice(0, step.cursor) + step.input.slice(step.cursor + 1),
+            error: null,
+          })
           return
         }
         if (!key.ctrl && !key.meta && input) {
-          setStep({ ...step, input: step.input + input, error: null })
+          setStep({
+            ...step,
+            input: step.input.slice(0, step.cursor) + input + step.input.slice(step.cursor),
+            cursor: step.cursor + input.length,
+            error: null,
+          })
         }
         return
       }
 
       // ── oauth-code ──
       if (step.type === "oauth-code") {
+        if (key.leftArrow) {
+          setStep({ ...step, cursor: Math.max(0, step.cursor - 1), error: false })
+          return
+        }
+        if (key.rightArrow) {
+          setStep({ ...step, cursor: Math.min(step.input.length, step.cursor + 1), error: false })
+          return
+        }
+        if (key.ctrl && input === "a") {
+          setStep({ ...step, cursor: 0, error: false })
+          return
+        }
+        if (key.ctrl && input === "e") {
+          setStep({ ...step, cursor: step.input.length, error: false })
+          return
+        }
         if (key.return) {
           const code = step.input.trim()
           if (!code) return
@@ -255,12 +342,31 @@ export function ProviderDialog({ rows, columns }: Props) {
           })
           return
         }
-        if (key.backspace || key.delete) {
-          setStep({ ...step, input: step.input.slice(0, -1), error: false })
+        if (key.backspace) {
+          if (step.cursor === 0) return
+          setStep({
+            ...step,
+            input: step.input.slice(0, step.cursor - 1) + step.input.slice(step.cursor),
+            cursor: step.cursor - 1,
+            error: false,
+          })
+          return
+        }
+        if (key.delete) {
+          setStep({
+            ...step,
+            input: step.input.slice(0, step.cursor) + step.input.slice(step.cursor + 1),
+            error: false,
+          })
           return
         }
         if (!key.ctrl && !key.meta && input) {
-          setStep({ ...step, input: step.input + input, error: false })
+          setStep({
+            ...step,
+            input: step.input.slice(0, step.cursor) + input + step.input.slice(step.cursor),
+            cursor: step.cursor + input.length,
+            error: false,
+          })
         }
         return
       }
@@ -347,17 +453,26 @@ export function ProviderDialog({ rows, columns }: Props) {
         (() => {
           const prompt = step.method.prompts![step.idx]
           if (!prompt) return null
+          const show = (text: string, cursor: number) => {
+            const before = text.slice(0, cursor)
+            const cur = text[cursor] ?? " "
+            const after = text.slice(cursor + 1)
+            return (
+              <Text color={theme.text}>
+                {before}
+                <Text backgroundColor={theme.overlay} color={theme.base}>
+                  {cur}
+                </Text>
+                {after}
+              </Text>
+            )
+          }
           return (
             <>
               <Text color={theme.subtext}>{prompt.message}</Text>
               <Box marginTop={1} borderStyle="single" borderColor={theme.cyan} paddingX={1}>
                 <Text color={theme.cyan}>{"› "}</Text>
-                <Text color={theme.text}>
-                  {step.input}
-                  <Text backgroundColor={theme.overlay} color={theme.base}>
-                    {" "}
-                  </Text>
-                </Text>
+                {show(step.input, step.cursor)}
               </Box>
               <Box marginTop={1}>
                 <Text color={theme.overlay}>enter confirm · esc back</Text>
@@ -373,10 +488,11 @@ export function ProviderDialog({ rows, columns }: Props) {
           <Box marginTop={1} borderStyle="single" borderColor={step.error ? theme.red : theme.cyan} paddingX={1}>
             <Text color={theme.cyan}>{"› "}</Text>
             <Text color={theme.text}>
-              {"•".repeat(step.input.length)}
+              {"•".repeat(step.cursor)}
               <Text backgroundColor={theme.overlay} color={theme.base}>
-                {" "}
+                {step.cursor < step.input.length ? "•" : " "}
               </Text>
+              {"•".repeat(Math.max(0, step.input.length - step.cursor - 1))}
             </Text>
           </Box>
           {step.error && <Text color={theme.red}>{step.error}</Text>}
@@ -412,10 +528,11 @@ export function ProviderDialog({ rows, columns }: Props) {
           <Box marginTop={1} borderStyle="single" borderColor={step.error ? theme.red : theme.cyan} paddingX={1}>
             <Text color={theme.cyan}>{"code › "}</Text>
             <Text color={theme.text}>
-              {step.input}
+              {step.input.slice(0, step.cursor)}
               <Text backgroundColor={theme.overlay} color={theme.base}>
-                {" "}
+                {step.input[step.cursor] ?? " "}
               </Text>
+              {step.input.slice(step.cursor + 1)}
             </Text>
           </Box>
           {step.error && <Text color={theme.red}>Invalid code, try again</Text>}

@@ -6,9 +6,10 @@ import { useAppStore } from "../store"
 
 interface Props {
   request: QuestionRequest
+  columns: number
 }
 
-export function QuestionPrompt({ request }: Props) {
+export function QuestionPrompt({ request, columns }: Props) {
   const theme = useTheme()
   const reply = useAppStore((s) => s.replyQuestion)
   // Track current question index and answers collected so far
@@ -16,6 +17,7 @@ export function QuestionPrompt({ request }: Props) {
   const [answers, setAnswers] = useState<string[][]>([])
   const [optIdx, setOptIdx] = useState(0)
   const [custom, setCustom] = useState("")
+  const [cursor, setCursor] = useState(0)
   const [typing, setTyping] = useState(false)
 
   const question = request.questions[qIdx]
@@ -28,19 +30,46 @@ export function QuestionPrompt({ request }: Props) {
       if (key.return) {
         advance([custom])
         setCustom("")
+        setCursor(0)
         setTyping(false)
         return
       }
       if (key.escape) {
         setTyping(false)
         setCustom("")
+        setCursor(0)
         return
       }
-      if (key.backspace || key.delete) {
-        setCustom((v) => v.slice(0, -1))
+      if (key.leftArrow) {
+        setCursor((v) => Math.max(0, v - 1))
         return
       }
-      if (!key.ctrl && !key.meta && input) setCustom((v) => v + input)
+      if (key.rightArrow) {
+        setCursor((v) => Math.min(custom.length, v + 1))
+        return
+      }
+      if (key.ctrl && input === "a") {
+        setCursor(0)
+        return
+      }
+      if (key.ctrl && input === "e") {
+        setCursor(custom.length)
+        return
+      }
+      if (key.backspace) {
+        if (cursor === 0) return
+        setCustom((v) => v.slice(0, cursor - 1) + v.slice(cursor))
+        setCursor((v) => Math.max(0, v - 1))
+        return
+      }
+      if (key.delete) {
+        setCustom((v) => v.slice(0, cursor) + v.slice(cursor + 1))
+        return
+      }
+      if (!key.ctrl && !key.meta && input) {
+        setCustom((v) => v.slice(0, cursor) + input + v.slice(cursor))
+        setCursor((v) => v + input.length)
+      }
       return
     }
 
@@ -57,6 +86,7 @@ export function QuestionPrompt({ request }: Props) {
       const isCustomSlot = question.custom !== false && optIdx === opts.length
       if (isCustomSlot) {
         setTyping(true)
+        setCursor(custom.length)
         return
       }
       const selected = opts[optIdx]?.label ?? ""
@@ -81,6 +111,9 @@ export function QuestionPrompt({ request }: Props) {
       setAnswers(next)
       setQIdx(nextIdx)
       setOptIdx(0)
+      setCustom("")
+      setCursor(0)
+      setTyping(false)
     }
   }
 
@@ -88,60 +121,78 @@ export function QuestionPrompt({ request }: Props) {
 
   const opts = question.options ?? []
   const showCustom = question.custom !== false
+  const cmd = "question"
+  const head = request.questions.length > 1 ? `${cmd} ${qIdx + 1}/${request.questions.length}` : cmd
+  const cut = (s: string, n: number) => {
+    if (n <= 0) return ""
+    if (s.length <= n) return s
+    if (n <= 3) return s.slice(0, n)
+    return s.slice(0, n - 3) + "..."
+  }
+  const labelWidth = Math.min(24, Math.max(10, ...opts.map((opt) => opt.label.length + 1), showCustom ? 18 : 0))
+  const render = (text: string, pos: number) => {
+    const cut = text.slice(0, pos)
+    const cur = text[pos] ?? " "
+    const tail = text.slice(pos + 1)
+    return (
+      <Text color={theme.text}>
+        {cut}
+        <Text backgroundColor={theme.overlay} color={theme.base}>
+          {cur}
+        </Text>
+        {tail}
+      </Text>
+    )
+  }
 
   return (
-    <Box
-      flexDirection="column"
-      paddingLeft={2}
-      paddingTop={1}
-      paddingBottom={1}
-      borderStyle="single"
-      borderLeft={true}
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      borderColor={theme.cyan}
-      marginBottom={1}
-      flexShrink={0}
-    >
-      <Text color={theme.cyan} bold>
-        Question {request.questions.length > 1 ? `(${qIdx + 1}/${request.questions.length})` : ""}
+    <Box flexDirection="column" width={columns} paddingX={2} paddingY={1} flexShrink={0}>
+      <Box marginBottom={1}>
+        <Text backgroundColor={theme.cyan} color={theme.base}>
+          {` ${head} `}
+        </Text>
+        <Text color={theme.overlay}>  answer below</Text>
+      </Box>
+
+      <Text color={theme.text} wrap="wrap">
+        {question.question}
       </Text>
-      <Text color={theme.text}>{question.question}</Text>
 
       <Box marginTop={1} flexDirection="column">
-        {opts.map((opt, i) => (
-          <Box key={opt.label} flexDirection="row" gap={1}>
-            <Text color={i === optIdx ? theme.cyan : theme.overlay}>{i === optIdx ? "▶" : " "}</Text>
-            <Text color={i === optIdx ? theme.text : theme.subtext}>{opt.label}</Text>
-            {opt.description && <Text color={theme.overlay}>{opt.description}</Text>}
-          </Box>
-        ))}
-        {showCustom && (
-          <Box flexDirection="row" gap={1}>
-            <Text color={optIdx === opts.length ? theme.cyan : theme.overlay}>
-              {optIdx === opts.length ? "▶" : " "}
+        {opts.map((opt, i) => {
+          const sel = i === optIdx
+          const name = cut(opt.label, labelWidth).padEnd(labelWidth, " ")
+          const space = Math.max(0, columns - 4 - labelWidth - 2)
+          const desc = cut(opt.description ?? "", space)
+          return (
+            <Text
+              key={opt.label}
+              backgroundColor={sel ? theme.surface2 : theme.mantle}
+              color={sel ? theme.text : theme.subtext}
+              wrap="truncate-end"
+            >
+              {` ${sel ? "▶" : " "} ${name}  ${desc}`.padEnd(Math.max(0, columns), " ")}
             </Text>
+          )
+        })}
+        {showCustom && (
+          <Text
+            backgroundColor={optIdx === opts.length ? theme.surface2 : theme.mantle}
+            color={typing ? theme.text : optIdx === opts.length ? theme.text : theme.overlay}
+            wrap="truncate-end"
+          >
+            {` ${optIdx === opts.length ? "▶" : " "} `}
             {typing ? (
-              <Text color={theme.text}>
-                {custom}
-                <Text backgroundColor={theme.overlay} color={theme.base}>
-                  {" "}
-                </Text>
-              </Text>
+              render(custom, cursor)
             ) : (
-              <Text color={optIdx === opts.length ? theme.subtext : theme.overlay}>
-                {typing ? custom : "Type a custom answer..."}
-              </Text>
+              "Type a custom answer..."
             )}
-          </Box>
+          </Text>
         )}
       </Box>
 
       <Box marginTop={1}>
-        <Text color={theme.surface2} dimColor>
-          ↑↓ navigate · enter select · esc reject
-        </Text>
+        <Text color={theme.overlay}>↑↓ navigate · ←→ move · enter select · esc reject</Text>
       </Box>
     </Box>
   )

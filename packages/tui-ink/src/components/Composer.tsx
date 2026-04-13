@@ -54,7 +54,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
   const showThinking = useAppStore((s) => s.showThinking)
   const composerAppend = useAppStore((s) => s.composerAppend)
   const setMode = useAppStore((s) => s.setMode)
-  const mode = useAppStore((s) => s.mode)
+  const agent = useAppStore((s) => s.mode)
   const regCmds = useCommands()
 
   // Animate spinner while generating
@@ -222,9 +222,9 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
         return
       }
 
-      // Shift+Tab → cycle plan/build mode
+      // Shift+Tab → cycle the active primary agent
       if (key.shift && key.tab) {
-        setMode(mode === "plan" ? "build" : "plan")
+        setMode(agent === "plan" ? "build" : "plan")
         return
       }
 

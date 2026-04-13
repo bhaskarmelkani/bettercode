@@ -438,6 +438,48 @@ describe("store — model / agent selection", () => {
     useAppStore.getState().setCurrentAgent(undefined)
     expect(useAppStore.getState().currentAgent).toBeUndefined()
   })
+
+  test("sendPrompt falls back to the active agent when no agent is selected", async () => {
+    const calls: Array<{ agent?: string; model?: { providerID: string; modelID: string } }> = []
+    useAppStore.setState({
+      client: {
+        session: {
+          promptAsync: async (input: { agent?: string; model?: { providerID: string; modelID: string } }) => {
+            calls.push(input)
+          },
+        },
+      } as never,
+      mode: "plan",
+      currentModel: { providerID: "anthropic", modelID: "claude-3-5" },
+      currentAgent: undefined,
+    })
+
+    await useAppStore.getState().sendPrompt("s1", "hello")
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.agent).toBe("plan")
+    expect(calls[0]?.model).toEqual({ providerID: "anthropic", modelID: "claude-3-5" })
+  })
+
+  test("sendPrompt keeps a picked agent over the active agent", async () => {
+    const calls: Array<{ agent?: string }> = []
+    useAppStore.setState({
+      client: {
+        session: {
+          promptAsync: async (input: { agent?: string }) => {
+            calls.push(input)
+          },
+        },
+      } as never,
+      mode: "build",
+      currentAgent: "review",
+    })
+
+    await useAppStore.getState().sendPrompt("s1", "hello")
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.agent).toBe("review")
+  })
 })
 
 describe("store — theme", () => {

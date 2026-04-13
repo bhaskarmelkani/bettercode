@@ -87,8 +87,8 @@ export function BottomDock({
 
   return (
     <Box flexDirection="column" height={height} width={columns}>
-      {permissions?.length ? <PermissionPrompt request={permissions[0]!} /> : null}
-      {!permissions?.length && questions?.length ? <QuestionPrompt request={questions[0]!} /> : null}
+      {permissions?.length ? <PermissionPrompt request={permissions[0]!} columns={columns} /> : null}
+      {!permissions?.length && questions?.length ? <QuestionPrompt request={questions[0]!} columns={columns} /> : null}
       <Composer
         onSubmit={onSubmit}
         onAbort={onAbort}
