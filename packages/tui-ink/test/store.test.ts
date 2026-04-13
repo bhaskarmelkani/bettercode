@@ -18,6 +18,32 @@ function makePart(id: string, messageID: string, type: string): Part {
   return { id, messageID, type, sessionID: "s1" } as unknown as Part
 }
 
+function makeTool(id: string, messageID: string, status: "pending" | "running" | "completed" | "error" = "completed"): Part {
+  return {
+    id,
+    messageID,
+    sessionID: "s1",
+    type: "tool",
+    callID: `call-${id}`,
+    tool: "Bash",
+    state:
+      status === "completed"
+        ? {
+            status,
+            input: { command: "ls" },
+            output: "file1.ts\nfile2.ts",
+            title: "ls",
+            metadata: {},
+            time: { start: 1, end: 2 },
+          }
+        : status === "running"
+          ? { status, input: { command: "ls" }, time: { start: 1 } }
+          : status === "error"
+            ? { status, input: { command: "ls" }, error: "boom", time: { start: 1, end: 2 } }
+            : { status, input: { command: "ls" }, raw: "ls" },
+  } as unknown as Part
+}
+
 function makePermission(id: string, sessionID: string): PermissionRequest {
   return { id, sessionID, title: "Test permission", description: "Allow?", command: "cmd" } as unknown as PermissionRequest
 }
@@ -36,6 +62,7 @@ function resetStore() {
     sessionDiff: {},
     messages: {},
     parts: {},
+    collapsedTools: {},
     messagesLoaded: {},
     scrollPos: {},
     permissions: {},
@@ -189,6 +216,49 @@ describe("store — parts", () => {
     useAppStore.getState().removePart("m1", "p1")
     const parts = useAppStore.getState().parts["m1"] ?? []
     expect(parts.map((p) => p.id)).toEqual(["p2"])
+  })
+
+  test("toggleToolCollapse flips tool collapse state", () => {
+    useAppStore.getState().upsertPart(makeTool("t1", "m1"))
+    expect(useAppStore.getState().collapsedTools["t1"]).toBeUndefined()
+    useAppStore.getState().toggleToolCollapse("t1")
+    expect(useAppStore.getState().collapsedTools["t1"]).toBe(false)
+    useAppStore.getState().toggleToolCollapse("t1")
+    expect(useAppStore.getState().collapsedTools["t1"]).toBe(true)
+  })
+
+  test("removePart clears collapse state for tool parts", () => {
+    useAppStore.getState().upsertPart(makeTool("t1", "m1"))
+    useAppStore.getState().toggleToolCollapse("t1")
+    expect(useAppStore.getState().collapsedTools["t1"]).toBe(false)
+    useAppStore.getState().removePart("m1", "t1")
+    expect(useAppStore.getState().collapsedTools["t1"]).toBeUndefined()
+  })
+})
+
+describe("store — tool groups", () => {
+  beforeEach(resetStore)
+
+  test("collapseAllTools and expandAllTools affect the last assistant message", () => {
+    useAppStore.getState().upsertMessage(makeMessage("m1", "s1", "assistant"))
+    useAppStore.getState().upsertPart(makeTool("t1", "m1"))
+    useAppStore.getState().upsertPart(makeTool("t2", "m1"))
+    useAppStore.getState().collapseAllTools("s1")
+    expect(useAppStore.getState().collapsedTools["t1"]).toBe(true)
+    expect(useAppStore.getState().collapsedTools["t2"]).toBe(true)
+    useAppStore.getState().expandAllTools("s1")
+    expect(useAppStore.getState().collapsedTools["t1"]).toBe(false)
+    expect(useAppStore.getState().collapsedTools["t2"]).toBe(false)
+  })
+
+  test("removeMessage clears tool collapse state and parts", () => {
+    useAppStore.getState().upsertMessage(makeMessage("m1", "s1", "assistant"))
+    useAppStore.getState().upsertPart(makeTool("t1", "m1"))
+    useAppStore.getState().toggleToolCollapse("t1")
+    expect(useAppStore.getState().collapsedTools["t1"]).toBe(false)
+    useAppStore.getState().removeMessage("s1", "m1")
+    expect(useAppStore.getState().collapsedTools["t1"]).toBeUndefined()
+    expect(useAppStore.getState().parts["m1"]).toBeUndefined()
   })
 })
 

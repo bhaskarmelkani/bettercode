@@ -109,6 +109,7 @@ export function SessionScreen({ sessionID, rows, columns, active }: Props) {
       <Header
         projectName={project}
         gitBranch={branch}
+        sessionCount={sessions.length}
         status={isError ? "error" : generating ? "generating" : "idle"}
       />
 

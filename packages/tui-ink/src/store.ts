@@ -8,6 +8,7 @@ import type {
   McpStatus,
   Message,
   Part,
+  ToolPart as ToolPartType,
   PermissionRequest,
   Provider,
   QuestionRequest,
@@ -83,6 +84,7 @@ export interface AppState {
   // Messages + parts (keyed by sessionID / messageID)
   messages: Record<string, Message[]>
   parts: Record<string, Part[]>
+  collapsedTools: Record<string, boolean>
   messagesLoaded: Record<string, boolean>
 
   // Per-session scroll position (message offset from bottom)
@@ -159,6 +161,9 @@ export interface AppState {
   upsertPart: (part: Part) => void
   removePart: (messageID: string, partID: string) => void
   appendPartDelta: (messageID: string, partID: string, field: string, delta: string) => void
+  toggleToolCollapse: (partID: string) => void
+  expandAllTools: (sessionID: string) => void
+  collapseAllTools: (sessionID: string) => void
 
   upsertPermission: (req: PermissionRequest) => void
   removePermission: (sessionID: string, requestID: string) => void
@@ -234,6 +239,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sessionDiff: {},
   messages: {},
   parts: {},
+  collapsedTools: {},
   messagesLoaded: {},
   scrollPos: {},
   permissions: {},
@@ -323,25 +329,40 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((prev) => {
       const arr = [...(prev.messages[sessionID] ?? [])]
       const { found, index } = bsearch(arr, messageID, (x) => x.id)
+      const nextParts = { ...prev.parts }
+      const nextCollapsed = { ...prev.collapsedTools }
       if (found) arr.splice(index, 1)
-      return { messages: { ...prev.messages, [sessionID]: arr } }
+      for (const part of nextParts[messageID] ?? []) {
+        if (part.type === "tool") delete nextCollapsed[part.id]
+      }
+      delete nextParts[messageID]
+      return {
+        messages: { ...prev.messages, [sessionID]: arr },
+        parts: nextParts,
+        collapsedTools: nextCollapsed,
+      }
     }),
 
   upsertPart: (part) =>
     set((prev) => {
       const arr = [...(prev.parts[part.messageID] ?? [])]
       const { found, index } = bsearch(arr, part.id, (x) => x.id)
+      const nextCollapsed = { ...prev.collapsedTools }
+      const old = found ? arr[index] : undefined
+      if (old?.type !== "tool" || part.type !== "tool") delete nextCollapsed[part.id]
       if (found) arr[index] = part
       else arr.splice(index, 0, part)
-      return { parts: { ...prev.parts, [part.messageID]: arr } }
+      return { parts: { ...prev.parts, [part.messageID]: arr }, collapsedTools: nextCollapsed }
     }),
 
   removePart: (messageID, partID) =>
     set((prev) => {
       const arr = [...(prev.parts[messageID] ?? [])]
       const { found, index } = bsearch(arr, partID, (x) => x.id)
+      const nextCollapsed = { ...prev.collapsedTools }
+      delete nextCollapsed[partID]
       if (found) arr.splice(index, 1)
-      return { parts: { ...prev.parts, [messageID]: arr } }
+      return { parts: { ...prev.parts, [messageID]: arr }, collapsedTools: nextCollapsed }
     }),
 
   appendPartDelta: (messageID, partID, field, delta) =>
@@ -356,6 +377,38 @@ export const useAppStore = create<AppState>((set, get) => ({
       part[field] = (existing ?? "") + delta
       next[index] = part as Part
       return { parts: { ...prev.parts, [messageID]: next } }
+    }),
+
+  toggleToolCollapse: (partID) =>
+    set((prev) => {
+      const part = Object.values(prev.parts)
+        .flat()
+        .find((p): p is ToolPartType => p.type === "tool" && p.id === partID)
+      if (!part) return prev
+      const now = prev.collapsedTools[partID] ?? part.state.status === "completed"
+      return { collapsedTools: { ...prev.collapsedTools, [partID]: !now } }
+    }),
+
+  expandAllTools: (sessionID) =>
+    set((prev) => {
+      const msg = [...(prev.messages[sessionID] ?? [])].reverse().find((m) => m.role === "assistant")
+      if (!msg) return prev
+      const tools = (prev.parts[msg.id] ?? []).filter((p): p is ToolPartType => p.type === "tool")
+      if (tools.length === 0) return prev
+      const next = { ...prev.collapsedTools }
+      for (const part of tools) next[part.id] = false
+      return { collapsedTools: next }
+    }),
+
+  collapseAllTools: (sessionID) =>
+    set((prev) => {
+      const msg = [...(prev.messages[sessionID] ?? [])].reverse().find((m) => m.role === "assistant")
+      if (!msg) return prev
+      const tools = (prev.parts[msg.id] ?? []).filter((p): p is ToolPartType => p.type === "tool")
+      if (tools.length === 0) return prev
+      const next = { ...prev.collapsedTools }
+      for (const part of tools) next[part.id] = true
+      return { collapsedTools: next }
     }),
 
   upsertPermission: (req) =>

@@ -15,12 +15,10 @@ export function ReasoningPart({ part, visible }: Props) {
   if (!text) return null
   return (
     <Box
-      marginTop={1}
-      paddingLeft={2}
-      paddingTop={1}
-      paddingBottom={1}
-      borderStyle="single"
-      borderColor={theme.surface1}
+      marginTop={0}
+      paddingLeft={1}
+      borderLeft={true}
+      borderColor={theme.surface2}
       flexDirection="column"
       flexShrink={0}
     >

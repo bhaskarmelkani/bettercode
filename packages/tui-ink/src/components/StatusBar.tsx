@@ -13,11 +13,12 @@ export function StatusBar() {
   return (
     <Box height={1} justifyContent="space-between">
       <Box flexDirection="row">
-        <Text color={theme.cyan}>{">>"} </Text>
-        <Text color={mode === "plan" ? theme.yellow : theme.green}>{mode}</Text>
-        <Text color={theme.overlay}>{"  (shift+tab to cycle)"}</Text>
+        <Text inverse>{` ${mode} `}</Text>
+        <Text color={theme.overlay}> │ </Text>
+        <Text color={theme.cyan}>{modelDisplay}</Text>
+        <Text color={theme.overlay}> │ </Text>
+        <Text color={theme.overlay}>e: tools · shift+tab: mode</Text>
       </Box>
-      <Text color={theme.cyan}>[{modelDisplay}]</Text>
     </Box>
   )
 }
