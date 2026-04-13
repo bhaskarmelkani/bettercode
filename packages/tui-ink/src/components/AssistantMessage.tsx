@@ -14,21 +14,45 @@ interface Props {
   isLast: boolean
 }
 
+function dur(start?: number, end?: number) {
+  if (!start || !end) return ""
+  const ms = end - start
+  if (ms < 1000) return `${ms}ms`
+  const sec = (ms / 1000).toFixed(ms < 10_000 ? 1 : 0)
+  return `${sec}s`
+}
+
+function tok(input: number, output: number) {
+  const total = input + output
+  if (total < 1000) return `${total}`
+  const out = (total / 1000).toFixed(total < 10_000 ? 1 : 0)
+  return `${out}k`
+}
+
 export function AssistantMessage({ message, parts, showThinking, isLast }: Props) {
   const theme = useTheme()
   const msg = message as Message & {
-    providerID?: string
     modelID?: string
     finish?: string
     error?: { name: string; data: { message: string } }
     mode?: string
     time?: { created: number; completed?: number }
+    tokens?: { input: number; output: number }
   }
 
   const done = msg.finish && !["tool-calls", "unknown"].includes(msg.finish)
+  let lead = true
+  const doneAt = msg.time?.completed
+  const footer = [
+    msg.mode ?? "chat",
+    msg.modelID,
+    doneAt ? dur(msg.time?.created, doneAt) : "",
+    doneAt && msg.tokens ? `${tok(msg.tokens.input, msg.tokens.output)} tokens` : "",
+    msg.error?.name === "MessageAbortedError" ? "interrupted" : "",
+  ].filter((v): v is string => !!v)
 
   return (
-    <Box flexDirection="column" marginTop={1} flexShrink={0}>
+    <Box flexDirection="column" marginTop={0} flexShrink={0}>
       {parts.map((part) => {
         if (part.type === "text") {
           const p = part as {
@@ -41,7 +65,9 @@ export function AssistantMessage({ message, parts, showThinking, isLast }: Props
             messageID: string
           }
           if (p.synthetic || p.ignored) return null
-          return <TextPart key={part.id} part={p as any} />
+          const out = <TextPart key={part.id} part={p as any} lead={lead ? "◆" : undefined} />
+          lead = false
+          return out
         }
         if (part.type === "reasoning") return <ReasoningPart key={part.id} part={part as any} visible={showThinking} />
         if (part.type === "tool") return <ToolPart key={part.id} part={part as any} />
@@ -51,10 +77,10 @@ export function AssistantMessage({ message, parts, showThinking, isLast }: Props
 
       {msg.error && msg.error.name !== "MessageAbortedError" && (
         <Box
-          marginTop={1}
+          marginTop={0}
           paddingLeft={2}
-          paddingTop={1}
-          paddingBottom={1}
+          paddingTop={0}
+          paddingBottom={0}
           borderStyle="single"
           borderLeft={true}
           borderRight={false}
@@ -69,13 +95,8 @@ export function AssistantMessage({ message, parts, showThinking, isLast }: Props
       )}
 
       {(isLast || done || msg.error?.name === "MessageAbortedError") && (
-        <Box paddingLeft={3} marginTop={1}>
-          <Text>
-            <Text color={theme.lavender}>▣ </Text>
-            <Text color={theme.text}>{msg.mode ?? "chat"}</Text>
-            {msg.modelID && <Text color={theme.overlay}> · {msg.modelID}</Text>}
-            {msg.error?.name === "MessageAbortedError" && <Text color={theme.overlay}> · interrupted</Text>}
-          </Text>
+        <Box paddingLeft={3} marginTop={0}>
+          <Text color={theme.overlay}>{footer.join(" · ")}</Text>
         </Box>
       )}
     </Box>

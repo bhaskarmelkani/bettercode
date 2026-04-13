@@ -2,20 +2,23 @@ import React from "react"
 import { Box, Text } from "ink"
 import type { TextPart } from "@opencode-ai/sdk/v2"
 import { useTheme } from "../../theme-context"
+import { MarkdownRenderer } from "../markdown/MarkdownRenderer"
 
 interface Props {
   part: TextPart
+  lead?: string
 }
 
-export function TextPart({ part }: Props) {
+export function TextPart({ part, lead }: Props) {
   const theme = useTheme()
-  const text = part.text.trim()
-  if (!text) return null
+  const text = part.text
+  if (!text.trim()) return null
   return (
-    <Box paddingLeft={3} marginTop={1} flexDirection="column" flexShrink={0}>
-      <Text wrap="wrap" color={theme.text}>
-        {text}
-      </Text>
+    <Box marginTop={0} paddingLeft={3} flexDirection="row" gap={1} flexShrink={0}>
+      {lead ? <Text color={theme.lavender}>{lead}</Text> : null}
+      <Box flexDirection="column" flexShrink={1}>
+        <MarkdownRenderer text={text} />
+      </Box>
     </Box>
   )
 }

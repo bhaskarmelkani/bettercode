@@ -117,6 +117,7 @@ function resetStore() {
     sessionDiff: {},
     messages: {},
     parts: {},
+    collapsedTools: {},
     messagesLoaded: {},
     scrollPos: {},
     permissions: {},

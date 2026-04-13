@@ -84,6 +84,9 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const showThinking = useAppStore((s) => s.showThinking)
   const savedPos = useAppStore((s) => s.scrollPos[sessionID] ?? 0)
   const setScrollPos = useAppStore((s) => s.setScrollPos)
+  const collapsedTools = useAppStore((s) => s.collapsedTools)
+  const expandAllTools = useAppStore((s) => s.expandAllTools)
+  const collapseAllTools = useAppStore((s) => s.collapseAllTools)
   const activeRef = useRef(active)
 
   const pending = useMemo(
@@ -149,6 +152,19 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
 
   useInput(
     (_input, key) => {
+      if (_input === "e" && !key.ctrl && !key.meta && !key.shift && generating) {
+        const msg = [...messages].reverse().find((m) => m.role === "assistant")
+        if (!msg) return
+        const tools = (parts[msg.id] ?? []).filter((p) => p.type === "tool")
+        if (tools.length === 0) return
+        const all = tools.every((part) => {
+          const collapsed = collapsedTools[part.id]
+          return collapsed ?? part.state.status === "completed"
+        })
+        if (all) expandAllTools(sessionID)
+        else collapseAllTools(sessionID)
+        return
+      }
       // Scroll up: PageUp, Shift+↑, or plain ↑ while generating
       const scrollUp = key.pageUp || (key.upArrow && key.shift) || (key.upArrow && generating)
       // Scroll down: PageDown, Shift+↓, or plain ↓ while generating
@@ -193,7 +209,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
           const msgParts = parts[msg.id] ?? []
           if (msg.role === "user") {
             const isQueued = !!(pending && msg.id > pending)
-            return <UserMessage key={msg.id} message={msg} parts={msgParts} isQueued={isQueued} />
+            return <UserMessage key={msg.id} parts={msgParts} isQueued={isQueued} />
           }
           return (
             <AssistantMessage

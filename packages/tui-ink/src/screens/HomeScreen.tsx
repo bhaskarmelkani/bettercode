@@ -53,7 +53,7 @@ export function HomeScreen({ rows, columns, active }: Props) {
   return (
     <Box height={rows} width={columns} flexDirection="column">
       {/* ── Header — same as SessionScreen ── */}
-      <Header projectName={project} gitBranch={branch} status="idle" />
+      <Header projectName={project} gitBranch={branch} sessionCount={sessions.length} status="idle" />
 
       {/* ── Content area ── */}
       <Box flexGrow={1} flexDirection="column" justifyContent="center" alignItems="center">
