@@ -15,14 +15,14 @@ export function ReasoningPart({ part, visible }: Props) {
   if (!text) return null
   return (
     <Box
-      marginTop={0}
+      marginTop={1}
       paddingLeft={1}
       borderLeft={true}
-      borderColor={theme.surface2}
+      borderColor={theme.lavender}
       flexDirection="column"
       flexShrink={0}
     >
-      <Text color={theme.overlay} italic>
+      <Text color={theme.mauve} italic>
         Thinking:
       </Text>
       <Text wrap="wrap" color={theme.subtext}>

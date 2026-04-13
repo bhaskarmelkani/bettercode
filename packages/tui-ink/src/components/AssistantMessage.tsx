@@ -52,7 +52,7 @@ export function AssistantMessage({ message, parts, showThinking, isLast }: Props
   ].filter((v): v is string => !!v)
 
   return (
-    <Box flexDirection="column" marginTop={0} flexShrink={0}>
+    <Box flexDirection="column" marginTop={1} paddingLeft={2} borderLeft={true} borderColor={theme.surface2} flexShrink={0}>
       {parts.map((part) => {
         if (part.type === "text") {
           const p = part as {
@@ -77,8 +77,8 @@ export function AssistantMessage({ message, parts, showThinking, isLast }: Props
 
       {msg.error && msg.error.name !== "MessageAbortedError" && (
         <Box
-          marginTop={0}
-          paddingLeft={2}
+          marginTop={1}
+          paddingLeft={1}
           paddingTop={0}
           paddingBottom={0}
           borderStyle="single"
@@ -95,7 +95,7 @@ export function AssistantMessage({ message, parts, showThinking, isLast }: Props
       )}
 
       {(isLast || done || msg.error?.name === "MessageAbortedError") && (
-        <Box paddingLeft={3} marginTop={0}>
+        <Box paddingLeft={1} marginTop={1}>
           <Text color={theme.overlay}>{footer.join(" · ")}</Text>
         </Box>
       )}

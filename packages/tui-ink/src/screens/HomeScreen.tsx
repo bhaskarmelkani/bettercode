@@ -1,16 +1,18 @@
 import React from "react"
 import { Box, Text } from "ink"
 import { useAppStore } from "../store"
-import { InputBar } from "../components/InputBar"
 import { Spinner } from "../components/Spinner"
 import { Header } from "../components/Header"
 import { StatusBar } from "../components/StatusBar"
 import { useTheme } from "../theme-context"
+import { BottomDock, dockHeight } from "../components/BottomDock"
+import type { Dialog } from "../store"
 
 interface Props {
   rows: number
   columns: number
   active: boolean
+  dialog?: Dialog
 }
 
 const logo = [
@@ -22,7 +24,7 @@ const logo = [
   " ╚═════╝ ╚══════╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝",
 ]
 
-export function HomeScreen({ rows, columns, active }: Props) {
+export function HomeScreen({ rows, columns, active, dialog }: Props) {
   const theme = useTheme()
   const syncStatus = useAppStore((s) => s.syncStatus)
   const sessions = useAppStore((s) => s.sessions)
@@ -34,6 +36,8 @@ export function HomeScreen({ rows, columns, active }: Props) {
   const dir = useAppStore((s) => s.directory)
   const project = dir?.split("/").pop() ?? "bettercode"
   const branch = vcs?.branch ?? "—"
+  const dockRows = dockHeight({ rows, dialog })
+  const mainRows = Math.max(1, rows - 2 - dockRows)
 
   const handleSubmit = async (text: string) => {
     const client = useAppStore.getState().client
@@ -52,11 +56,9 @@ export function HomeScreen({ rows, columns, active }: Props) {
 
   return (
     <Box height={rows} width={columns} flexDirection="column">
-      {/* ── Header — same as SessionScreen ── */}
       <Header projectName={project} gitBranch={branch} sessionCount={sessions.length} status="idle" />
 
-      {/* ── Content area ── */}
-      <Box flexGrow={1} flexDirection="column" justifyContent="center" alignItems="center">
+      <Box height={mainRows} flexDirection="column" justifyContent="center" alignItems="center">
         {isLoading && <Spinner label=" connecting to server..." />}
 
         {isPartial && (
@@ -111,10 +113,16 @@ export function HomeScreen({ rows, columns, active }: Props) {
         )}
       </Box>
 
-      {/* ── Input — same separator+input structure as SessionScreen ── */}
-      <InputBar onSubmit={handleSubmit} active={active && !isLoading && !isPartial} columns={columns} />
+      <BottomDock
+        dialog={dialog}
+        rows={dockRows}
+        columns={columns}
+        active={active && !isLoading && !isPartial}
+        generating={false}
+        onSubmit={handleSubmit}
+        onAbort={() => {}}
+      />
 
-      {/* ── StatusBar — same as SessionScreen ── */}
       <StatusBar />
     </Box>
   )

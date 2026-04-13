@@ -3,6 +3,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import type { Event } from "@opencode-ai/sdk/v2"
 import { useAppStore } from "../store"
 import { registry } from "../commands/registry"
+import { resolve } from "../model"
 
 interface Opts {
   url: string
@@ -193,14 +194,18 @@ async function bootstrap(client: ReturnType<typeof createOpencodeClient>, direct
     syncStatus: "complete",
   })
 
-  // Auto-select a default model if none has been chosen yet
+  // Auto-select a model using config, then saved state, then sensible fallbacks.
   const state = useAppStore.getState()
-  if (!state.currentModel) {
-    const firstConnected = providerList.connected[0]
-    const defaultModelID = firstConnected ? providerList.default[firstConnected] : undefined
-    if (firstConnected && defaultModelID) {
-      state.setCurrentModel({ providerID: firstConnected, modelID: defaultModelID })
-    }
+  const next = resolve({
+    cfg: config,
+    saved: state.currentModel,
+    recent: state.recentModels,
+    providers: providerList.all,
+    connected: providerList.connected,
+    defaults: providerList.default,
+  })
+  if (next && (state.currentModel?.providerID !== next.providerID || state.currentModel.modelID !== next.modelID)) {
+    state.setCurrentModel(next)
   }
 }
 

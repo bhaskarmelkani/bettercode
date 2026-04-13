@@ -4,6 +4,7 @@ import { readFile, writeFile, mkdir } from "fs/promises"
 import { dirname, join } from "path"
 import { App } from "./app"
 import { useAppStore } from "./store"
+import { read as readModel } from "./model"
 
 export interface TuiInkOptions {
   url: string
@@ -34,6 +35,10 @@ async function writePrefs(prefs: Record<string, unknown>): Promise<void> {
 
 export async function startTuiInk(opts: TuiInkOptions): Promise<void> {
   const prefs = await readPrefs()
+  const currentModel = readModel(prefs.currentModel)
+  const recentModels = Array.isArray(prefs.recentModels)
+    ? prefs.recentModels.map(readModel).filter((v): v is { providerID: string; modelID: string } => !!v)
+    : []
 
   useAppStore.setState({
     serverUrl: opts.url,
@@ -44,18 +49,22 @@ export async function startTuiInk(opts: TuiInkOptions): Promise<void> {
     ...(typeof prefs.theme === "string" ? { currentThemeName: prefs.theme } : {}),
     ...(Array.isArray(prefs.promptHistory) ? { promptHistory: prefs.promptHistory as string[] } : {}),
     ...(typeof prefs.promptStash === "string" ? { promptStash: prefs.promptStash } : {}),
+    ...(currentModel ? { currentModel } : {}),
+    ...(recentModels.length > 0 ? { recentModels } : {}),
     ...(prefs.frecency && typeof prefs.frecency === "object"
       ? { frecency: prefs.frecency as Record<string, { score: number; last: number }> }
       : {}),
   })
 
-  // Persist theme + prompt history + stash to disk on change
+  // Persist theme + prompt history + stash + model state to disk on change
   const unsub = useAppStore.subscribe((state, prev) => {
     const changed =
       state.currentThemeName !== prev.currentThemeName ||
       state.promptHistory !== prev.promptHistory ||
       state.promptStash !== prev.promptStash ||
-      state.frecency !== prev.frecency
+      state.frecency !== prev.frecency ||
+      state.currentModel !== prev.currentModel ||
+      state.recentModels !== prev.recentModels
     if (changed) {
       readPrefs().then((p) =>
         writePrefs({
@@ -64,6 +73,8 @@ export async function startTuiInk(opts: TuiInkOptions): Promise<void> {
           promptHistory: state.promptHistory,
           promptStash: state.promptStash,
           frecency: state.frecency,
+          currentModel: state.currentModel,
+          recentModels: state.recentModels,
         }),
       )
     }

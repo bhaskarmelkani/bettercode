@@ -117,7 +117,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
       .map((c) => ({ name: c.name, description: c.description ?? "" })),
   ]
 
-  const slashOptions = isSlash ? allSlash.filter((c) => c.name.startsWith(query)).slice(0, 5) : []
+  const slashOptions = isSlash ? allSlash.filter((c) => c.name.startsWith(query)).slice(0, 6) : []
   const slashVisible = slashOptions.length > 0 && !mentionActive
   const mentionVisible = mentionActive && mentionResults.length > 0
 
@@ -374,26 +374,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
   const placeholder = generating ? "Generating... (↑↓ scroll · ctrl+c abort)" : "Type a message... (/ for commands, @ for files)"
 
   return (
-    <Box flexDirection="column" flexShrink={0}>
-      {/* Suggestions area — above the separator line */}
-      {slashVisible && (
-        <SlashMenu query={query} options={slashOptions} focused={slashIdx} onSelect={handleSlashSelect} />
-      )}
-      {mentionVisible && (
-        <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
-          {mentionResults.map((path, i) => (
-            <Box key={path} flexDirection="row" gap={1}>
-              <Text color={i === mentionIdx ? theme.cyan : theme.overlay}>{i === mentionIdx ? "▶" : " "}</Text>
-              <Text color={i === mentionIdx ? theme.text : theme.subtext} wrap="truncate-end">
-                {path}
-              </Text>
-            </Box>
-          ))}
-          <Text color={theme.surface2} dimColor>
-            ↑↓ navigate · tab/enter insert · esc dismiss
-          </Text>
-        </Box>
-      )}
+    <Box flexDirection="column" flexShrink={0} position="relative">
       {attachments.length > 0 && (
         <Box flexDirection="row" gap={1} flexWrap="wrap" marginBottom={0} paddingLeft={2}>
           {attachments.map((a) => (
@@ -415,26 +396,46 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
         </Box>
       )}
 
-      {/* Blank line above separator for breathing space */}
-      <Text> </Text>
-
-      {/* Separator — between suggestions and input */}
-      <Text color={theme.surface1}>{"─".repeat(width)}</Text>
-
-      {/* Input row */}
-      <Box flexDirection="row">
-        <Text color={generating ? theme.yellow : theme.cyan}>
-          {generating ? SPIN_FRAMES[spinFrame] + " " : "› "}
-        </Text>
-        {generating ? (
-          <Text color={theme.overlay}>{placeholder}</Text>
-        ) : (
-          <>
-            {value && <Text color={theme.text}>{value}</Text>}
-            <Text backgroundColor={caretOn ? theme.cyan : undefined} color={theme.base}>{" "}</Text>
-            {!value && <Text color={theme.overlay}>{placeholder}</Text>}
-          </>
+      <Box flexDirection="column" position="relative">
+        {mentionVisible && (
+          <Box position="absolute" width={width} marginTop={-Math.min(6, mentionResults.length)} flexDirection="column" paddingX={1}>
+            {mentionResults.slice(0, 6).map((path, i) => (
+              <Text
+                key={path}
+                backgroundColor={i === mentionIdx ? theme.surface2 : theme.mantle}
+                color={i === mentionIdx ? theme.text : theme.subtext}
+                wrap="truncate-end"
+              >
+                {`${i === mentionIdx ? "▶ " : "  "}${path}`}
+              </Text>
+            ))}
+          </Box>
         )}
+        {/* Claude-like: keep the input row fixed; show suggestions as an overlay above it. */}
+        {slashVisible && (
+          <SlashMenu width={width} options={slashOptions} focused={slashIdx} />
+        )}
+
+        {/* Separator — between transcript and input */}
+        <Text color={theme.surface1}>{"─".repeat(width)}</Text>
+
+        {/* Input row */}
+        <Box flexDirection="row">
+          <Text color={generating ? theme.yellow : theme.cyan}>
+            {generating ? SPIN_FRAMES[spinFrame] + " " : "› "}
+          </Text>
+          {generating ? (
+            <Text color={theme.overlay}>{placeholder}</Text>
+          ) : (
+            <>
+              {value && <Text color={theme.text}>{value}</Text>}
+              <Text backgroundColor={caretOn ? theme.cyan : undefined} color={theme.base}>
+                {" "}
+              </Text>
+              {!value && <Text color={theme.overlay}>{placeholder}</Text>}
+            </>
+          )}
+        </Box>
       </Box>
 
     </Box>

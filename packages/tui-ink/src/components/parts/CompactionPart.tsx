@@ -5,8 +5,8 @@ import { useTheme } from "../../theme-context"
 export function CompactionPart() {
   const theme = useTheme()
   return (
-    <Box marginTop={0} marginBottom={0} flexShrink={0}>
-      <Text color={theme.overlay}>────── context compacted ──────</Text>
+    <Box marginTop={1} marginBottom={0} flexShrink={0}>
+      <Text color={theme.surface2}>• context compacted</Text>
     </Box>
   )
 }

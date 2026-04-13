@@ -72,6 +72,9 @@ export function ModelPickerDialog({ rows, columns }: Props) {
   const safeIdx = Math.min(idx, Math.max(0, total - 1))
   const start = Math.max(0, safeIdx - Math.floor(maxVisible / 2))
   const visible = entries.slice(start, start + maxVisible)
+  const prompt = "› "
+  const value = query || "search models..."
+  const fill = Math.max(0, columns - 4 - prompt.length - value.length - 1)
 
   useInput((input, key) => {
     if (key.escape || (key.ctrl && input === "k")) {
@@ -111,21 +114,25 @@ export function ModelPickerDialog({ rows, columns }: Props) {
         <Text color={theme.mauve} bold>
           Model
         </Text>
-        {currentModel && <Text color={theme.overlay}> current: {currentModel.modelID}</Text>}
+        {currentModel && (
+          <Text backgroundColor={theme.blue} color={theme.base}>
+            {" current "}
+          </Text>
+        )}
+        {currentModel && <Text color={theme.overlay}>{` ${currentModel.modelID}`}</Text>}
       </Box>
 
-      <Box marginBottom={1} borderStyle="single" borderColor={theme.surface2} paddingX={1}>
-        <Text color={theme.cyan}>{"› "}</Text>
-        {query ? (
-          <Text color={theme.text}>
-            {query}
-            <Text backgroundColor={theme.overlay} color={theme.base}>
-              {" "}
-            </Text>
-          </Text>
-        ) : (
-          <Text color={theme.overlay}>search models...</Text>
-        )}
+      <Box marginBottom={1} flexDirection="row">
+        <Text backgroundColor={theme.surface0} color={theme.cyan}>
+          {prompt}
+        </Text>
+        <Text backgroundColor={theme.surface0} color={query ? theme.text : theme.overlay}>
+          {value}
+        </Text>
+        <Text backgroundColor={theme.overlay} color={theme.base}>
+          {" "}
+        </Text>
+        <Text backgroundColor={theme.surface0}>{fill > 0 ? " ".repeat(fill) : ""}</Text>
       </Box>
 
       {total === 0 && (
@@ -139,20 +146,27 @@ export function ModelPickerDialog({ rows, columns }: Props) {
       {visible.map((e, i) => {
         const real = start + i
         const selected = real === safeIdx
+        const current = e.isCurrent
         return (
           <Box key={`${e.providerID}/${e.modelID}`} flexDirection="column">
             <Box>
               <Text color={selected ? theme.cyan : theme.overlay}>{selected ? "▶ " : "  "}</Text>
-              <Text color={e.isCurrent ? theme.green : selected ? theme.text : theme.subtext} bold={selected}>
+              <Text color={current ? theme.blue : selected ? theme.text : theme.subtext} bold={selected}>
                 {e.name}
               </Text>
-              {e.isCurrent && <Text color={theme.green}>{" ✓"}</Text>}
-              {e.isRecent && !e.isCurrent && <Text color={theme.surface2}>{" ★"}</Text>}
               <Text color={theme.overlay}>{`  ${e.providerID}`}</Text>
+              {current && (
+                <Text backgroundColor={theme.blue} color={theme.base}>
+                  {" current "}
+                </Text>
+              )}
+              {e.isRecent && !current && <Text color={theme.surface2}>{" ★"}</Text>}
             </Box>
             {selected && (
               <Box paddingLeft={4}>
-                <Text color={theme.subtext}>{e.modelID}</Text>
+                <Text color={theme.subtext}>
+                  model: <Text color={theme.text}>{e.modelID}</Text>
+                </Text>
               </Box>
             )}
           </Box>

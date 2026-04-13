@@ -35,14 +35,16 @@ export function FileMentionMenu({ query, onSelect }: Props) {
   if (results.length === 0) return null
 
   return (
-    <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
+    <Box flexDirection="column" marginBottom={1} paddingLeft={2} paddingY={1}>
       {results.map((path, i) => (
-        <Box key={path} flexDirection="row" gap={1}>
-          <Text color={i === idx ? theme.cyan : theme.overlay}>{i === idx ? "▶" : " "}</Text>
-          <Text color={i === idx ? theme.text : theme.subtext} wrap="truncate-end">
-            {path}
-          </Text>
-        </Box>
+        <Text
+          key={path}
+          color={i === idx ? theme.cyan : theme.subtext}
+          backgroundColor={theme.mantle}
+          wrap="truncate-end"
+        >
+          {`${i === idx ? "▶" : " "} ${path}`}
+        </Text>
       ))}
       <Box marginTop={0}>
         <Text color={theme.surface2} dimColor>

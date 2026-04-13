@@ -112,11 +112,9 @@ export function InputBar({ onSubmit, active = true, columns = 80 }: Props) {
   )
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" position="relative">
       {/* Slash suggestions above separator */}
-      {slashVisible && (
-        <SlashMenu query={query} options={slashOptions} focused={slashIdx} onSelect={handleSlashSelect} />
-      )}
+      {slashVisible && <SlashMenu width={columns} options={slashOptions} focused={slashIdx} />}
 
       {/* Blank line above separator for breathing space */}
       <Text> </Text>
