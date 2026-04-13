@@ -48,6 +48,9 @@ export function App({ onExit }: AppProps) {
 
   const hasDialog = dialogs.length > 0
   const top = dialogs[dialogs.length - 1]
+  const dockTypes = new Set(["command-palette", "session-list", "provider", "model-picker", "agent-picker", "mcp", "theme"])
+  const dock = top && dockTypes.has(top.type) ? top : undefined
+  const overlay = top && !dock ? top : undefined
 
   // Global keys — always active regardless of screen
   useInput((input, key) => {
@@ -57,9 +60,7 @@ export function App({ onExit }: AppProps) {
     }
     // Ctrl+K → command palette
     if (key.ctrl && input === "k") {
-      if (hasDialog) {
-        popDialog()
-      } else {
+      if (!hasDialog) {
         pushDialog({ type: "command-palette" })
       }
       return
@@ -71,15 +72,13 @@ export function App({ onExit }: AppProps) {
     }
     // Ctrl+S → session list dialog
     if (key.ctrl && input === "s") {
-      if (hasDialog) {
-        popDialog()
-      } else {
+      if (!hasDialog) {
         pushDialog({ type: "session-list" })
       }
       return
     }
     // Escape → close top dialog
-    if (key.escape && hasDialog) {
+    if (key.escape && overlay) {
       popDialog()
     }
   })
@@ -91,22 +90,19 @@ export function App({ onExit }: AppProps) {
     <ThemeProvider>
       <Box width={cols} height={rows} flexDirection="column">
         {route.type === "home" && (
-          <HomeScreen rows={rows} columns={cols} active={!hasDialog} />
+          <HomeScreen rows={rows} columns={cols} active={!hasDialog} dialog={dock} />
         )}
         {route.type === "plugin" && (
           <PluginScreen name={route.name} params={route.params} rows={rows} columns={cols} active={!hasDialog} />
         )}
         {route.type === "session" && (
-          <SessionScreen sessionID={route.sessionID} rows={rows} columns={cols} active={!hasDialog} />
+          <SessionScreen sessionID={route.sessionID} rows={rows} columns={cols} active={!hasDialog} dialog={dock} />
         )}
 
-        {/* Dialog absolutely positioned over the current screen.
-            Yoga positions absolute elements at 0,0 of their parent by default,
-            so this covers the screen without needing explicit top/left props.
-            The screen stays mounted (just inactive) — eliminating dialog-open flicker. */}
-        {top && (
+        {/* Keep destructive/alert overlays on top; routine pickers now live in the bottom dock. */}
+        {overlay && (
           <Box position="absolute" width={cols} height={rows} flexDirection="column">
-            <DialogOverlay dialog={top} rows={rows} columns={cols} />
+            <DialogOverlay dialog={overlay} rows={rows} columns={cols} />
           </Box>
         )}
       </Box>

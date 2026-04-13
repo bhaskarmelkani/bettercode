@@ -5,6 +5,8 @@ import { UserMessage } from "./UserMessage"
 import { AssistantMessage } from "./AssistantMessage"
 import { useAppStore } from "../store"
 import { mouseScrollEvents } from "../mouseScrollEvents"
+import { lex } from "./markdown/MarkdownRenderer"
+import type { Token } from "./markdown/types"
 
 const EMPTY_MESSAGES: Message[] = []
 const EMPTY_PARTS: Record<string, Part[]> = {}
@@ -22,21 +24,58 @@ interface Props {
 // Estimates how many terminal rows a message will occupy.
 // Intentionally errs on the high side so we never underflow the viewport.
 // ---------------------------------------------------------------------------
-function estimateHeight(msg: Message, parts: Part[], width: number): number {
-  const safeWidth = Math.max(1, width - 6) // account for border/padding chars
+function text(items: Token[]): string {
+  return items
+    .map((tok) => {
+      if (tok.type === "text" || tok.type === "html" || tok.type === "escape") return tok.raw ?? tok.text ?? ""
+      if (tok.tokens?.length) return text(tok.tokens)
+      if (tok.items?.length) return text(tok.items)
+      return tok.raw ?? tok.text ?? ""
+    })
+    .join("")
+}
+
+function lines(input: string, width: number) {
+  return Math.max(1, Math.ceil(Math.max(1, input.length) / Math.max(1, width)))
+}
+
+function measure(items: Token[], width: number): number {
+  return items.reduce((sum, tok) => {
+    if (tok.type === "space") return sum
+    if (tok.type === "heading") return sum + lines(text(tok.tokens ?? []), width) + 1
+    if (tok.type === "paragraph") return sum + lines(text(tok.tokens ?? []), width) + 1
+    if (tok.type === "code") {
+      const body = tok.text ?? ""
+      return sum + Math.max(1, body.split(/\r?\n/).length) + 2
+    }
+    if (tok.type === "list") {
+      return (
+        sum +
+        (tok.items ?? []).reduce((rows, item) => rows + measure(item.tokens ?? [], width - 2) + 1, 1)
+      )
+    }
+    if (tok.type === "blockquote") return sum + 1 + measure(tok.tokens ?? [], width - 2)
+    if (tok.type === "hr") return sum + 1
+    if (tok.tokens?.length) return sum + measure(tok.tokens, width)
+    if (tok.items?.length) return sum + measure(tok.items, width)
+    return sum + lines(tok.raw ?? tok.text ?? "", width)
+  }, 0)
+}
+
+export function estimateHeight(msg: Message, parts: Part[], width: number): number {
+  const safeWidth = Math.max(1, width - 6)
   if (msg.role === "user") {
     const text = parts.find((p) => p.type === "text" && !(p as any).synthetic) as { text: string } | undefined
-    const lines = text ? Math.max(1, Math.ceil(text.text.length / safeWidth)) : 0
-    return lines + 4 // 1 marginTop + 1 paddingTop + lines + 1 paddingBottom + 1 safety
+    const body = text ? lex(text.text) : []
+    return measure(body, safeWidth) + 4 // margin + border + padding + safety
   }
-  // assistant: 1 marginTop + parts + 2 footer (footerMarginTop + footerText)
-  let h = 3
+  // assistant: margin + border + parts + footer + safety
+  let h = 4
   for (const part of parts) {
     if (part.type === "text") {
       const p = part as { text: string; synthetic?: boolean; ignored?: boolean }
       if (p.synthetic || p.ignored) continue
-      const lines = Math.max(1, Math.ceil(p.text.length / safeWidth))
-      h += lines + 2 // 1 marginTop on TextPart + lines + 1 extra safety
+      h += measure(lex(p.text), safeWidth) + 1
     } else if (part.type === "tool") {
       h += 4 // 1 marginTop + title + optional summary + 1 safety
     } else if (part.type === "compaction") {
@@ -100,7 +139,8 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const sticky = rowOffset === 0
   const prevMsgCount = useRef(messages.length)
 
-  // Total estimated height of all messages (+2 safety buffer to prevent bottom clip)
+  // Total estimated height of all messages. Keep a small buffer for markdown/code drift,
+  // but avoid the large empty band the previous conservative estimate produced.
   const totalHeight = useMemo(() => {
     const base = messages.reduce((acc, msg) => acc + estimateHeight(msg, parts[msg.id] ?? [], width), 0)
     return base + 2

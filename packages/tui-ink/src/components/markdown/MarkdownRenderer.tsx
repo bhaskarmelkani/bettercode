@@ -1,5 +1,5 @@
 import React, { useMemo } from "react"
-import { Box, Text, useStdout } from "ink"
+import { Box, Text } from "ink"
 import { marked } from "marked"
 import { useTheme } from "../../theme-context"
 import { CodeBlock } from "./CodeBlock"
@@ -22,8 +22,6 @@ function isText(tok: Token) {
 
 export function MarkdownRenderer({ text }: Props) {
   const theme = useTheme()
-  const { stdout } = useStdout()
-  const width = Math.max(1, (stdout?.columns ?? 80) - 6)
   const tokens = useMemo(() => lex(text), [text])
 
   const walk = (items: Token[], key: string): React.ReactNode[] => {
@@ -36,8 +34,8 @@ export function MarkdownRenderer({ text }: Props) {
 
       if (tok.type === "heading") {
         out.push(
-          <Box key={id} marginTop={0}>
-            <Text bold color={theme.text}>
+          <Box key={id} marginTop={1}>
+            <Text bold color={theme.lavender}>
               <InlineText tokens={tok.tokens ?? []} />
             </Text>
           </Box>,
@@ -48,7 +46,7 @@ export function MarkdownRenderer({ text }: Props) {
       if (tok.type === "paragraph") {
         out.push(
           <Box key={id} marginTop={0}>
-            <Text color={theme.text}>
+            <Text color={theme.text} wrap="wrap">
               <InlineText tokens={tok.tokens ?? []} />
             </Text>
           </Box>,
@@ -64,20 +62,22 @@ export function MarkdownRenderer({ text }: Props) {
       if (tok.type === "list") {
         const items = tok.items ?? []
         out.push(
-          <Box key={id} marginTop={0} flexDirection="column" flexShrink={0}>
+          <Box key={id} marginTop={1} flexDirection="column" flexShrink={0}>
             {items.map((item, idx) => {
               const mark = tok.ordered ? `${idx + 1}.` : "•"
               const body = item.tokens?.length ? (
-                <Text color={theme.text}>
+                <Text color={theme.text} wrap="wrap">
                   <InlineText tokens={item.tokens} />
                 </Text>
               ) : (
-                <Text color={theme.text}>{item.raw ?? item.text ?? ""}</Text>
+                <Text color={theme.text} wrap="wrap">
+                  {item.raw ?? item.text ?? ""}
+                </Text>
               )
 
               return (
                 <Box key={`${id}-${idx}`} flexDirection="row" gap={1} marginTop={idx === 0 ? 0 : 1}>
-                  <Text color={theme.overlay}>{mark}</Text>
+                  <Text color={tok.ordered ? theme.mauve : theme.cyan}>{mark}</Text>
                   <Box flexDirection="column" flexShrink={1}>
                     {body}
                   </Box>
@@ -93,11 +93,11 @@ export function MarkdownRenderer({ text }: Props) {
         out.push(
           <Box
             key={id}
-            marginTop={0}
+            marginTop={1}
             paddingLeft={1}
             flexDirection="column"
             borderLeft={true}
-            borderColor={theme.surface1}
+            borderColor={theme.surface2}
             flexShrink={0}
           >
             {walk(tok.tokens ?? [], id)}
@@ -108,9 +108,9 @@ export function MarkdownRenderer({ text }: Props) {
 
       if (tok.type === "hr") {
         out.push(
-          <Text key={id} color={theme.surface1}>
-            {"─".repeat(width)}
-          </Text>,
+          <Box key={id} marginTop={1}>
+            <Text color={theme.surface2}>· · ·</Text>
+          </Box>,
         )
         return out
       }

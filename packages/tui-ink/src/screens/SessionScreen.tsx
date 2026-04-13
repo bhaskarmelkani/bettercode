@@ -4,21 +4,21 @@ import { useShallow } from "zustand/shallow"
 import { useAppStore } from "../store"
 import { Header } from "../components/Header"
 import { MessageList } from "../components/MessageList"
-import { Composer } from "../components/Composer"
-import { PermissionPrompt } from "../components/PermissionPrompt"
-import { QuestionPrompt } from "../components/QuestionPrompt"
 import { StatusBar } from "../components/StatusBar"
 import { Sidebar } from "../components/Sidebar"
 import { ToastOverlay } from "../components/ToastOverlay"
+import { BottomDock, dockHeight } from "../components/BottomDock"
+import type { Dialog } from "../store"
 
 interface Props {
   sessionID: string
   rows: number
   columns: number
   active: boolean
+  dialog?: Dialog
 }
 
-export function SessionScreen({ sessionID, rows, columns, active }: Props) {
+export function SessionScreen({ sessionID, rows, columns, active, dialog }: Props) {
   const syncStatus = useAppStore((s) => s.syncStatus)
   const sessions = useAppStore((s) => s.sessions)
   const vcs = useAppStore((s) => s.vcs)
@@ -68,13 +68,9 @@ export function SessionScreen({ sessionID, rows, columns, active }: Props) {
 
   const SIDEBAR_WIDTH = 32
 
-  // Layout: 1 header + 3 composer (blank+separator+input) + 1 statusbar = 5 rows reserved
-  // Plus permission/question prompts if visible
-  const promptHeight = 3 // composer rows: blank + separator + input
-  const permHeight = permissions.length > 0 ? 6 : 0
-  const qHeight = questions.length > 0 && permissions.length === 0 ? 8 : 0
-  const listHeight = Math.max(1, rows - 1 - 1 - promptHeight - permHeight - qHeight)
-  const mainWidth = sidebarOpen ? columns - SIDEBAR_WIDTH : columns
+  const dockRows = dockHeight({ rows, dialog, permissions, questions })
+  const listHeight = Math.max(1, rows - 2 - dockRows)
+  const mainWidth = Math.max(1, sidebarOpen ? columns - SIDEBAR_WIDTH : columns)
 
   const project = dir?.split("/").pop() ?? "bettercode"
   const branch = vcs?.branch ?? "—"
@@ -115,26 +111,26 @@ export function SessionScreen({ sessionID, rows, columns, active }: Props) {
 
       <Box flexDirection="row" flexGrow={1}>
         <Box flexDirection="column" width={mainWidth}>
-          <MessageList
-            sessionID={sessionID}
-            height={listHeight}
-            width={mainWidth - 4}
-            active={active && permissions.length === 0 && questions.length === 0}
-            generating={generating}
-          />
-
-          {permissions.length > 0 && <PermissionPrompt request={permissions[0]!} />}
-
-          {permissions.length === 0 && questions.length > 0 && <QuestionPrompt request={questions[0]!} />}
+            <MessageList
+              sessionID={sessionID}
+              height={listHeight}
+              width={Math.max(1, mainWidth - 4)}
+              active={active && !dialog && permissions.length === 0 && questions.length === 0}
+              generating={generating}
+            />
 
           <ToastOverlay />
 
-          <Composer
+          <BottomDock
+            dialog={dialog}
+            rows={dockRows}
+            columns={mainWidth}
+            active={active && !dialog && permissions.length === 0 && questions.length === 0}
+            generating={generating}
             onSubmit={handleSubmit}
             onAbort={handleAbort}
-            active={active && permissions.length === 0 && questions.length === 0}
-            generating={generating}
-            width={mainWidth}
+            permissions={permissions}
+            questions={questions}
           />
         </Box>
 

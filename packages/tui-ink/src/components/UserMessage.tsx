@@ -21,19 +21,26 @@ export function UserMessage({ parts, isQueued }: Props) {
 
   return (
     <Box
-      marginTop={0}
-      paddingLeft={3}
+      marginTop={1}
+      paddingLeft={2}
+      paddingRight={1}
       flexShrink={0}
+      borderLeft={true}
+      borderColor={theme.cyan}
     >
-      <Text color={theme.mauve}>●</Text>
       <Box flexDirection="column" paddingLeft={1} paddingTop={0} paddingBottom={0} flexShrink={1}>
-        <MarkdownRenderer text={text.text} />
-        <FileParts parts={files} />
-        {isQueued && (
-          <Text color={theme.overlay} dimColor>
-            QUEUED
-          </Text>
-        )}
+        <Box flexDirection="row" gap={1}>
+          <Text color={theme.cyan}>•</Text>
+          <Box flexDirection="column" flexShrink={1}>
+            <MarkdownRenderer text={text.text} />
+            <FileParts parts={files} />
+            {isQueued && (
+              <Text color={theme.overlay} dimColor>
+                QUEUED
+              </Text>
+            )}
+          </Box>
+        </Box>
       </Box>
     </Box>
   )
