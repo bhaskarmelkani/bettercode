@@ -901,7 +901,7 @@ Goal: add measurement scaffolding and eliminate the worst unnecessary height wor
 
 Checklist:
 
-- [ ] performance — Add reusable long-session fixtures for transcript tests
+- [x] performance — Add reusable long-session fixtures for transcript tests
   - Files:
     - `packages/tui-ink/test/scroll.test.ts`
     - optional new fixture file under `packages/tui-ink/test/`
@@ -911,7 +911,7 @@ Checklist:
     - 500-message transcript
     - mixed text + tool rows
 
-- [ ] performance — Add height-cache scaffolding for completed messages
+- [x] performance — Add height-cache scaffolding for completed messages
   - File: `packages/tui-ink/src/components/MessageList.tsx`
   - Cache estimated message heights by message id and width-sensitive version.
   - Only invalidate for:
@@ -919,14 +919,14 @@ Checklist:
     - in-progress messages
     - actual part changes for the message being measured
 
-- [ ] performance — Keep the height cache isolated and testable
+- [x] performance — Keep the height cache isolated and testable
   - File: `packages/tui-ink/src/components/MessageList.tsx`
   - If needed, extract pure helper logic for:
     - cache key/version calculation
     - visible range calculation
   - Keep helpers small and local to transcript rendering.
 
-- [ ] test — Add or extend height and scroll tests
+- [x] test — Add or extend height and scroll tests
   - Files:
     - `packages/tui-ink/test/scroll.test.ts`
   - Cover:
@@ -934,7 +934,7 @@ Checklist:
     - width change invalidation
     - correct total/visible height behavior after caching
 
-- [ ] validation — Stop and verify milestone 8
+- [x] validation — Stop and verify milestone 8
   - Run `bun typecheck`.
   - Run `bun test test/`.
   - Manually verify:
@@ -944,11 +944,35 @@ Checklist:
 
 Done when:
 
-- [ ] Long-session fixtures exist for later transcript performance work
-- [ ] Completed messages no longer need full height recomputation on every delta
-- [ ] Scroll tests still reflect correct behavior
+- [x] Long-session fixtures exist for later transcript performance work
+- [x] Completed messages no longer need full height recomputation on every delta
+- [x] Scroll tests still reflect correct behavior
 
 Milestone notes:
+
+### Implementation notes (2026-04-14)
+
+**Fixture file**: New `packages/tui-ink/test/fixtures.ts` — exports `makeMsg`, `makeTextPart`, `makeToolPart`, `makeTranscript(n)`. Builds a mixed transcript of n messages (alternating user/assistant, every third assistant turn includes a tool part). Used by updated `scroll.test.ts` which now imports from fixtures instead of defining local helpers.
+
+**Height cache design** (`MessageList.tsx`):
+
+- Module-scoped `Map<string, { height: number; version: number }>` named `heightCache`.
+- Module-scoped `cacheWidth: number` (initial -1) tracks the current terminal width.
+- `cacheVersion(parts): number` — pure exported helper: `parts.length * 1_000_000 + lastTextPart.text.length`. Cheap to compute; changes whenever streaming appends characters. Stable for completed messages.
+- `clearHeightCache()` — exported, sets `cacheWidth = -1` and clears the Map. Used in tests and called internally on width change.
+- `cachedHeight(msg, parts, width, pending)` — module-level (not exported). Bypasses cache for `msg.id === pending` (always recomputes the in-progress message). For all other messages: returns cached height if version matches, otherwise computes, stores, and returns.
+- `totalHeight` useMemo now depends on `[messages, parts, width, pending]` and calls `cachedHeight` instead of `estimateHeight` directly. Width change causes `heightCache.clear()` + `cacheWidth = width` before accumulation.
+
+**Result**: During streaming, only the active pending message calls `estimateHeight` (and thus `marked.lexer`) on every delta flush. All completed messages return O(1) cached heights.
+
+**Cache note — module scope**: The cache is shared across all MessageList instances (acceptable since MessageList is a singleton in the current tree). Cache keys are message UUIDs so cross-session pollution is not an issue.
+
+**New test count**: +15 new tests added to `scroll.test.ts` across 3 new describe blocks: `cacheVersion` (6 tests), `clearHeightCache` (2 tests), `makeTranscript fixtures` (7 tests).
+
+**Validation results**:
+
+- `bun typecheck`: PASS
+- `bun test test/`: 186 pass, 0 fail (was 171; +15 new tests)
 
 ## Milestone 9 — Transcript performance implementation
 

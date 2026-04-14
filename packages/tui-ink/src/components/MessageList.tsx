@@ -11,6 +11,43 @@ import type { Token } from "./markdown/types"
 const EMPTY_MESSAGES: Message[] = []
 const EMPTY_PARTS: Record<string, Part[]> = {}
 
+// ---------------------------------------------------------------------------
+// Height cache — module-scoped so it survives React re-renders.
+// Completed messages have immutable parts; their heights are cached until
+// either the parts version changes or the terminal width changes.
+// Only the in-progress (pending) message is always recomputed.
+// ---------------------------------------------------------------------------
+type CacheEntry = { height: number; version: number }
+const heightCache = new Map<string, CacheEntry>()
+let cacheWidth = -1
+
+/**
+ * Pure version key for a parts array.
+ * version = (parts.length * 1_000_000) + length of the last text part's text.
+ * Cheap to compute and changes whenever streaming appends characters.
+ */
+export function cacheVersion(parts: Part[]): number {
+  const last = [...parts].reverse().find((p): p is TextPartType => p.type === "text")
+  return parts.length * 1_000_000 + (last?.text.length ?? 0)
+}
+
+/** Clear the height cache (used in tests and on width change). */
+export function clearHeightCache(): void {
+  heightCache.clear()
+  cacheWidth = -1
+}
+
+function cachedHeight(msg: Message, parts: Part[], width: number, pending: string | undefined): number {
+  // Always recompute for the actively streaming message.
+  if (msg.id === pending) return estimateHeight(msg, parts, width)
+  const v = cacheVersion(parts)
+  const entry = heightCache.get(msg.id)
+  if (entry && entry.version === v) return entry.height
+  const h = estimateHeight(msg, parts, width)
+  heightCache.set(msg.id, { height: h, version: v })
+  return h
+}
+
 interface Props {
   sessionID: string
   height: number
@@ -132,12 +169,17 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const sticky = rowOffset === 0
   const prevMsgCount = useRef(messages.length)
 
-  // Total estimated height of all messages. Keep a small buffer for markdown/code drift,
-  // but avoid the large empty band the previous conservative estimate produced.
+  // Total estimated height of all messages. Completed messages are served
+  // from the module-scoped heightCache; only the pending (streaming) message
+  // is recomputed on every delta.
   const totalHeight = useMemo(() => {
-    const base = messages.reduce((acc, msg) => acc + estimateHeight(msg, parts[msg.id] ?? [], width), 0)
+    if (cacheWidth !== width) {
+      heightCache.clear()
+      cacheWidth = width
+    }
+    const base = messages.reduce((acc, msg) => acc + cachedHeight(msg, parts[msg.id] ?? [], width, pending), 0)
     return base + 2
-  }, [messages, parts, width])
+  }, [messages, parts, width, pending])
 
   // Max rows we can scroll up before reaching the very top
   const maxRowOffset = Math.max(0, totalHeight - height)

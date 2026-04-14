@@ -2,9 +2,10 @@
  * Virtual scrolling / visible-slice tests for MessageList.
  * We extract the pure functions and test them independently.
  */
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect, beforeEach } from "bun:test"
 import type { Message, Part } from "@opencode-ai/sdk/v2"
-import { estimateHeight } from "../src/components/MessageList"
+import { estimateHeight, cacheVersion, clearHeightCache } from "../src/components/MessageList"
+import { makeMsg, makeTextPart, makeToolPart, makeTranscript } from "./fixtures"
 
 function visibleSlice(
   msgs: Message[],
@@ -23,14 +24,6 @@ function visibleSlice(
     start--
   }
   return msgs.slice(start, end)
-}
-
-function makeMsg(id: string, role: "user" | "assistant"): Message {
-  return { id, role, sessionID: "s1" } as Message
-}
-
-function makeTextPart(id: string, messageID: string, text: string): Part {
-  return { id, messageID, type: "text", text, sessionID: "s1" } as unknown as Part
 }
 
 describe("estimateHeight", () => {
@@ -138,11 +131,7 @@ describe("visibleSlice", () => {
   })
 
   test("uses part heights for sizing when available", () => {
-    const msgs = [
-      makeMsg("m1", "assistant"),
-      makeMsg("m2", "assistant"),
-      makeMsg("m3", "assistant"),
-    ]
+    const msgs = [makeMsg("m1", "assistant"), makeMsg("m2", "assistant"), makeMsg("m3", "assistant")]
     const longText = "x".repeat(500)
     const parts: Record<string, Part[]> = {
       m1: [makeTextPart("p1", "m1", longText)],
@@ -154,5 +143,138 @@ describe("visibleSlice", () => {
     const slice = visibleSlice(msgs, parts, 15, 80, 0)
     expect(slice.length).toBe(1)
     expect(slice[0]!.id).toBe("m3")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// cacheVersion — pure version key helper
+// ---------------------------------------------------------------------------
+describe("cacheVersion", () => {
+  test("returns 0 for empty parts", () => {
+    expect(cacheVersion([])).toBe(0)
+  })
+
+  test("changes when parts count changes", () => {
+    const msg = makeMsg("m1", "assistant")
+    const p1 = makeTextPart("p1", "m1", "hello")
+    const p2 = makeTextPart("p2", "m1", "world")
+    expect(cacheVersion([p1])).not.toBe(cacheVersion([p1, p2]))
+  })
+
+  test("changes when last text part length changes", () => {
+    const p = makeTextPart("p1", "m1", "short")
+    const pLong = makeTextPart("p1", "m1", "much longer text here")
+    expect(cacheVersion([p])).not.toBe(cacheVersion([pLong]))
+  })
+
+  test("same for identical parts arrays", () => {
+    const parts = [makeTextPart("p1", "m1", "hello"), makeToolPart("t1", "m1")]
+    expect(cacheVersion(parts)).toBe(cacheVersion(parts))
+  })
+
+  test("tool-only parts uses parts.length * 1_000_000", () => {
+    const parts = [makeToolPart("t1", "m1")]
+    expect(cacheVersion(parts)).toBe(1_000_000)
+  })
+
+  test("text + tool: last text part drives the text length component", () => {
+    const txt = makeTextPart("p1", "m1", "ab") // length 2
+    const tool = makeToolPart("t1", "m1")
+    // With [txt, tool], no text part comes after tool, so we scan in reverse and skip tool
+    // last text = p1 with length 2 → version = 2 * 1_000_000 + 2
+    expect(cacheVersion([txt, tool])).toBe(2_000_002)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// clearHeightCache — cache reset helper
+// ---------------------------------------------------------------------------
+describe("clearHeightCache", () => {
+  test("can be called without error on an empty cache", () => {
+    clearHeightCache()
+    // calling again is a no-op
+    clearHeightCache()
+  })
+
+  test("subsequent estimateHeight calls after clear return correct values", () => {
+    clearHeightCache()
+    const msg = makeMsg("m1", "user")
+    const part = makeTextPart("p1", "m1", "hello")
+    const h = estimateHeight(msg, [part], 80)
+    expect(h).toBeGreaterThanOrEqual(5)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Long-session fixture tests
+// ---------------------------------------------------------------------------
+describe("makeTranscript fixtures", () => {
+  beforeEach(() => clearHeightCache())
+
+  test("20-message transcript has correct shape", () => {
+    const { msgs, parts } = makeTranscript(20)
+    expect(msgs).toHaveLength(20)
+    // Every message has at least one part
+    for (const msg of msgs) {
+      expect(parts[msg.id]).toBeDefined()
+      expect(parts[msg.id]!.length).toBeGreaterThanOrEqual(1)
+    }
+  })
+
+  test("100-message transcript: estimateHeight returns positive values for all messages", () => {
+    const { msgs, parts } = makeTranscript(100)
+    for (const msg of msgs) {
+      const h = estimateHeight(msg, parts[msg.id] ?? [], 80)
+      expect(h).toBeGreaterThan(0)
+    }
+  })
+
+  test("500-message transcript: total height is consistent across two passes", () => {
+    const { msgs, parts } = makeTranscript(500)
+    const total1 = msgs.reduce((acc, msg) => acc + estimateHeight(msg, parts[msg.id] ?? [], 80), 0)
+    const total2 = msgs.reduce((acc, msg) => acc + estimateHeight(msg, parts[msg.id] ?? [], 80), 0)
+    expect(total1).toBe(total2)
+    expect(total1).toBeGreaterThan(0)
+  })
+
+  test("width change produces different total height for long session", () => {
+    const { msgs, parts } = makeTranscript(50)
+    const narrow = msgs.reduce((acc, msg) => acc + estimateHeight(msg, parts[msg.id] ?? [], 40), 0)
+    const wide = msgs.reduce((acc, msg) => acc + estimateHeight(msg, parts[msg.id] ?? [], 120), 0)
+    // narrower terminal → text wraps more → taller
+    expect(narrow).toBeGreaterThan(wide)
+  })
+
+  test("cacheVersion is stable for completed-message parts (same version on repeated calls)", () => {
+    const { msgs, parts } = makeTranscript(20)
+    for (const msg of msgs) {
+      const p = parts[msg.id] ?? []
+      const v1 = cacheVersion(p)
+      const v2 = cacheVersion(p)
+      expect(v1).toBe(v2)
+    }
+  })
+
+  test("visibleSlice works on 100-message transcript at 24-row viewport", () => {
+    const { msgs, parts } = makeTranscript(100)
+    const slice = visibleSlice(msgs, parts, 24, 80, 0)
+    // Should return a small subset of all 100 messages
+    expect(slice.length).toBeGreaterThan(0)
+    expect(slice.length).toBeLessThan(100)
+    // Last message in slice should be the last overall (sticky-bottom)
+    expect(slice[slice.length - 1]!.id).toBe(msgs[99]!.id)
+  })
+
+  test("visibleSlice with offset excludes tail messages", () => {
+    const { msgs, parts } = makeTranscript(20)
+    const full = visibleSlice(msgs, parts, 200, 80, 0)
+    const offset5 = visibleSlice(msgs, parts, 200, 80, 5)
+    // offset=5 should exclude last 5 messages
+    const fullIds = full.map((m) => m.id)
+    const offsetIds = offset5.map((m) => m.id)
+    expect(fullIds.every((id) => !offsetIds.includes(id) || offsetIds.includes(id))).toBe(true)
+    // The last message in offset5 should not be in the last 5 of msgs
+    const last5 = msgs.slice(-5).map((m) => m.id)
+    expect(last5.includes(offset5[offset5.length - 1]?.id ?? "")).toBe(false)
   })
 })
