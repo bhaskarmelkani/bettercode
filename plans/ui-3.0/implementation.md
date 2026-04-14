@@ -1198,7 +1198,7 @@ Milestone notes:
 
 ## Final delivery checklist
 
-- [ ] `plans/ui-3.0/implementation.md` stays updated during implementation
-- [ ] Milestone notes are kept current
-- [ ] Every milestone ends with typecheck, tests, and manual regression checks
-- [ ] No milestone moves forward with unresolved regressions in core transcript/composer behavior
+- [x] `plans/ui-3.0/implementation.md` stays updated during implementation
+- [x] Milestone notes are kept current
+- [x] Every milestone ends with typecheck, tests, and manual regression checks
+- [x] No milestone moves forward with unresolved regressions in core transcript/composer behavior
