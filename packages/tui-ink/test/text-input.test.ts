@@ -11,6 +11,7 @@ import {
   textInsertAt,
   textDelAt,
   textDelForward,
+  textDelKey,
   textDelWord,
   lineCount,
   cursorLineIdx,
@@ -164,6 +165,20 @@ describe("textDelForward — forward delete at cursor", () => {
   test("cursor does not move", () => {
     const [, c] = textDelForward("abc", 1)
     expect(c).toBe(1)
+  })
+})
+
+describe("textDelKey — terminal delete compatibility", () => {
+  test("delete in middle keeps forward-delete behavior", () => {
+    expect(textDelKey("hello", 2)).toEqual(["helo", 2])
+  })
+
+  test("delete at end falls back to backward delete", () => {
+    expect(textDelKey("hello", 5)).toEqual(["hell", 4])
+  })
+
+  test("delete on empty input stays a no-op", () => {
+    expect(textDelKey("", 0)).toEqual(["", 0])
   })
 })
 

@@ -2,7 +2,6 @@ import React from "react"
 import { Box, Text } from "ink"
 import { useAppStore } from "../store"
 import { Spinner } from "../components/Spinner"
-import { Header } from "../components/Header"
 import { StatusBar } from "../components/StatusBar"
 import { useTheme } from "../theme-context"
 import { BottomDock, dockHeight } from "../components/BottomDock"
@@ -15,15 +14,6 @@ interface Props {
   dialog?: Dialog
 }
 
-const logo = [
-  " ██████╗ ███████╗████████╗████████╗███████╗██████╗ ",
-  " ██╔══██╗██╔════╝╚══██╔══╝╚══██╔══╝██╔════╝██╔══██╗",
-  " ██████╔╝█████╗     ██║      ██║   █████╗  ██████╔╝",
-  " ██╔══██╗██╔══╝     ██║      ██║   ██╔══╝  ██╔══██╗",
-  " ██████╔╝███████╗   ██║      ██║   ███████╗██║  ██║",
-  " ╚═════╝ ╚══════╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝",
-]
-
 export function HomeScreen({ rows, columns, active, dialog }: Props) {
   const theme = useTheme()
   const syncStatus = useAppStore((s) => s.syncStatus)
@@ -34,10 +24,11 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
   const sendPrompt = useAppStore((s) => s.sendPrompt)
 
   const dir = useAppStore((s) => s.directory)
+  const composerLines = useAppStore((s) => s.composerLines)
   const project = dir?.split("/").pop() ?? "bettercode"
   const branch = vcs?.branch ?? "—"
-  const dockRows = dockHeight({ rows, dialog })
-  const mainRows = Math.max(1, rows - 2 - dockRows)
+  const dockRows = dockHeight({ rows, dialog, inputLines: composerLines })
+  const mainRows = Math.max(1, rows - 1 - dockRows)
 
   const handleSubmit = async (text: string) => {
     const client = useAppStore.getState().client
@@ -53,73 +44,46 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
 
   const isLoading = syncStatus === "loading"
   const isPartial = syncStatus === "partial"
-  const wide = columns >= 120
+  const recent = sessions.slice(-4).reverse()
 
   return (
     <Box height={rows} width={columns} flexDirection="column">
-      <Header projectName={project} gitBranch={branch} sessionCount={sessions.length} status="idle" />
-
       <Box height={mainRows} flexDirection="column" justifyContent="center" alignItems="center">
         {isLoading && <Spinner label=" connecting to server..." />}
 
         {isPartial && (
           <>
-            <Text color={theme.red}>Server connection failed.</Text>
+            <Text color={theme.red}>connection failed</Text>
             <Text color={theme.subtext}>Check that the bettercode server is running and retry.</Text>
           </>
         )}
 
         {!isLoading && !isPartial && (
-          <>
-            {/* logo — wide terminals only */}
-            {wide && (
-              <Box flexDirection="column" alignItems="center">
-                {logo.map((line, i) => (
-                  <Text key={i} color={theme.mauve}>
-                    {line}
+          <Box flexDirection="column">
+            <Text color={theme.text} bold>
+              bettercode
+            </Text>
+            <Box marginTop={1} flexDirection="row">
+              <Text color={theme.overlay}>⎇ </Text>
+              <Text color={theme.cyan}>{branch}</Text>
+              <Text color={theme.overlay}>{`  ·  ${providers.length} provider${providers.length !== 1 ? "s" : ""}  ·  ${project}`}</Text>
+            </Box>
+
+            {recent.length > 0 && (
+              <Box marginTop={2} flexDirection="column">
+                <Text color={theme.overlay}>recent sessions</Text>
+                {recent.map((s) => (
+                  <Text key={s.id} color={theme.subtext}>
+                    {"  · "}{s.title ?? s.id.slice(0, 8)}
                   </Text>
                 ))}
               </Box>
             )}
-            {!wide && (
-              <Box justifyContent="center">
-                <Text color={theme.mauve} bold>
-                  bettercode
-                </Text>
-              </Box>
-            )}
 
-            {/* project + branch */}
-            <Box marginTop={1} justifyContent="center">
-              <Text color={theme.subtext}>{project}</Text>
-              {vcs?.branch && <Text color={theme.overlay}> {vcs.branch}</Text>}
-              <Text color={theme.overlay}>
-                {" "}
-                {providers.length} provider{providers.length !== 1 ? "s" : ""}
-              </Text>
+            <Box marginTop={2}>
+              <Text color={theme.overlay}>start with a prompt or resume a recent session</Text>
             </Box>
-
-            {/* recent sessions (max 3) */}
-            {sessions.length > 0 && (
-              <Box marginTop={1} flexDirection="column" alignItems="center">
-                <Text color={theme.overlay}>recent sessions</Text>
-                {sessions
-                  .slice(-3)
-                  .reverse()
-                  .map((s) => (
-                    <Text key={s.id} color={theme.surface2}>
-                      · {s.title ?? s.id.slice(0, 8)}
-                    </Text>
-                  ))}
-              </Box>
-            )}
-
-            {sessions.length === 0 && (
-              <Box marginTop={1} justifyContent="center">
-                <Text color={theme.overlay}>No sessions yet. Type a message to begin.</Text>
-              </Box>
-            )}
-          </>
+          </Box>
         )}
       </Box>
 
@@ -133,7 +97,7 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
         onAbort={() => {}}
       />
 
-      <StatusBar />
+      <StatusBar width={columns} />
     </Box>
   )
 }

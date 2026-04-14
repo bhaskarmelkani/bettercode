@@ -28,6 +28,14 @@ export function textDelForward(value: string, cursor: number): [string, number] 
   return [value.slice(0, cursor) + value.slice(cursor + 1), cursor]
 }
 
+// Terminal delete compatibility: if the key lands at end-of-line, treat it like
+// backspace so terminals that report the main Delete key as `key.delete` still
+// erase predictably. Otherwise keep forward-delete semantics.
+export function textDelKey(value: string, cursor: number): [string, number] {
+  if (cursor >= value.length) return textDelAt(value, cursor)
+  return textDelForward(value, cursor)
+}
+
 // Ctrl+W: delete word backward from cursor; returns [nextValue, nextCursor].
 export function textDelWord(value: string, cursor: number): [string, number] {
   if (cursor === 0) return [value, 0]
@@ -109,6 +117,12 @@ export function useTextInput(initial = "") {
       return { value: v, cursor: c }
     })
 
+  const deleteKey = () =>
+    setState((s) => {
+      const [v, c] = textDelKey(s.value, s.cursor)
+      return { value: v, cursor: c }
+    })
+
   const deleteWord = () =>
     setState((s) => {
       const [v, c] = textDelWord(s.value, s.cursor)
@@ -145,6 +159,7 @@ export function useTextInput(initial = "") {
     insert,
     del,
     deleteForward,
+    deleteKey,
     deleteWord,
     moveLeft,
     moveRight,

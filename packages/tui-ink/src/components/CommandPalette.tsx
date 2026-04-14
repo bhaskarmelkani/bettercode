@@ -53,6 +53,8 @@ export function CommandPalette({ rows, columns }: Props) {
   const total = filtered.length + serverFiltered.length
   const maxVisible = Math.max(1, rows - 9)
   const start = Math.max(0, idx - Math.floor(maxVisible / 2))
+  const prompt = "› "
+  const value = query || "filter commands..."
 
   // Build flat display list: registry entries then server entries
   type Entry =
@@ -116,6 +118,7 @@ export function CommandPalette({ rows, columns }: Props) {
       return
     }
     if (key.ctrl || key.meta) return
+    if (input && (input.startsWith("[<") || input.startsWith("[M"))) return
     if (input) {
       setQuery((v) => v + input)
       setIdx(0)
@@ -132,18 +135,10 @@ export function CommandPalette({ rows, columns }: Props) {
       </Box>
 
       {/* Filter input */}
-      <Box marginBottom={1} borderStyle="single" borderColor={theme.surface2} paddingX={1}>
-        <Text color={theme.cyan}>{"› "}</Text>
-        {query ? (
-          <Text color={theme.text}>
-            {query}
-            <Text backgroundColor={theme.overlay} color={theme.base}>
-              {" "}
-            </Text>
-          </Text>
-        ) : (
-          <Text color={theme.overlay}>filter commands...</Text>
-        )}
+      <Box marginBottom={1} flexDirection="row">
+        <Text color={theme.cyan}>{prompt}</Text>
+        <Text color={query ? theme.text : theme.subtext}>{value}</Text>
+        <Text color={theme.cyan}>│</Text>
       </Box>
 
       {total === 0 && <Text color={theme.overlay}>No commands match.</Text>}

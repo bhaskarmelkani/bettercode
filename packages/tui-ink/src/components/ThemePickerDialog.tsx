@@ -28,6 +28,8 @@ export function ThemePickerDialog({ rows, columns }: Props) {
   const maxVisible = Math.max(1, rows - 8)
   const start = Math.max(0, safeIdx - Math.floor(maxVisible / 2))
   const visible = filtered.slice(start, start + maxVisible)
+  const prompt = "› "
+  const value = query || "filter themes..."
 
   // No live preview — theme is only applied on Enter to avoid global rerenders.
 
@@ -56,6 +58,7 @@ export function ThemePickerDialog({ rows, columns }: Props) {
       return
     }
     if (key.ctrl || key.meta) return
+    if (input && (input.startsWith("[<") || input.startsWith("[M"))) return
     if (input) {
       setQuery((v) => v + input)
       setIdx(0)
@@ -71,18 +74,10 @@ export function ThemePickerDialog({ rows, columns }: Props) {
         <Text color={theme.overlay}> {filtered.length} available</Text>
       </Box>
 
-      <Box marginBottom={1} borderStyle="single" borderColor={theme.surface2} paddingX={1}>
-        <Text color={theme.cyan}>{"› "}</Text>
-        {query ? (
-          <Text color={theme.text}>
-            {query}
-            <Text backgroundColor={theme.overlay} color={theme.base}>
-              {" "}
-            </Text>
-          </Text>
-        ) : (
-          <Text color={theme.overlay}>filter themes...</Text>
-        )}
+      <Box marginBottom={1} flexDirection="row">
+        <Text color={theme.cyan}>{prompt}</Text>
+        <Text color={query ? theme.text : theme.subtext}>{value}</Text>
+        <Text color={theme.cyan}>│</Text>
       </Box>
 
       {filtered.length === 0 && <Text color={theme.overlay}>No themes match.</Text>}

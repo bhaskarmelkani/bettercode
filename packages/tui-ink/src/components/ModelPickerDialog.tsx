@@ -74,7 +74,6 @@ export function ModelPickerDialog({ rows, columns }: Props) {
   const visible = entries.slice(start, start + maxVisible)
   const prompt = "› "
   const value = query || "search models..."
-  const fill = Math.max(0, columns - 4 - prompt.length - value.length - 1)
 
   useInput((input, key) => {
     if (key.escape || (key.ctrl && input === "k")) {
@@ -102,6 +101,7 @@ export function ModelPickerDialog({ rows, columns }: Props) {
       return
     }
     if (key.ctrl || key.meta) return
+    if (input && (input.startsWith("[<") || input.startsWith("[M"))) return
     if (input) {
       setQuery((v) => v + input)
       setIdx(0)
@@ -114,25 +114,14 @@ export function ModelPickerDialog({ rows, columns }: Props) {
         <Text color={theme.mauve} bold>
           Model
         </Text>
-        {currentModel && (
-          <Text backgroundColor={theme.blue} color={theme.base}>
-            {" current "}
-          </Text>
-        )}
+        {currentModel && <Text color={theme.blue}> · current</Text>}
         {currentModel && <Text color={theme.overlay}>{` ${currentModel.modelID}`}</Text>}
       </Box>
 
       <Box marginBottom={1} flexDirection="row">
-        <Text backgroundColor={theme.surface0} color={theme.cyan}>
-          {prompt}
-        </Text>
-        <Text backgroundColor={theme.surface0} color={query ? theme.text : theme.overlay}>
-          {value}
-        </Text>
-        <Text backgroundColor={theme.overlay} color={theme.base}>
-          {" "}
-        </Text>
-        <Text backgroundColor={theme.surface0}>{fill > 0 ? " ".repeat(fill) : ""}</Text>
+        <Text color={theme.cyan}>{prompt}</Text>
+        <Text color={query ? theme.text : theme.subtext}>{value}</Text>
+        <Text color={theme.cyan}>│</Text>
       </Box>
 
       {total === 0 && (
@@ -155,11 +144,7 @@ export function ModelPickerDialog({ rows, columns }: Props) {
                 {e.name}
               </Text>
               <Text color={theme.overlay}>{`  ${e.providerID}`}</Text>
-              {current && (
-                <Text backgroundColor={theme.blue} color={theme.base}>
-                  {" current "}
-                </Text>
-              )}
+              {current && <Text color={theme.blue}> ✓</Text>}
               {e.isRecent && !current && <Text color={theme.surface2}>{" ★"}</Text>}
             </Box>
             {selected && (

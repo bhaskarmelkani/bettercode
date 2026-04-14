@@ -3,6 +3,7 @@ import { Box, Text, useInput } from "ink"
 import type { Provider, ProviderAuthMethod, ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
 import { useAppStore } from "../store"
 import { useTheme } from "../theme-context"
+import { textDelKey } from "../hooks/useTextInput"
 
 interface Props {
   rows: number
@@ -210,9 +211,11 @@ export function ProviderDialog({ rows, columns }: Props) {
           return
         }
         if (key.delete) {
+          const [next, pos] = textDelKey(step.input, step.cursor)
           setStep({
             ...step,
-            input: step.input.slice(0, step.cursor) + step.input.slice(step.cursor + 1),
+            input: next,
+            cursor: pos,
           })
           return
         }
@@ -293,9 +296,11 @@ export function ProviderDialog({ rows, columns }: Props) {
           return
         }
         if (key.delete) {
+          const [next, pos] = textDelKey(step.input, step.cursor)
           setStep({
             ...step,
-            input: step.input.slice(0, step.cursor) + step.input.slice(step.cursor + 1),
+            input: next,
+            cursor: pos,
             error: null,
           })
           return
@@ -353,9 +358,11 @@ export function ProviderDialog({ rows, columns }: Props) {
           return
         }
         if (key.delete) {
+          const [next, pos] = textDelKey(step.input, step.cursor)
           setStep({
             ...step,
-            input: step.input.slice(0, step.cursor) + step.input.slice(step.cursor + 1),
+            input: next,
+            cursor: pos,
             error: false,
           })
           return

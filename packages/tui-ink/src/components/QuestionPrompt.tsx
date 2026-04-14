@@ -3,6 +3,7 @@ import { Box, Text, useInput } from "ink"
 import type { QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useTheme } from "../theme-context"
 import { useAppStore } from "../store"
+import { textDelKey } from "../hooks/useTextInput"
 
 interface Props {
   request: QuestionRequest
@@ -63,7 +64,9 @@ export function QuestionPrompt({ request, columns }: Props) {
         return
       }
       if (key.delete) {
-        setCustom((v) => v.slice(0, cursor) + v.slice(cursor + 1))
+        const [next, pos] = textDelKey(custom, cursor)
+        setCustom(next)
+        setCursor(pos)
         return
       }
       if (!key.ctrl && !key.meta && input) {

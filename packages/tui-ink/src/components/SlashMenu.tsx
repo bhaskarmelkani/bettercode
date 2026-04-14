@@ -31,13 +31,13 @@ export function SlashMenu({ width, options, focused }: Props) {
         const sel = i === focused
         const prefix = `${sel ? "▶" : " "}`
         const name = `/${cmd.name}`.padEnd(cmdWidth, " ")
-        const space = Math.max(0, width - 3 - cmdWidth)
+        const space = Math.max(0, width - 5 - cmdWidth)
         const desc = cut(cmd.description, space)
-        const body = ` ${prefix} ${name}  ${desc}`.padEnd(Math.max(0, width), " ")
+        const body = ` ${prefix} ${name}  ${desc}`.padEnd(width)
         return (
           <Text
             key={cmd.name}
-            backgroundColor={sel ? theme.surface2 : theme.mantle}
+            backgroundColor={sel ? theme.surface1 : theme.surface0}
             color={sel ? theme.text : theme.subtext}
             wrap="truncate-end"
           >

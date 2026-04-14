@@ -28,6 +28,8 @@ export function AgentPickerDialog({ rows, columns }: Props) {
   const safeIdx = Math.min(idx, Math.max(0, total - 1))
   const start = Math.max(0, safeIdx - Math.floor(maxVisible / 2))
   const visible = filtered.slice(start, start + maxVisible)
+  const prompt = "› "
+  const value = query || "search agents..."
 
   useInput((input, key) => {
     if (key.escape || (key.ctrl && input === "k")) {
@@ -59,6 +61,7 @@ export function AgentPickerDialog({ rows, columns }: Props) {
       return
     }
     if (key.ctrl || key.meta) return
+    if (input && (input.startsWith("[<") || input.startsWith("[M"))) return
     if (input) {
       setQuery((v) => v + input)
       setIdx(0)
@@ -74,18 +77,10 @@ export function AgentPickerDialog({ rows, columns }: Props) {
         {currentAgent && <Text color={theme.overlay}> current: {currentAgent}</Text>}
       </Box>
 
-      <Box marginBottom={1} borderStyle="single" borderColor={theme.surface2} paddingX={1}>
-        <Text color={theme.cyan}>{"› "}</Text>
-        {query ? (
-          <Text color={theme.text}>
-            {query}
-            <Text backgroundColor={theme.overlay} color={theme.base}>
-              {" "}
-            </Text>
-          </Text>
-        ) : (
-          <Text color={theme.overlay}>search agents...</Text>
-        )}
+      <Box marginBottom={1} flexDirection="row">
+        <Text color={theme.cyan}>{prompt}</Text>
+        <Text color={query ? theme.text : theme.subtext}>{value}</Text>
+        <Text color={theme.cyan}>│</Text>
       </Box>
 
       {total === 0 && <Text color={theme.overlay}>No agents available.</Text>}

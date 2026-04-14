@@ -33,8 +33,8 @@ export function dockHeight(input: {
   }
   if (input.permissions?.length) return Math.max(1, Math.min(input.rows - 3, base + perm))
   if (input.questions?.length) return Math.max(1, Math.min(input.rows - 3, base + quest))
-  // base + extra rows for each additional input line (capped at MAX_VISIBLE - 1 = 4 extra)
-  const extra = Math.max(0, Math.min(4, (input.inputLines ?? 1) - 1))
+  // base + extra rows for each additional input line (capped at 14 extra = 15 visible lines)
+  const extra = Math.max(0, Math.min(14, (input.inputLines ?? 1) - 1))
   return Math.max(1, Math.min(input.rows - 3, base + extra))
 }
 

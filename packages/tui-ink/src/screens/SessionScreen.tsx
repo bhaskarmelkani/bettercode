@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react"
 import { Box, Text, useInput } from "ink"
 import { useShallow } from "zustand/shallow"
 import { useAppStore } from "../store"
-import { Header } from "../components/Header"
 import { MessageList } from "../components/MessageList"
 import { StatusBar } from "../components/StatusBar"
 import { Sidebar } from "../components/Sidebar"
@@ -73,11 +72,12 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const SIDEBAR_MIN = 120
 
   const dockRows = dockHeight({ rows, dialog, permissions, questions, inputLines: composerLines })
-  const listHeight = Math.max(1, rows - 2 - dockRows)
+  const listHeight = Math.max(1, rows - 1 - dockRows)
   const mainWidth = Math.max(1, sidebarOpen ? columns - SIDEBAR_WIDTH : columns)
 
   const project = dir?.split("/").pop() ?? "bettercode"
   const branch = vcs?.branch ?? "—"
+  const inputActive = active && !dialog && !sidebarOpen && permissions.length === 0 && questions.length === 0
 
   useEffect(() => {
     if (sidebarOpen && columns < SIDEBAR_MIN) setSidebarOpen(false)
@@ -119,13 +119,6 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
 
   return (
     <Box flexDirection="column" height={rows} width={columns}>
-      <Header
-        projectName={project}
-        gitBranch={branch}
-        sessionCount={sessions.length}
-        status={isError ? "error" : generating ? "generating" : "idle"}
-      />
-
       <Box flexDirection="row" flexGrow={1}>
         <Box flexDirection="column" width={mainWidth}>
           <ErrorBoundary label="transcript">
@@ -133,7 +126,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
               sessionID={sessionID}
               height={listHeight}
               width={Math.max(1, mainWidth - 4)}
-              active={active && !dialog && permissions.length === 0 && questions.length === 0}
+              active={inputActive}
               generating={generating}
             />
           </ErrorBoundary>
@@ -145,7 +138,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
               dialog={dialog}
               rows={dockRows}
               columns={mainWidth}
-              active={active && !dialog && permissions.length === 0 && questions.length === 0}
+              active={inputActive}
               generating={generating}
               onSubmit={handleSubmit}
               onAbort={handleAbort}
@@ -155,10 +148,12 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
           </ErrorBoundary>
         </Box>
 
-        {sidebarOpen && <Sidebar sessionID={sessionID} width={SIDEBAR_WIDTH} height={rows - 2} active={sidebarOpen} />}
+        {sidebarOpen && (
+          <Sidebar sessionID={sessionID} width={SIDEBAR_WIDTH} height={rows - 2} active={active && sidebarOpen} />
+        )}
       </Box>
 
-      <StatusBar />
+      <StatusBar width={columns} sidebarOpen={sidebarOpen} />
     </Box>
   )
 }

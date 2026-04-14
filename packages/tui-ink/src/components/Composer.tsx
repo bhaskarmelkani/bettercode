@@ -2,12 +2,13 @@ import React, { useState, useEffect } from "react"
 import { Box, Text, useInput } from "ink"
 import { useTheme } from "../theme-context"
 import { SlashMenu } from "./SlashMenu"
+import { Spinner } from "./Spinner"
 import { useAppStore } from "../store"
 import {
   useTextInput,
   textInsertAt,
   textDelAt,
-  textDelForward,
+  textDelKey,
   textDelWord,
   cursorLineIdx,
   lineCount,
@@ -17,7 +18,14 @@ import { useSlashCommands } from "../hooks/useSlashCommands"
 import type { FilePartInput } from "@opencode-ai/sdk/v2"
 
 // Maximum visible input lines before scrolling within the composer.
-const MAX_VISIBLE = 5
+const MAX_VISIBLE = 15
+
+// Known terminal encodings for Shift+Enter.
+// Terminals cannot send key.shift+key.return via normal TTY — they use escape sequences instead.
+//   [27;2;13~ = XTerm modifyOtherKeys (format 1) — used by iTerm2, Terminal.app, etc.
+//   [13;2u    = CSI-u (Kitty keyboard protocol) — used by kitty, WezTerm with CSI-u enabled
+//   [27;2u    = CSI-u alternate encoding
+const SHIFT_ENTER = new Set(["[27;2;13~", "[13;2u", "[27;2u"])
 
 interface Props {
   onSubmit: (text: string, files?: FilePartInput[]) => void
@@ -35,7 +43,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
     setValue,
     insert,
     del,
-    deleteForward,
+    deleteKey,
     deleteWord,
     moveLeft,
     moveRight,
@@ -167,8 +175,8 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
         return
       }
 
-      // Alt+Enter → insert newline (multi-line input)
-      if (key.meta && key.return) {
+      // Alt+Enter or Shift+Enter → insert newline (multi-line input)
+      if ((key.meta && key.return) || (key.shift && key.return)) {
         newline()
         return
       }
@@ -267,9 +275,8 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
       }
 
       if (key.delete) {
-        // Forward delete — Delete key (not Backspace)
-        const next = textDelForward(value, cursor)[0]
-        deleteForward()
+        const next = textDelKey(value, cursor)[0]
+        deleteKey()
         slash.setIdx(0)
         mentions.update(next)
         return
@@ -302,9 +309,16 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
         return
       }
 
+      // Terminal escape sequences — must be checked before the ctrl/meta guard because
+      // some terminals set key.meta=true for ESC-prefixed CSI sequences.
+      if (input && /^\[[\d;]+[A-Za-z~]$/.test(input)) {
+        if (SHIFT_ENTER.has(input)) newline()
+        return
+      }
+
       if (key.ctrl || key.meta) return
 
-      // Filter out terminal mouse escape sequences (SGR/X10 format, ESC stripped by Ink)
+      // Filter out remaining terminal escape sequences (mouse SGR/X10)
       if (input && (input.startsWith("[<") || input.startsWith("[M"))) return
 
       if (input) {
@@ -329,6 +343,8 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
   const curLine = cursorLineIdx(value, cursor)
   const viewStart = Math.max(0, curLine - MAX_VISIBLE + 1)
   const visLines = allLines.slice(viewStart, viewStart + MAX_VISIBLE)
+  const field = undefined
+  const overlay = theme.surface0
   // Precompute start position of each line in `value`.
   const allStarts = allLines.reduce<number[]>((acc, _, i) => {
     acc.push(i === 0 ? 0 : acc[i - 1]! + allLines[i - 1]!.length + 1)
@@ -365,31 +381,39 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
             width={width}
             marginTop={-Math.min(6, mentions.results.length)}
             flexDirection="column"
-            paddingX={1}
           >
             {mentions.results.slice(0, 6).map((path, i) => (
               <Text
                 key={path}
-                backgroundColor={i === mentions.idx ? theme.surface2 : theme.mantle}
+                backgroundColor={i === mentions.idx ? theme.surface1 : theme.surface0}
                 color={i === mentions.idx ? theme.text : theme.subtext}
                 wrap="truncate-end"
               >
-                {`${i === mentions.idx ? "▶ " : "  "}${path}`}
+                {`${i === mentions.idx ? "▶ " : "  "}${path}`.padEnd(width)}
               </Text>
             ))}
           </Box>
         )}
-        {/* Claude-like: keep the input row fixed; show suggestions as an overlay above it. */}
+        {/* Slash menu — absolute overlay above the input */}
         {slash.visible && <SlashMenu width={width} options={slash.options} focused={slash.idx} />}
 
-        {/* Separator — between transcript and input */}
-        <Text color={active ? theme.surface1 : theme.mantle}>{"─".repeat(width)}</Text>
+        {/* Context line — generating status or empty */}
+        <Box height={1}>
+          {generating ? (
+            <Spinner label=" generating  ↑↓ scroll · ctrl+c abort" />
+          ) : (
+            <Text> </Text>
+          )}
+        </Box>
+
+        {/* Separator — prominent divider between content and input */}
+        <Text color={theme.surface2}>{"─".repeat(width)}</Text>
 
         {/* Input area — single or multi-line */}
         {generating ? (
           <Box flexDirection="row">
-            <Text color={theme.yellow}>{"◎ "}</Text>
-            <Text color={theme.overlay}>{placeholder}</Text>
+            <Text color={theme.overlay}>{"› "}</Text>
+            <Text color={theme.overlay} dimColor>{"waiting for response..."}</Text>
           </Box>
         ) : (
           <Box flexDirection="column">
@@ -398,23 +422,45 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
               const lineStart = allStarts[absIdx]!
               const onLine = absIdx === curLine
               const col = onLine ? cursor - lineStart : -1
-              const txt = active ? theme.text : theme.overlay
+              const txt = active ? theme.text : theme.subtext
               const glyph = active ? theme.cyan : theme.overlay
+              const body = !value ? placeholder : line || " "
+              const fill = Math.max(0, width - 2 - body.length)
 
               return (
                 <Box key={absIdx} flexDirection="row">
-                  <Text color={glyph}>{vi === 0 && viewStart === 0 ? "› " : "  "}</Text>
+                  <Text color={glyph} backgroundColor={field}>
+                    {vi === 0 && viewStart === 0 ? "› " : "  "}
+                  </Text>
                   {onLine ? (
                     <>
-                      {col > 0 && <Text color={txt}>{line.slice(0, col)}</Text>}
-                      <Text backgroundColor={caretOn ? theme.cyan : undefined} color={caretOn ? theme.base : txt}>
+                      {col > 0 && (
+                        <Text color={txt} backgroundColor={field}>
+                          {line.slice(0, col)}
+                        </Text>
+                      )}
+                      <Text backgroundColor={caretOn ? theme.cyan : field} color={caretOn ? theme.base : txt}>
                         {col < line.length ? line[col] : " "}
                       </Text>
-                      {col < line.length && <Text color={txt}>{line.slice(col + 1)}</Text>}
-                      {!value && <Text color={theme.overlay}>{placeholder}</Text>}
+                      {col < line.length && (
+                        <Text color={txt} backgroundColor={field}>
+                          {line.slice(col + 1)}
+                        </Text>
+                      )}
+                      {!value && (
+                        <Text color={theme.subtext} backgroundColor={field}>
+                          {placeholder}
+                        </Text>
+                      )}
+                      {fill > 0 ? <Text backgroundColor={field}>{" ".repeat(fill)}</Text> : null}
                     </>
                   ) : (
-                    <Text color={txt}>{line || " "}</Text>
+                    <>
+                      <Text color={txt} backgroundColor={field}>
+                        {line || " "}
+                      </Text>
+                      {fill > 0 ? <Text backgroundColor={field}>{" ".repeat(fill)}</Text> : null}
+                    </>
                   )}
                 </Box>
               )

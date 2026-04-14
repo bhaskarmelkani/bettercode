@@ -6,9 +6,10 @@ const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "
 
 interface SpinnerProps {
   label?: string
+  backgroundColor?: string
 }
 
-export function Spinner({ label }: SpinnerProps) {
+export function Spinner({ label, backgroundColor }: SpinnerProps) {
   const theme = useTheme()
   const [frame, setFrame] = useState(0)
 
@@ -20,7 +21,7 @@ export function Spinner({ label }: SpinnerProps) {
   }, [])
 
   return (
-    <Text color={theme.yellow}>
+    <Text color={theme.yellow} backgroundColor={backgroundColor}>
       {FRAMES[frame]}
       {label}
     </Text>

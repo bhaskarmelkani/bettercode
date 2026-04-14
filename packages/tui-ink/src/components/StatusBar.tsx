@@ -3,10 +3,23 @@ import { Box, Text } from "ink"
 import { useTheme } from "../theme-context"
 import { useAppStore } from "../store"
 
-export function StatusBar() {
+interface Props {
+  width: number
+  sidebarOpen?: boolean
+}
+
+function cut(text: string, max: number) {
+  if (max <= 0) return ""
+  if (text.length <= max) return text
+  if (max === 1) return "…"
+  return `${text.slice(0, max - 1)}…`
+}
+
+export function StatusBar({ width, sidebarOpen }: Props) {
   const theme = useTheme()
   const model = useAppStore((s) => s.currentModel)
   const agent = useAppStore((s) => s.mode)
+  const vcs = useAppStore((s) => s.vcs)
   const sid = useAppStore((s) => s.currentSessionID)
   const composerStatus = useAppStore((s) => s.composerStatus)
   const session = useAppStore((s) => s.sessionStatus[sid])
@@ -15,47 +28,42 @@ export function StatusBar() {
   const perms = useAppStore((s) => (s.permissions[sid]?.length ?? 0) > 0)
   const qs = useAppStore((s) => (s.questions[sid]?.length ?? 0) > 0)
 
-  const display = model ? model.modelID : "no model"
+  const branch = cut(vcs?.branch ?? "—", 28)
+  const display = cut(model ? model.modelID : "no model", 24)
   const generating = session?.type === "busy" || composerStatus === "generating"
-  const pill = agent === "plan" ? theme.yellow : theme.blue
-  const bg = theme.mantle
+  const tone = agent === "plan" ? theme.yellow : theme.blue
+  const bg = undefined
 
-  const hint = perms
+  const raw = perms
     ? "y: allow · a: allow all · n: deny"
     : qs
       ? "↑↓: navigate · enter: select · esc: reject"
-      : dlg
-        ? "esc: close · tab: navigate"
-        : generating
-          ? "↑↓ scroll · e: tools · ctrl+c abort"
-          : scroll > 0
-            ? "ctrl+↓: snap bottom · shift+↑↓: scroll"
-            : "ctrl+k: commands · ctrl+s: sessions · shift+tab: agent"
+    : dlg
+      ? "esc: close · tab: navigate"
+      : sidebarOpen
+        ? "tab/←→: sidebar · ctrl+b: close"
+      : generating
+        ? "↑↓ scroll · ctrl+c abort"
+        : scroll > 0
+          ? "ctrl+↓: snap bottom"
+          : "ctrl+k: commands · shift+tab: mode"
+
+  // fixed = " "(2) + branch + " · "(3) + agent + " · "(3) + display + " · "(3)
+  const fixed = 2 + branch.length + 3 + agent.length + 3 + display.length + 3
+  const hint = cut(raw, Math.max(0, width - fixed))
+  const fill = Math.max(0, width - fixed - hint.length)
 
   return (
-    <Box height={1}>
-      <Text color={theme.overlay} backgroundColor={bg}>
-        primary agent
-      </Text>
-      <Text color={theme.overlay} backgroundColor={bg}>
-        {" "}
-        │{" "}
-      </Text>
-      <Text backgroundColor={pill} color={theme.base}>{` ${agent} `}</Text>
-      <Text color={theme.overlay} backgroundColor={bg}>
-        {" "}
-        │{" "}
-      </Text>
-      <Text color={theme.cyan} backgroundColor={bg}>
-        {display}
-      </Text>
-      <Text color={theme.overlay} backgroundColor={bg}>
-        {" "}
-        │{" "}
-      </Text>
-      <Text color={theme.overlay} backgroundColor={bg}>
-        {hint}
-      </Text>
+    <Box height={1} flexDirection="row">
+      <Text color={theme.overlay} backgroundColor={bg}>{" "}</Text>
+      <Text color={theme.cyan} backgroundColor={bg}>{branch}</Text>
+      <Text color={theme.overlay} backgroundColor={bg}>{" · "}</Text>
+      <Text color={tone} bold backgroundColor={bg}>{agent}</Text>
+      <Text color={theme.overlay} backgroundColor={bg}>{" · "}</Text>
+      <Text color={theme.subtext} backgroundColor={bg}>{display}</Text>
+      <Text color={theme.overlay} backgroundColor={bg}>{" · "}</Text>
+      <Text color={theme.overlay} backgroundColor={bg}>{hint}</Text>
+      {fill > 0 ? <Text backgroundColor={bg}>{" ".repeat(fill)}</Text> : null}
     </Box>
   )
 }
