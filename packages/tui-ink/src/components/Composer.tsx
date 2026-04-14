@@ -5,6 +5,7 @@ import { SlashMenu, type SlashCommand } from "./SlashMenu"
 import { useAppStore } from "../store"
 import { useCommands } from "../commands/useCommands"
 import { registry } from "../commands/registry"
+import { useTextInput } from "../hooks/useTextInput"
 import type { FilePartInput } from "@opencode-ai/sdk/v2"
 
 // Built-in slash commands always available in session context
@@ -25,7 +26,7 @@ interface Props {
 
 export function Composer({ onSubmit, onAbort, active, generating, width }: Props) {
   const theme = useTheme()
-  const [value, setValue] = useState("")
+  const { value, setValue, insert, del, clear } = useTextInput()
   const [draft, setDraft] = useState("")
   const [histIdx, setHistIdx] = useState<number | null>(null)
   const [slashIdx, setSlashIdx] = useState(0)
@@ -126,7 +127,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
     pushPromptHistory(trimmed)
     setHistIdx(null)
     setDraft("")
-    setValue("")
+    clear()
     setSlashIdx(0)
     setAttachments([])
     const files = buildFileParts()
@@ -148,16 +149,16 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
   function handleSlashSelect(cmd: SlashCommand) {
     if (cmd.name === "thinking") {
       setShowThinking(!showThinking)
-      setValue("")
+      clear()
       return
     }
     if (cmd.name === "clear") {
-      setValue("")
+      clear()
       return
     }
     const reg = regCmds.find((c) => c.slash === cmd.name && c.enabled !== false)
     if (reg) {
-      setValue("")
+      clear()
       setSlashIdx(0)
       registry.trigger(reg.id)
       return
@@ -186,7 +187,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
       }
 
       if (key.ctrl && input === "u") {
-        setValue("")
+        clear()
         setHistIdx(null)
         setSlashIdx(0)
         setMentionActive(false)
@@ -198,7 +199,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
       if (key.ctrl && input === "x") {
         if (value) {
           setPromptStash(value)
-          setValue("")
+          clear()
           setHistIdx(null)
           setSlashIdx(0)
         }
@@ -225,10 +226,10 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
           return
         }
         if (slashVisible) {
-          setValue("")
+          clear()
           setSlashIdx(0)
         } else {
-          setValue("")
+          clear()
           setHistIdx(null)
         }
         return
@@ -304,8 +305,9 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
       }
 
       if (key.backspace || key.delete) {
+        // Compute next value for mention tracking before mutating state
         const next = value.slice(0, -1)
-        setValue(next)
+        del()
         setSlashIdx(0)
         // Update mention query when backspacing
         if (mentionActive) {
@@ -326,8 +328,9 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
       if (input && (input.startsWith("[<") || input.startsWith("[M"))) return
 
       if (input) {
+        // Compute next value for mention tracking before mutating state
         const next = value + input
-        setValue(next)
+        insert(input)
         setSlashIdx(0)
 
         // Check for @ trigger

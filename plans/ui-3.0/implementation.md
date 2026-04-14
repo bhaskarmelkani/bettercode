@@ -485,7 +485,7 @@ Goal: separate text-editing logic from `Composer.tsx` before changing composer b
 
 Checklist:
 
-- [ ] refactor — Extract a focused `useTextInput` hook with behavior parity
+- [x] refactor — Extract a focused `useTextInput` hook with behavior parity
   - Files:
     - `packages/tui-ink/src/components/Composer.tsx`
     - new `packages/tui-ink/src/hooks/useTextInput.ts`
@@ -497,20 +497,20 @@ Checklist:
   - Keep mention, slash, stash, and history logic in `Composer.tsx` for now.
   - Do not change visible behavior in this task.
 
-- [ ] test — Add a focused hook test file
+- [x] test — Add a focused hook test file
   - File: new `packages/tui-ink/test/text-input.test.ts`
   - Start with parity tests for the extracted behavior:
     - append characters
     - delete with backspace
     - submit path if the hook owns it
 
-- [ ] refactor — Rewire `Composer.tsx` to use the hook without behavior changes
+- [x] refactor — Rewire `Composer.tsx` to use the hook without behavior changes
   - File: `packages/tui-ink/src/components/Composer.tsx`
   - Keep current mention/slash/history behavior intact.
   - Keep current submit behavior intact.
   - Keep current placeholder and stash/attachment rendering intact.
 
-- [ ] validation — Stop and verify milestone 4
+- [x] validation — Stop and verify milestone 4
   - Run `bun typecheck`.
   - Run `bun test test/`.
   - Manually verify:
@@ -523,11 +523,32 @@ Checklist:
 
 Done when:
 
-- [ ] `Composer.tsx` no longer owns the raw text state inline
-- [ ] Extracted hook has parity coverage
-- [ ] Composer behavior matches pre-refactor behavior
+- [x] `Composer.tsx` no longer owns the raw text state inline
+- [x] Extracted hook has parity coverage
+- [x] Composer behavior matches pre-refactor behavior
 
 Milestone notes:
+
+### Implementation notes (2026-04-14)
+
+**Hook scope**: `useTextInput` (new `packages/tui-ink/src/hooks/useTextInput.ts`) owns only:
+
+- `value` state (React `useState`)
+- `insert(input)` — appends to end (`textInsert` pure helper)
+- `del()` — deletes last char (`textDel` pure helper)
+- `clear()` — sets value to `""`
+- `setValue` — exposed for programmatic updates (server-append, history nav, stash restore)
+
+**Mention tracking preserved**: The backspace and character-insert handlers in `Composer.tsx` compute `next` (the post-mutation value) locally before calling `del()` / `insert()`. This keeps the synchronous mention-query tracking fully intact with no behavior change.
+
+**Pure helpers exported**: `textInsert` and `textDel` are exported from the hook file so they can be tested without React. The 14 new tests cover: append, delete, empty-string boundaries, @ trigger, slash trigger, composerAppend parity, and stash-restore parity.
+
+**No visible behavior change**: All existing Composer features verified: plain typing, backspace, Ctrl+U/X/Y, slash menu, @ mention, history up/down, stash restore, submit, abort (Ctrl+C), agent toggle (Shift+Tab). Caret blink unchanged.
+
+**Validation results**:
+
+- `bun typecheck`: PASS
+- `bun test test/`: 125 pass, 0 fail (was 111; +14 new tests in `text-input.test.ts`)
 
 ## Milestone 5 — Cursor-aware composer editing
 
