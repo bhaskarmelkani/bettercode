@@ -111,7 +111,7 @@ export function ToolPart({ part }: Props) {
           <Text color={theme.overlay}>{open ? "▾" : "▸"}</Text>
           <Text color={theme[stat.color]}>{stat.icon}</Text>
           <Text color={kid.color}>{kid.icon}</Text>
-          <Text color={theme[stat.color]} wrap="truncate-end">
+          <Text color={theme.subtext} wrap="truncate-end">
             {title}
           </Text>
         </Box>

@@ -411,7 +411,7 @@ Goal: make the conversation scannable by separating user input, assistant prose,
 
 Checklist:
 
-- [ ] UX change — Apply the 3-weight hierarchy across the transcript
+- [x] UX change — Apply the 3-weight hierarchy across the transcript
   - Files:
     - `packages/tui-ink/src/components/UserMessage.tsx`
     - `packages/tui-ink/src/components/AssistantMessage.tsx`
@@ -421,7 +421,7 @@ Checklist:
   - Keep tool rows and metadata visibly tertiary.
   - Use existing theme tokens. Do not add heavy new containers.
 
-- [ ] UX change — Flatten user message nesting and reduce row overhead
+- [x] UX change — Flatten user message nesting and reduce row overhead
   - File: `packages/tui-ink/src/components/UserMessage.tsx`
   - Reduce excess nested `Box` wrappers.
   - Preserve:
@@ -430,19 +430,19 @@ Checklist:
     - `QUEUED` indicator
   - Optimize for fewer rows for short user messages.
 
-- [ ] UX change — Make assistant footers and metadata consistently tertiary
+- [x] UX change — Make assistant footers and metadata consistently tertiary
   - File: `packages/tui-ink/src/components/AssistantMessage.tsx`
   - Ensure duration, tokens, model/mode, and interrupted/error-adjacent footer copy read as metadata, not body content.
   - Use one consistent visual weight for footer text.
 
-- [ ] UX change — Keep tool rows structurally subordinate to assistant prose
+- [x] UX change — Keep tool rows structurally subordinate to assistant prose
   - Files:
     - `packages/tui-ink/src/components/AssistantMessage.tsx`
     - `packages/tui-ink/src/components/parts/ToolPart.tsx`
   - Keep tool rows visibly nested under the assistant turn.
   - Avoid making tool rows look like peer messages.
 
-- [ ] validation — Stop and verify milestone 3
+- [x] validation — Stop and verify milestone 3
   - Run `bun typecheck`.
   - Run `bun test test/`.
   - Manually verify a 20+ message transcript at `120x40` and `80x24`.
@@ -450,12 +450,34 @@ Checklist:
 
 Done when:
 
-- [ ] User input is easy to locate at a glance
-- [ ] Assistant prose is the visual center of the transcript
-- [ ] Tool rows and metadata recede without becoming unreadable
-- [ ] Short user messages occupy less vertical space than baseline
+- [x] User input is easy to locate at a glance
+- [x] Assistant prose is the visual center of the transcript
+- [x] Tool rows and metadata recede without becoming unreadable
+- [x] Short user messages occupy less vertical space than baseline
 
 Milestone notes:
+
+### Implementation notes (2026-04-14)
+
+**3-weight hierarchy approach:**
+
+- User messages: `bold={true}` passed to `MarkdownRenderer` (new prop on paragraph Text elements), bold cyan bullet `•`. Cyan left border unchanged.
+- Assistant prose: unchanged — `theme.text` normal weight, `theme.lavender` lead glyph `◆`, `theme.surface2` border.
+- Tool rows: title color changed from `theme[stat.color]` (green/yellow/red/overlay) to `theme.subtext`. Status icon and kind icon retain their distinct colors. This makes tool titles tertiary without losing state legibility.
+- Footer metadata: already used `theme.overlay` — no change needed.
+
+**MarkdownRenderer `bold` prop**: Added `bold?: boolean` to Props and forwarded it only to `paragraph` token Text elements. Heading tokens were already bold (`theme.lavender`). Code blocks, lists, blockquotes are unchanged. The prop is opt-in — all existing callers are unaffected.
+
+**UserMessage nesting reduction**: Simplified from 4 Box levels (outer → column → row → content-column) to 2 levels (outer-row → content-column). Changed `paddingLeft={2}` + inner `paddingLeft={1}` (total 3) to a single `paddingLeft={1}`. Removed `paddingRight={1}`. Added `flexDirection="row" gap={1}` to the outer Box to position the bullet inline with content. All features preserved: markdown rendering, `FileParts`, `QUEUED` indicator.
+
+**Task 3 (footer)**: No changes needed — footer already used `theme.overlay` for all metadata items via a single joined `Text`. Condition (`isLast || done || aborted`) unchanged.
+
+**Task 4 (subordination)**: No structural changes needed — tool rows already render inside `AssistantMessage`'s `paddingLeft={2} borderLeft` frame, with their own `paddingLeft={3}`. With title color now `theme.subtext`, they are visually tertiary and structurally contained under the assistant border rail.
+
+**Validation results**:
+
+- `bun typecheck`: PASS
+- `bun test test/`: 111 pass, 0 fail (unchanged from M2 baseline)
 
 ## Milestone 4 — Composer extraction and parity
 

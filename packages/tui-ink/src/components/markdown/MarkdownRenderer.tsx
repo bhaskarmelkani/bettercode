@@ -14,13 +14,14 @@ export function lex(text: string) {
 
 interface Props {
   text: string
+  bold?: boolean
 }
 
 function isText(tok: Token) {
   return tok.type === "text" || tok.type === "escape" || tok.type === "html"
 }
 
-export function MarkdownRenderer({ text }: Props) {
+export function MarkdownRenderer({ text, bold }: Props) {
   const theme = useTheme()
   const tokens = useMemo(() => lex(text), [text])
 
@@ -46,7 +47,7 @@ export function MarkdownRenderer({ text }: Props) {
       if (tok.type === "paragraph") {
         out.push(
           <Box key={id} marginTop={0}>
-            <Text color={theme.text} wrap="wrap">
+            <Text color={theme.text} bold={bold} wrap="wrap">
               <InlineText tokens={tok.tokens ?? []} />
             </Text>
           </Box>,
