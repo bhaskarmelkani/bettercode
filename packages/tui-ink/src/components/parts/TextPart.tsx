@@ -1,15 +1,15 @@
 import React from "react"
 import { Box, Text } from "ink"
-import type { TextPart } from "@opencode-ai/sdk/v2"
+import type { TextPart as TextPartSDK } from "@opencode-ai/sdk/v2"
 import { useTheme } from "../../theme-context"
 import { MarkdownRenderer } from "../markdown/MarkdownRenderer"
 
 interface Props {
-  part: TextPart
+  part: TextPartSDK
   lead?: string
 }
 
-export function TextPart({ part, lead }: Props) {
+export const TextPart = React.memo(function TextPart({ part, lead }: Props) {
   const theme = useTheme()
   const text = part.text
   if (!text.trim()) return null
@@ -21,4 +21,4 @@ export function TextPart({ part, lead }: Props) {
       </Box>
     </Box>
   )
-}
+})

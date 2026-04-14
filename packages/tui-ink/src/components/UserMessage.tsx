@@ -10,7 +10,7 @@ interface Props {
   isQueued?: boolean
 }
 
-export function UserMessage({ parts, isQueued }: Props) {
+export const UserMessage = React.memo(function UserMessage({ parts, isQueued }: Props) {
   const theme = useTheme()
   const text = parts.find((p): p is TextPartType => p.type === "text" && !p.synthetic)
   const files = parts.filter((p) => p.type === "file") as FilePartType[]
@@ -41,4 +41,4 @@ export function UserMessage({ parts, isQueued }: Props) {
       </Box>
     </Box>
   )
-}
+})

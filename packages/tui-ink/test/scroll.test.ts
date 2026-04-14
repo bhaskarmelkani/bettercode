@@ -26,6 +26,52 @@ function visibleSlice(
   return msgs.slice(start, end)
 }
 
+// ---------------------------------------------------------------------------
+// Windowed rendering helpers — mirrors MessageList windowing logic.
+// Returns { winStart, winEnd, topSpacer, bottomSpacer } for a given scroll
+// state so we can verify the window is correct without rendering React.
+// ---------------------------------------------------------------------------
+function buildCumH(msgs: Message[], parts: Record<string, Part[]>, width: number): number[] {
+  const h: number[] = [0]
+  for (const msg of msgs) {
+    h.push(h[h.length - 1]! + estimateHeight(msg, parts[msg.id] ?? [], width))
+  }
+  return h
+}
+
+function findWindow(
+  cumH: number[],
+  totalHeight: number,
+  scrollTop: number,
+  viewH: number,
+  buffer = 2,
+): { winStart: number; winEnd: number; topSpacer: number; bottomSpacer: number } {
+  const n = cumH.length - 1 // number of messages
+  const viewEnd = scrollTop + viewH
+  let winFirst = n
+  let winLast = -1
+  for (let i = 0; i < n; i++) {
+    if (cumH[i + 1]! > scrollTop && cumH[i]! < viewEnd) {
+      if (i < winFirst) winFirst = i
+      winLast = i
+    }
+  }
+  const winStart = Math.max(0, winFirst - buffer)
+  const winEnd = Math.min(n, winLast + 1 + buffer)
+  const topSpacer = cumH[winStart]!
+  const bottomSpacer = totalHeight - cumH[winEnd]!
+  return { winStart, winEnd, topSpacer, bottomSpacer }
+}
+
+function scrollTopFromOffset(totalHeight: number, viewH: number, rowOffset: number): number {
+  const clampedOffset = Math.min(rowOffset, Math.max(0, totalHeight - viewH))
+  const absoluteTop = totalHeight > viewH ? -(totalHeight - viewH - clampedOffset) : 0
+  return absoluteTop < 0 ? -absoluteTop : 0
+}
+
+// ---------------------------------------------------------------------------
+// estimateHeight
+// ---------------------------------------------------------------------------
 describe("estimateHeight", () => {
   test("user message with no text parts returns 4 (0 lines + 4 padding)", () => {
     const msg = makeMsg("m1", "user")
@@ -276,5 +322,129 @@ describe("makeTranscript fixtures", () => {
     // The last message in offset5 should not be in the last 5 of msgs
     const last5 = msgs.slice(-5).map((m) => m.id)
     expect(last5.includes(offset5[offset5.length - 1]?.id ?? "")).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Windowed rendering — verifies the window-finding logic used by MessageList
+// ---------------------------------------------------------------------------
+describe("windowed rendering", () => {
+  beforeEach(() => clearHeightCache())
+
+  test("sticky-bottom: window includes the last message", () => {
+    const { msgs, parts } = makeTranscript(50)
+    const width = 80
+    const viewH = 24
+    const cumH = buildCumH(msgs, parts, width)
+    const base = cumH[cumH.length - 1]!
+    const total = base + 2
+    // rowOffset=0: scrolled to bottom
+    const scrollTop = scrollTopFromOffset(total, viewH, 0)
+    const { winStart, winEnd } = findWindow(cumH, total, scrollTop, viewH)
+    expect(winEnd).toBe(50) // buffer extends to message.length
+    expect(msgs.slice(winStart, winEnd).some((m) => m.id === msgs[49]!.id)).toBe(true)
+  })
+
+  test("top-scroll: window includes the first message", () => {
+    const { msgs, parts } = makeTranscript(50)
+    const width = 80
+    const viewH = 24
+    const cumH = buildCumH(msgs, parts, width)
+    const base = cumH[cumH.length - 1]!
+    const total = base + 2
+    // rowOffset=max: scrolled to top
+    const maxRowOffset = Math.max(0, total - viewH)
+    const scrollTop = scrollTopFromOffset(total, viewH, maxRowOffset)
+    const { winStart } = findWindow(cumH, total, scrollTop, viewH)
+    expect(winStart).toBe(0)
+  })
+
+  test("spacers preserve total inner-box height", () => {
+    const { msgs, parts } = makeTranscript(30)
+    const width = 80
+    const viewH = 24
+    const cumH = buildCumH(msgs, parts, width)
+    const base = cumH[cumH.length - 1]!
+    const total = base + 2
+    // Mid-scroll
+    const maxRowOffset = Math.max(0, total - viewH)
+    const scrollTop = scrollTopFromOffset(total, viewH, Math.floor(maxRowOffset / 2))
+    const { winStart, winEnd, topSpacer, bottomSpacer } = findWindow(cumH, total, scrollTop, viewH)
+    const visH = cumH[winEnd]! - cumH[winStart]!
+    expect(topSpacer + visH + bottomSpacer).toBe(total)
+  })
+
+  test("empty transcript: window is empty with full bottom spacer", () => {
+    const cumH = [0]
+    const total = 2
+    const { winStart, winEnd, topSpacer, bottomSpacer } = findWindow(cumH, total, 0, 24)
+    expect(winStart).toBe(0)
+    expect(winEnd).toBe(0)
+    expect(topSpacer).toBe(0)
+    expect(bottomSpacer).toBe(2)
+  })
+
+  test("all messages fit in viewport: no spacers", () => {
+    // 3 short messages that all fit in a large viewport
+    const msgs = [makeMsg("m1", "user"), makeMsg("m2", "user"), makeMsg("m3", "user")]
+    const parts: Record<string, Part[]> = {}
+    const cumH = buildCumH(msgs, parts, 80)
+    const base = cumH[3]!
+    const total = base + 2
+    // Very large viewport — all messages visible
+    const { topSpacer, winStart, winEnd } = findWindow(cumH, total, 0, 1000)
+    expect(winStart).toBe(0)
+    expect(winEnd).toBe(3)
+    expect(topSpacer).toBe(0)
+  })
+
+  test("window shrinks for narrow viewport with many messages", () => {
+    const { msgs, parts } = makeTranscript(100)
+    const width = 80
+    const viewH = 24
+    const cumH = buildCumH(msgs, parts, width)
+    const base = cumH[100]!
+    const total = base + 2
+    const scrollTop = scrollTopFromOffset(total, viewH, 0)
+    const { winStart, winEnd } = findWindow(cumH, total, scrollTop, viewH)
+    // Window should be much smaller than 100
+    const rendered = winEnd - winStart
+    expect(rendered).toBeLessThan(100)
+    expect(rendered).toBeGreaterThan(0)
+  })
+
+  test("detached scroll: window is centered around scrolled position", () => {
+    const { msgs, parts } = makeTranscript(50)
+    const width = 80
+    const viewH = 24
+    const cumH = buildCumH(msgs, parts, width)
+    const base = cumH[50]!
+    const total = base + 2
+    // Scroll to middle
+    const maxRowOffset = Math.max(0, total - viewH)
+    const midOffset = Math.floor(maxRowOffset / 2)
+    const scrollTop = scrollTopFromOffset(total, viewH, midOffset)
+    const { winStart, winEnd } = findWindow(cumH, total, scrollTop, viewH)
+    // Neither the first nor the last message should be in the window
+    // (assuming there are enough messages)
+    if (msgs.length > 20) {
+      expect(winStart).toBeGreaterThan(0)
+      expect(winEnd).toBeLessThan(msgs.length)
+    }
+  })
+
+  test("500-message: window is tiny fraction of total", () => {
+    const { msgs, parts } = makeTranscript(500)
+    const width = 80
+    const viewH = 24
+    const cumH = buildCumH(msgs, parts, width)
+    const base = cumH[500]!
+    const total = base + 2
+    const scrollTop = scrollTopFromOffset(total, viewH, 0)
+    const { winStart, winEnd } = findWindow(cumH, total, scrollTop, viewH)
+    const rendered = winEnd - winStart
+    // Should render at most ~20 messages (24 rows / ~5 per message + buffer)
+    expect(rendered).toBeLessThan(50)
+    expect(rendered).toBeGreaterThan(0)
   })
 })

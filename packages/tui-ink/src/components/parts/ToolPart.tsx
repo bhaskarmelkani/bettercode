@@ -1,12 +1,12 @@
 import React from "react"
 import { Box, Text } from "ink"
-import type { ToolPart } from "@opencode-ai/sdk/v2"
+import type { ToolPart as ToolPartSDK } from "@opencode-ai/sdk/v2"
 import { useAppStore } from "../../store"
 import { useTheme } from "../../theme-context"
 import type { Theme } from "../../theme"
 
 interface Props {
-  part: ToolPart
+  part: ToolPartSDK
 }
 
 const STAT = {
@@ -73,7 +73,7 @@ export function isOpen(status: string, collapsed: boolean | undefined): boolean 
   return status === "error"
 }
 
-export function ToolPart({ part }: Props) {
+export const ToolPart = React.memo(function ToolPart({ part }: Props) {
   const theme = useTheme()
   const collapsed = useAppStore((s) => s.collapsedTools[part.id])
   const state = part.state
@@ -83,26 +83,6 @@ export function ToolPart({ part }: Props) {
   const sum = span(state.input)
   const title = "title" in state && state.title ? state.title : sum ? `${part.tool} ${sum}` : part.tool
   const time = "time" in state ? dur(state.time.start, "end" in state.time ? state.time.end : undefined) : ""
-  const body =
-    state.status === "error" ? (
-      <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.red} flexDirection="column">
-        <Text wrap="wrap" color={theme.subtext}>
-          {line(cut(state.error, 2000), 30)}
-        </Text>
-      </Box>
-    ) : state.status === "completed" ? (
-      <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.surface0} flexDirection="column">
-        <Text wrap="wrap" color={theme.subtext}>
-          {line(cut(state.output, 2000), 30)}
-        </Text>
-      </Box>
-    ) : (
-      <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.surface0} flexDirection="column">
-        <Text wrap="wrap" color={theme.overlay}>
-          {json(state.input)}
-        </Text>
-      </Box>
-    )
 
   return (
     <Box marginTop={0} paddingLeft={3} flexDirection="column" flexShrink={0}>
@@ -117,7 +97,26 @@ export function ToolPart({ part }: Props) {
         </Box>
         <Text color={theme.overlay}>{time}</Text>
       </Box>
-      {open ? body : null}
+      {open &&
+        (state.status === "error" ? (
+          <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.red} flexDirection="column">
+            <Text wrap="wrap" color={theme.subtext}>
+              {line(cut(state.error, 2000), 30)}
+            </Text>
+          </Box>
+        ) : state.status === "completed" ? (
+          <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.surface0} flexDirection="column">
+            <Text wrap="wrap" color={theme.subtext}>
+              {line(cut(state.output, 2000), 30)}
+            </Text>
+          </Box>
+        ) : (
+          <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.surface0} flexDirection="column">
+            <Text wrap="wrap" color={theme.overlay}>
+              {json(state.input)}
+            </Text>
+          </Box>
+        ))}
     </Box>
   )
-}
+})

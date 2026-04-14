@@ -30,7 +30,7 @@ function tok(input: number, output: number) {
   return `${out}k`
 }
 
-export function AssistantMessage({ message, parts, showThinking, isLast }: Props) {
+export const AssistantMessage = React.memo(function AssistantMessage({ message, parts, showThinking, isLast }: Props) {
   const theme = useTheme()
   if (message.role !== "assistant") return null
   const msg = message as AssistantMsg
@@ -94,4 +94,4 @@ export function AssistantMessage({ message, parts, showThinking, isLast }: Props
       )}
     </Box>
   )
-}
+})

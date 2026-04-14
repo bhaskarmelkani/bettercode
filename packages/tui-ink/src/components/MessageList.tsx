@@ -10,6 +10,7 @@ import type { Token } from "./markdown/types"
 
 const EMPTY_MESSAGES: Message[] = []
 const EMPTY_PARTS: Record<string, Part[]> = {}
+const EMPTY_ARRAY: Part[] = []
 
 // ---------------------------------------------------------------------------
 // Height cache — module-scoped so it survives React re-renders.
@@ -121,26 +122,38 @@ export function estimateHeight(msg: Message, parts: Part[], width: number): numb
 }
 
 // ---------------------------------------------------------------------------
-// Session-scoped parts selector
-// Only watches parts for messages belonging to this session, so an unrelated
-// session streaming doesn't trigger a re-render here.
+// Session-scoped parts selector with reference stability.
+// Uses a ref-based cache so the returned Record has a stable identity when
+// none of the per-message Part[] arrays actually changed.
 // ---------------------------------------------------------------------------
 function useSessionParts(sessionID: string): Record<string, Part[]> {
-  // Watch the messages array directly (stable store reference) rather than
-  // mapping to IDs. `.map()` inside a selector creates a new array on every
-  // store update, causing useSyncExternalStore to detect an infinite change
-  // loop and throw "Maximum update depth exceeded".
   const messages = useAppStore((s) => s.messages[sessionID] ?? EMPTY_MESSAGES)
   const allParts = useAppStore((s) => s.parts)
+  const stable = useRef<Record<string, Part[]>>(EMPTY_PARTS)
 
   return useMemo(() => {
-    if (messages.length === 0) return EMPTY_PARTS
-    const out: Record<string, Part[]> = {}
+    if (messages.length === 0) {
+      stable.current = EMPTY_PARTS
+      return EMPTY_PARTS
+    }
+    const prev = stable.current
+    let changed = false
+    const next: Record<string, Part[]> = {}
     for (const msg of messages) {
       const p = allParts[msg.id]
-      if (p) out[msg.id] = p
+      if (p !== undefined) {
+        next[msg.id] = p
+        if (p !== prev[msg.id]) changed = true
+      } else if (msg.id in prev) {
+        changed = true
+      }
     }
-    return out
+    // Return the previous Record if content is identical (same Part[] refs).
+    const prevLen = Object.keys(prev).length
+    const nextLen = Object.keys(next).length
+    if (!changed && prevLen === nextLen) return prev
+    stable.current = next
+    return next
   }, [allParts, messages])
 }
 
@@ -149,6 +162,8 @@ function useSessionParts(sessionID: string): Record<string, Part[]> {
 // ---------------------------------------------------------------------------
 const SCROLL_STEP = 5
 const MOUSE_SCROLL_STEP = 3
+// Extra messages to render above/below the visible viewport
+const WIN_BUFFER = 2
 
 export const MessageList = React.memo(function MessageList({ sessionID, height, width, active, generating }: Props) {
   const messages = useAppStore((s) => s.messages[sessionID] ?? EMPTY_MESSAGES)
@@ -169,16 +184,20 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const sticky = rowOffset === 0
   const prevMsgCount = useRef(messages.length)
 
-  // Total estimated height of all messages. Completed messages are served
-  // from the module-scoped heightCache; only the pending (streaming) message
+  // Compute totalHeight and per-message cumulative heights in one pass.
+  // cumH[i] = sum of heights of messages 0..i-1; cumH[messages.length] = total base.
+  // Completed messages are served from heightCache (O(1)); only the pending message
   // is recomputed on every delta.
-  const totalHeight = useMemo(() => {
+  const [totalHeight, cumH] = useMemo(() => {
     if (cacheWidth !== width) {
       heightCache.clear()
       cacheWidth = width
     }
-    const base = messages.reduce((acc, msg) => acc + cachedHeight(msg, parts[msg.id] ?? [], width, pending), 0)
-    return base + 2
+    const h: number[] = [0]
+    for (const msg of messages) {
+      h.push(h[h.length - 1]! + cachedHeight(msg, parts[msg.id] ?? EMPTY_ARRAY, width, pending))
+    }
+    return [h[h.length - 1]! + 2, h] as const
   }, [messages, parts, width, pending])
 
   // Max rows we can scroll up before reaching the very top
@@ -194,6 +213,35 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   // rowOffset=0  → absoluteTop = -(totalHeight-height)  → shows BOTTOM of content
   // rowOffset=max → absoluteTop = 0                     → shows TOP of content
   const absoluteTop = totalHeight > height ? -(totalHeight - height - clampedOffset) : 0
+
+  // ---------------------------------------------------------------------------
+  // Windowed rendering — find the visible message range.
+  // scrollTop: how many rows of content are above the viewport top edge.
+  // We render WIN_BUFFER extra messages before and after the visible range.
+  // Top + bottom spacers preserve the total inner-box height so scroll math
+  // stays identical to full-list rendering.
+  // ---------------------------------------------------------------------------
+  const scrollTop = absoluteTop < 0 ? -absoluteTop : 0
+  const viewEnd = scrollTop + height
+
+  let winFirst = messages.length
+  let winLast = -1
+  for (let i = 0; i < messages.length; i++) {
+    const top = cumH[i]!
+    const bottom = cumH[i + 1]!
+    if (bottom > scrollTop && top < viewEnd) {
+      if (i < winFirst) winFirst = i
+      winLast = i
+    }
+  }
+
+  // Clamp window with buffer
+  const winStart = Math.max(0, winFirst - WIN_BUFFER)
+  const winEnd = Math.min(messages.length, winLast + 1 + WIN_BUFFER)
+
+  // Spacers preserve total inner-box height = totalHeight
+  const topSpacer = cumH[winStart]!
+  const bottomSpacer = totalHeight - cumH[winEnd]!
 
   // Restore scroll position when switching sessions
   useEffect(() => {
@@ -230,7 +278,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
       if (_input === "e" && !key.ctrl && !key.meta && !key.shift && generating) {
         const msg = [...messages].reverse().find((m) => m.role === "assistant")
         if (!msg) return
-        const tools = (parts[msg.id] ?? []).filter((p) => p.type === "tool")
+        const tools = (parts[msg.id] ?? EMPTY_ARRAY).filter((p) => p.type === "tool")
         if (tools.length === 0) return
         const all = tools.every((part) => {
           const collapsed = collapsedTools[part.id]
@@ -267,6 +315,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   )
 
   const last = messages[messages.length - 1]
+  const win = messages.slice(winStart, winEnd)
 
   return (
     <Box height={height} overflowY="hidden" flexDirection="column">
@@ -278,10 +327,13 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
       )}
 
       {/* Content box — negative marginTop slides content up, overflowY clips it.
-          absoluteTop is negative when rowOffset=0 (stick to bottom), 0 when at top. */}
+          absoluteTop is negative when rowOffset=0 (stick to bottom), 0 when at top.
+          Top/bottom spacers preserve the total inner-box height so scroll math
+          stays identical regardless of how many messages are actually rendered. */}
       <Box flexDirection="column" marginTop={absoluteTop}>
-        {messages.map((msg) => {
-          const msgParts = parts[msg.id] ?? []
+        {topSpacer > 0 && <Box height={topSpacer} />}
+        {win.map((msg) => {
+          const msgParts = parts[msg.id] ?? EMPTY_ARRAY
           if (msg.role === "user") {
             const isQueued = !!(pending && msg.id > pending)
             return <UserMessage key={msg.id} parts={msgParts} isQueued={isQueued} />
@@ -296,6 +348,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
             />
           )
         })}
+        {bottomSpacer > 0 && <Box height={bottomSpacer} />}
       </Box>
     </Box>
   )
