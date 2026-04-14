@@ -23,7 +23,7 @@ export function StatusBar() {
   const hint = perms
     ? "y: allow · a: allow all · n: deny"
     : qs
-      ? "enter: confirm · n: deny"
+      ? "↑↓: navigate · enter: select · esc: reject"
       : dlg
         ? "esc: close · tab: navigate"
         : generating

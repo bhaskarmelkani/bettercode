@@ -151,7 +151,7 @@ export function QuestionPrompt({ request, columns }: Props) {
         <Text backgroundColor={theme.cyan} color={theme.base}>
           {` ${head} `}
         </Text>
-        <Text color={theme.overlay}>  answer below</Text>
+        <Text color={theme.overlay}> answer below</Text>
       </Box>
 
       <Text color={theme.text} wrap="wrap">
@@ -182,17 +182,17 @@ export function QuestionPrompt({ request, columns }: Props) {
             wrap="truncate-end"
           >
             {` ${optIdx === opts.length ? "▶" : " "} `}
-            {typing ? (
-              render(custom, cursor)
-            ) : (
-              "Type a custom answer..."
-            )}
+            {typing ? render(custom, cursor) : "Type a custom answer..."}
           </Text>
         )}
       </Box>
 
       <Box marginTop={1}>
-        <Text color={theme.overlay}>↑↓ navigate · ←→ move · enter select · esc reject</Text>
+        {typing ? (
+          <Text color={theme.overlay}>←→ move · ctrl+a/e home/end · enter submit · esc cancel</Text>
+        ) : (
+          <Text color={theme.overlay}>↑↓ navigate · enter select · esc reject</Text>
+        )}
       </Box>
     </Box>
   )

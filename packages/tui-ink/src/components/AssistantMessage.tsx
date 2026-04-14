@@ -80,10 +80,16 @@ export const AssistantMessage = React.memo(function AssistantMessage({ message, 
           borderTop={false}
           borderBottom={false}
           borderColor={theme.red}
+          flexDirection="column"
         >
-          <Text wrap="wrap" color={theme.subtext}>
-            {msg.error.data.message}
+          <Text color={theme.red} bold>
+            ✗ {msg.error.name}
           </Text>
+          {msg.error.data?.message && (
+            <Text wrap="wrap" color={theme.subtext}>
+              {msg.error.data.message}
+            </Text>
+          )}
         </Box>
       )}
 

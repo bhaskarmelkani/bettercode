@@ -27,7 +27,7 @@ export function PermissionPrompt({ request, columns }: Props) {
         <Text backgroundColor={theme.yellow} color={theme.base}>
           {" permission "}
         </Text>
-        <Text color={theme.overlay}>  answer below</Text>
+        <Text color={theme.overlay}> answer below</Text>
       </Box>
       <Text color={theme.text} wrap="wrap">
         {request.permission}
@@ -49,9 +49,6 @@ export function PermissionPrompt({ request, columns }: Props) {
         <Text backgroundColor={theme.mantle} color={theme.subtext}>
           {" n  reject".padEnd(Math.max(0, columns), " ")}
         </Text>
-      </Box>
-      <Box marginTop={1}>
-        <Text color={theme.overlay}>y once · a always · n reject · r reject</Text>
       </Box>
     </Box>
   )

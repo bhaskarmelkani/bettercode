@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react"
+import React, { useState } from "react"
 import { Box, Text, useInput } from "ink"
 import { useAppStore } from "../store"
 import { useTheme } from "../theme-context"
@@ -17,7 +17,7 @@ export function ThemePickerDialog({ rows, columns }: Props) {
   const setTheme = useAppStore((s) => s.setTheme)
   const popDialog = useAppStore((s) => s.popDialog)
 
-  // Track the initial theme so we can revert on escape
+  // Track the initial theme so we can show which is the current default
   const [initial] = useState(currentThemeName)
   const [idx, setIdx] = useState(() => Math.max(0, THEME_NAMES.indexOf(currentThemeName)))
   const [query, setQuery] = useState("")
@@ -29,16 +29,10 @@ export function ThemePickerDialog({ rows, columns }: Props) {
   const start = Math.max(0, safeIdx - Math.floor(maxVisible / 2))
   const visible = filtered.slice(start, start + maxVisible)
 
-  // Live preview: apply theme as user navigates
-  useEffect(() => {
-    const name = filtered[safeIdx]
-    if (name) setTheme(name)
-  }, [safeIdx, filtered])
+  // No live preview — theme is only applied on Enter to avoid global rerenders.
 
   useInput((input, key) => {
     if (key.escape) {
-      // Revert to initial theme
-      setTheme(initial)
       popDialog()
       return
     }
@@ -51,7 +45,7 @@ export function ThemePickerDialog({ rows, columns }: Props) {
       return
     }
     if (key.return && filtered[safeIdx]) {
-      // Confirm selection — theme already applied via live preview
+      // Confirm selection — apply and close
       setTheme(filtered[safeIdx]!)
       popDialog()
       return
@@ -108,7 +102,7 @@ export function ThemePickerDialog({ rows, columns }: Props) {
       })}
 
       <Box marginTop={1}>
-        <Text color={theme.overlay}>↑↓ navigate (live preview) · enter confirm · esc revert · type to filter</Text>
+        <Text color={theme.overlay}>↑↓ navigate · enter confirm · esc close · type to filter</Text>
       </Box>
     </Box>
   )

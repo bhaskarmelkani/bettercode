@@ -8,6 +8,8 @@ import { StatusBar } from "../components/StatusBar"
 import { Sidebar } from "../components/Sidebar"
 import { ToastOverlay } from "../components/ToastOverlay"
 import { BottomDock, dockHeight } from "../components/BottomDock"
+import { useTheme } from "../theme-context"
+import { ErrorBoundary } from "../components/ErrorBoundary"
 import type { Dialog } from "../store"
 
 interface Props {
@@ -19,6 +21,7 @@ interface Props {
 }
 
 export function SessionScreen({ sessionID, rows, columns, active, dialog }: Props) {
+  const theme = useTheme()
   const syncStatus = useAppStore((s) => s.syncStatus)
   const sessions = useAppStore((s) => s.sessions)
   const vcs = useAppStore((s) => s.vcs)
@@ -99,8 +102,17 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
 
   if (syncStatus === "loading") {
     return (
-      <Box height={rows} width={columns} justifyContent="center" alignItems="center">
-        <Text>Connecting...</Text>
+      <Box height={rows} width={columns} justifyContent="center" alignItems="center" flexDirection="column">
+        <Text color={theme.cyan}>Connecting...</Text>
+      </Box>
+    )
+  }
+
+  if (syncStatus === "partial") {
+    return (
+      <Box height={rows} width={columns} justifyContent="center" alignItems="center" flexDirection="column">
+        <Text color={theme.red}>Server connection failed.</Text>
+        <Text color={theme.subtext}>Check that the bettercode server is running, then restart.</Text>
       </Box>
     )
   }
@@ -116,27 +128,31 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
 
       <Box flexDirection="row" flexGrow={1}>
         <Box flexDirection="column" width={mainWidth}>
-          <MessageList
-            sessionID={sessionID}
-            height={listHeight}
-            width={Math.max(1, mainWidth - 4)}
-            active={active && !dialog && permissions.length === 0 && questions.length === 0}
-            generating={generating}
-          />
+          <ErrorBoundary label="transcript">
+            <MessageList
+              sessionID={sessionID}
+              height={listHeight}
+              width={Math.max(1, mainWidth - 4)}
+              active={active && !dialog && permissions.length === 0 && questions.length === 0}
+              generating={generating}
+            />
+          </ErrorBoundary>
 
           <ToastOverlay />
 
-          <BottomDock
-            dialog={dialog}
-            rows={dockRows}
-            columns={mainWidth}
-            active={active && !dialog && permissions.length === 0 && questions.length === 0}
-            generating={generating}
-            onSubmit={handleSubmit}
-            onAbort={handleAbort}
-            permissions={permissions}
-            questions={questions}
-          />
+          <ErrorBoundary label="dock">
+            <BottomDock
+              dialog={dialog}
+              rows={dockRows}
+              columns={mainWidth}
+              active={active && !dialog && permissions.length === 0 && questions.length === 0}
+              generating={generating}
+              onSubmit={handleSubmit}
+              onAbort={handleAbort}
+              permissions={permissions}
+              questions={questions}
+            />
+          </ErrorBoundary>
         </Box>
 
         {sidebarOpen && <Sidebar sessionID={sessionID} width={SIDEBAR_WIDTH} height={rows - 2} active={sidebarOpen} />}

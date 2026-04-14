@@ -53,6 +53,7 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
 
   const isLoading = syncStatus === "loading"
   const isPartial = syncStatus === "partial"
+  const wide = columns >= 120
 
   return (
     <Box height={rows} width={columns} flexDirection="column">
@@ -70,14 +71,23 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
 
         {!isLoading && !isPartial && (
           <>
-            {/* logo */}
-            <Box flexDirection="column" alignItems="center">
-              {logo.map((line, i) => (
-                <Text key={i} color={theme.mauve}>
-                  {line}
+            {/* logo — wide terminals only */}
+            {wide && (
+              <Box flexDirection="column" alignItems="center">
+                {logo.map((line, i) => (
+                  <Text key={i} color={theme.mauve}>
+                    {line}
+                  </Text>
+                ))}
+              </Box>
+            )}
+            {!wide && (
+              <Box justifyContent="center">
+                <Text color={theme.mauve} bold>
+                  bettercode
                 </Text>
-              ))}
-            </Box>
+              </Box>
+            )}
 
             {/* project + branch */}
             <Box marginTop={1} justifyContent="center">
