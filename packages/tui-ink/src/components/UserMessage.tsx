@@ -1,6 +1,6 @@
 import React from "react"
 import { Box, Text } from "ink"
-import type { Part, FilePart as FilePartType } from "@opencode-ai/sdk/v2"
+import type { Part, FilePart as FilePartType, TextPart as TextPartType } from "@opencode-ai/sdk/v2"
 import { useTheme } from "../theme-context"
 import { FileParts } from "./parts/FilePart"
 import { MarkdownRenderer } from "./markdown/MarkdownRenderer"
@@ -12,9 +12,7 @@ interface Props {
 
 export function UserMessage({ parts, isQueued }: Props) {
   const theme = useTheme()
-  const text = parts.find((p) => p.type === "text" && !(p as any).synthetic) as
-    | { type: "text"; text: string }
-    | undefined
+  const text = parts.find((p): p is TextPartType => p.type === "text" && !p.synthetic)
   const files = parts.filter((p) => p.type === "file") as FilePartType[]
 
   if (!text) return null

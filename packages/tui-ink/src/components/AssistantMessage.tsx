@@ -1,6 +1,7 @@
 import React from "react"
 import { Box, Text } from "ink"
 import type { Message, Part } from "@opencode-ai/sdk/v2"
+import type { AssistantMsg } from "../types"
 import { useTheme } from "../theme-context"
 import { TextPart } from "./parts/TextPart"
 import { ReasoningPart } from "./parts/ReasoningPart"
@@ -31,14 +32,8 @@ function tok(input: number, output: number) {
 
 export function AssistantMessage({ message, parts, showThinking, isLast }: Props) {
   const theme = useTheme()
-  const msg = message as Message & {
-    modelID?: string
-    finish?: string
-    error?: { name: string; data: { message: string } }
-    mode?: string
-    time?: { created: number; completed?: number }
-    tokens?: { input: number; output: number }
-  }
+  if (message.role !== "assistant") return null
+  const msg = message as AssistantMsg
 
   const done = msg.finish && !["tool-calls", "unknown"].includes(msg.finish)
   let lead = true
@@ -47,30 +42,28 @@ export function AssistantMessage({ message, parts, showThinking, isLast }: Props
     msg.mode ?? "chat",
     msg.modelID,
     doneAt ? dur(msg.time?.created, doneAt) : "",
-    doneAt && msg.tokens ? `${tok(msg.tokens.input, msg.tokens.output)} tokens` : "",
+    doneAt ? `${tok(msg.tokens.input, msg.tokens.output)} tokens` : "",
     msg.error?.name === "MessageAbortedError" ? "interrupted" : "",
   ].filter((v): v is string => !!v)
 
   return (
-    <Box flexDirection="column" marginTop={1} paddingLeft={2} borderLeft={true} borderColor={theme.surface2} flexShrink={0}>
+    <Box
+      flexDirection="column"
+      marginTop={1}
+      paddingLeft={2}
+      borderLeft={true}
+      borderColor={theme.surface2}
+      flexShrink={0}
+    >
       {parts.map((part) => {
         if (part.type === "text") {
-          const p = part as {
-            type: "text"
-            text: string
-            synthetic?: boolean
-            ignored?: boolean
-            id: string
-            sessionID: string
-            messageID: string
-          }
-          if (p.synthetic || p.ignored) return null
-          const out = <TextPart key={part.id} part={p as any} lead={lead ? "◆" : undefined} />
+          if (part.synthetic || part.ignored) return null
+          const out = <TextPart key={part.id} part={part} lead={lead ? "◆" : undefined} />
           lead = false
           return out
         }
-        if (part.type === "reasoning") return <ReasoningPart key={part.id} part={part as any} visible={showThinking} />
-        if (part.type === "tool") return <ToolPart key={part.id} part={part as any} />
+        if (part.type === "reasoning") return <ReasoningPart key={part.id} part={part} visible={showThinking} />
+        if (part.type === "tool") return <ToolPart key={part.id} part={part} />
         if (part.type === "compaction") return <CompactionPart key={part.id} />
         return null
       })}

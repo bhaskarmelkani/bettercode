@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from "react"
 import { Box, Text, useInput } from "ink"
-import type { Message, Part } from "@opencode-ai/sdk/v2"
+import type { Message, Part, TextPart as TextPartType } from "@opencode-ai/sdk/v2"
 import { UserMessage } from "./UserMessage"
 import { AssistantMessage } from "./AssistantMessage"
 import { useAppStore } from "../store"
@@ -49,10 +49,7 @@ function measure(items: Token[], width: number): number {
       return sum + Math.max(1, body.split(/\r?\n/).length) + 2
     }
     if (tok.type === "list") {
-      return (
-        sum +
-        (tok.items ?? []).reduce((rows, item) => rows + measure(item.tokens ?? [], width - 2) + 1, 1)
-      )
+      return sum + (tok.items ?? []).reduce((rows, item) => rows + measure(item.tokens ?? [], width - 2) + 1, 1)
     }
     if (tok.type === "blockquote") return sum + 1 + measure(tok.tokens ?? [], width - 2)
     if (tok.type === "hr") return sum + 1
@@ -65,17 +62,16 @@ function measure(items: Token[], width: number): number {
 export function estimateHeight(msg: Message, parts: Part[], width: number): number {
   const safeWidth = Math.max(1, width - 6)
   if (msg.role === "user") {
-    const text = parts.find((p) => p.type === "text" && !(p as any).synthetic) as { text: string } | undefined
-    const body = text ? lex(text.text) : []
+    const t = parts.find((p): p is TextPartType => p.type === "text" && !p.synthetic)
+    const body = t ? lex(t.text) : []
     return measure(body, safeWidth) + 4 // margin + border + padding + safety
   }
   // assistant: margin + border + parts + footer + safety
   let h = 4
   for (const part of parts) {
     if (part.type === "text") {
-      const p = part as { text: string; synthetic?: boolean; ignored?: boolean }
-      if (p.synthetic || p.ignored) continue
-      h += measure(lex(p.text), safeWidth) + 1
+      if (part.synthetic || part.ignored) continue
+      h += measure(lex(part.text), safeWidth) + 1
     } else if (part.type === "tool") {
       h += 4 // 1 marginTop + title + optional summary + 1 safety
     } else if (part.type === "compaction") {
@@ -128,10 +124,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const collapseAllTools = useAppStore((s) => s.collapseAllTools)
   const activeRef = useRef(active)
 
-  const pending = useMemo(
-    () => messages.findLast((m) => m.role === "assistant" && !(m as any).time?.completed)?.id,
-    [messages],
-  )
+  const pending = useMemo(() => messages.findLast((m) => m.role === "assistant" && !m.time.completed)?.id, [messages])
 
   // rowOffset: how many rows from the absolute bottom of all content to scroll up.
   // 0 = stick to bottom (latest), positive = scrolled up.

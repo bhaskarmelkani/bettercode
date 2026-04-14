@@ -128,7 +128,9 @@ export function Sidebar({ sessionID, width, height, active }: Props) {
             ) : (
               lsp.map((l) => (
                 <Box key={l.name} flexDirection="row" gap={1}>
-                  <Text color={(l as any).running ? theme.green : theme.red}>{(l as any).running ? "●" : "○"}</Text>
+                  <Text color={l.status === "connected" ? theme.green : theme.red}>
+                    {l.status === "connected" ? "●" : "○"}
+                  </Text>
                   <Text color={theme.subtext}>{l.name}</Text>
                 </Box>
               ))

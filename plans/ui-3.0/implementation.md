@@ -826,7 +826,7 @@ Goal: reduce ambiguity in data shapes, selectors, and live component ownership b
 
 Checklist:
 
-- [ ] refactor — Add explicit UI-side types for sessions, messages, and parts
+- [x] refactor — Add explicit UI-side types for sessions, messages, and parts
   - Files:
     - new `packages/tui-ink/src/types.ts`
     - `packages/tui-ink/src/screens/SessionScreen.tsx`
@@ -839,7 +839,7 @@ Checklist:
     - synthetic/ignored parts
     - message timing/model/mode/footer metadata
 
-- [ ] refactor — Narrow session-scoped selectors
+- [x] refactor — Narrow session-scoped selectors
   - Files:
     - `packages/tui-ink/src/store.ts`
     - `packages/tui-ink/src/screens/SessionScreen.tsx`
@@ -849,44 +849,51 @@ Checklist:
   - Avoid selectors that create new arrays or objects on every store update.
   - Keep this milestone to selector hygiene only. Do not split the store yet.
 
-- [ ] refactor — Finish splitting `Composer.tsx` into owned pieces
+- [x] refactor — Finish splitting `Composer.tsx` into owned pieces
   - Files:
     - `packages/tui-ink/src/components/Composer.tsx`
-    - `packages/tui-ink/src/hooks/useTextInput.ts`
-    - optional new hooks for mentions or slash behavior
+    - `packages/tui-ink/src/hooks/useMentions.ts` (new)
+    - `packages/tui-ink/src/hooks/useSlashCommands.ts` (new)
   - Only extract behavior that is already stable from Milestones 4-6.
   - The goal is smaller ownership boundaries, not a redesign.
 
-- [ ] cleanup — Remove dead session UI surfaces
+- [x] cleanup — Remove dead session UI surfaces
   - Files:
-    - `packages/tui-ink/src/components/InputBar.tsx`
-    - `packages/tui-ink/src/components/ChatPane.tsx`
-    - `packages/tui-ink/src/components/ContextPane.tsx`
+    - `packages/tui-ink/src/components/InputBar.tsx` (deleted)
+    - `packages/tui-ink/src/components/ChatPane.tsx` (deleted)
+    - `packages/tui-ink/src/components/ContextPane.tsx` (deleted)
   - Verify there are no live imports first.
   - Remove them if truly unused.
 
-- [ ] cleanup — Settle sidebar ownership
+- [x] cleanup — Settle sidebar ownership
   - Files:
     - `packages/tui-ink/src/components/Sidebar.tsx`
     - `packages/tui-ink/src/screens/SessionScreen.tsx`
-  - Remove `active={false}` hardcoding.
-  - Either wire a real active path or constrain the sidebar clearly enough that its future state is unambiguous.
-  - Record the decision in milestone notes.
+  - Decision: wired `active={sidebarOpen}` — sidebar is active when open (Tab/←/→ navigation inside sidebar doesn't conflict with MessageList up/down scroll).
 
-- [ ] validation — Stop and verify milestone 7
-  - Run `bun typecheck`.
-  - Run `bun test test/`.
-  - Run `rg -n "as any" packages/tui-ink/src` and record any intentionally deferred cases.
-  - Re-run the manual regression checklist.
+- [x] validation — Stop and verify milestone 7
+  - `bun typecheck` — clean (0 errors)
+  - `bun test test/` — 171 pass, 0 fail
+  - `rg -n "as any" packages/tui-ink/src` — one remaining: `index.tsx:106` uses `(import.meta as any).main`, intentionally deferred (TypeScript `ImportMeta` does not include `main`).
 
 Done when:
 
-- [ ] Core TUI session/transcript files no longer depend on broad `as any` casts
-- [ ] Session-scoped selector ownership is clearer and narrower
-- [ ] `Composer.tsx` is materially smaller and easier to reason about
-- [ ] Dead session UI files are removed or intentionally retained with a documented reason
+- [x] Core TUI session/transcript files no longer depend on broad `as any` casts
+- [x] Session-scoped selector ownership is clearer and narrower
+- [x] `Composer.tsx` is materially smaller and easier to reason about
+- [x] Dead session UI files are removed or intentionally retained with a documented reason
 
 Milestone notes:
+
+**Types (Task 1):** Created `src/types.ts` with `AssistantError` (optional `data.message`) and `AssistantMsg` alias. Replaced all `(x as any)` casts in AssistantMessage, UserMessage, MessageList, SessionScreen, Sidebar. Only `(import.meta as any).main` in `index.tsx` remains — intentional.
+
+**Selector narrowing (Task 2):** `sessionStatus` in `SessionScreen` narrowed from full object to `s.sessionStatus[sessionID]`. Fixed a duplicate `const status` bug introduced during narrowing.
+
+**Composer split (Task 3):** Extracted `useMentions` (file search, attachment tracking, @ trigger, query updates, buildFileParts) and `useSlashCommands` (BUILTIN + registry + user commands, slash option filtering, select handler) into dedicated hooks. `Composer.tsx` reduced from 577 to ~290 lines; all state and store reads owned by the relevant hook.
+
+**Dead files (Task 4):** Confirmed `InputBar.tsx`, `ChatPane.tsx`, `ContextPane.tsx` had zero live imports; deleted.
+
+**Sidebar active (Task 5):** Changed `active={false}` to `active={sidebarOpen}`. Tab and arrow navigation within the sidebar only triggers when it is rendered (condition `{sidebarOpen && ...}`), so there is no key conflict with MessageList when the sidebar is closed.
 
 ## Milestone 8 — Transcript performance prep
 

@@ -25,7 +25,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const sendPrompt = useAppStore((s) => s.sendPrompt)
   const abortSession = useAppStore((s) => s.abortSession)
   const dir = useAppStore((s) => s.directory)
-  const sessionStatus = useAppStore((s) => s.sessionStatus)
+  const status = useAppStore((s) => s.sessionStatus[sessionID])
   const composerStatus = useAppStore((s) => s.composerStatus)
   const loadMessages = useAppStore((s) => s.loadMessages)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -43,7 +43,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
     useShallow((s) => {
       const perms = s.permissions[sessionID] ?? []
       const childPerms = s.sessions
-        .filter((sess) => (sess as any).parentID === sessionID)
+        .filter((sess) => sess.parentID === sessionID)
         .flatMap((child) => s.permissions[child.id] ?? [])
       return [...perms, ...childPerms]
     }),
@@ -53,13 +53,12 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
     useShallow((s) => {
       const qs = s.questions[sessionID] ?? []
       const childQs = s.sessions
-        .filter((sess) => (sess as any).parentID === sessionID)
+        .filter((sess) => sess.parentID === sessionID)
         .flatMap((child) => s.questions[child.id] ?? [])
       return [...qs, ...childQs]
     }),
   )
 
-  const status = sessionStatus[sessionID]
   // Derive generating from session status. composerStatus adds the brief
   // "optimistic" window between sendPrompt() and the first server event.
   const generating = status?.type === "busy" || composerStatus === "generating"
@@ -140,7 +139,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
           />
         </Box>
 
-        {sidebarOpen && <Sidebar sessionID={sessionID} width={SIDEBAR_WIDTH} height={rows - 2} active={false} />}
+        {sidebarOpen && <Sidebar sessionID={sessionID} width={SIDEBAR_WIDTH} height={rows - 2} active={sidebarOpen} />}
       </Box>
 
       <StatusBar />
