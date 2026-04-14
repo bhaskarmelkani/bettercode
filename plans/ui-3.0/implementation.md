@@ -313,7 +313,7 @@ Goal: make tool activity quieter and more readable before changing the broader t
 
 Checklist:
 
-- [ ] refactor — Extract tool summary helpers before changing behavior
+- [x] refactor — Extract tool summary helpers before changing behavior
   - Files:
     - `packages/tui-ink/src/components/parts/ToolPart.tsx`
     - optional new helper file near `ToolPart.tsx`
@@ -324,7 +324,7 @@ Checklist:
     - default open/closed decision
   - Keep the helper narrowly scoped to tool rows.
 
-- [ ] UX change — Reduce tool kind icons from 6 to 4
+- [x] UX change — Reduce tool kind icons from 6 to 4
   - File: `packages/tui-ink/src/components/parts/ToolPart.tsx`
   - Use only:
     - `◇` for read/search/glob/grep
@@ -332,13 +332,13 @@ Checklist:
     - `$` for bash/execute
     - `⬡` for mcp and remaining external tool kinds
 
-- [ ] UX change — Prefer `state.title` as the primary summary
+- [x] UX change — Prefer `state.title` as the primary summary
   - File: `packages/tui-ink/src/components/parts/ToolPart.tsx`
   - Use `state.title` whenever it exists.
   - Fall back to a concise input-derived summary only when title is missing.
   - Do not show noisy raw keys like `file_read` unless no better summary exists.
 
-- [ ] UX change — Invert tool disclosure defaults
+- [x] UX change — Invert tool disclosure defaults
   - Files:
     - `packages/tui-ink/src/components/parts/ToolPart.tsx`
     - `packages/tui-ink/src/store.ts`
@@ -347,27 +347,27 @@ Checklist:
   - Make error tools expand automatically.
   - Preserve manual collapse/expand behavior.
 
-- [ ] UX change — Remove raw JSON input from default running state
+- [x] UX change — Remove raw JSON input from default running state
   - File: `packages/tui-ink/src/components/parts/ToolPart.tsx`
   - Running tools should not render raw input JSON unless the row is explicitly expanded or the tool errors.
   - Replace it with a concise title/status line.
 
-- [ ] UX change — Replace round borders with transcript-consistent left rails
+- [x] UX change — Replace round borders with transcript-consistent left rails
   - File: `packages/tui-ink/src/components/parts/ToolPart.tsx`
   - Replace `borderStyle="round"` usage with the same left-rail grammar used elsewhere.
   - Keep error presentation clearly stronger than success presentation.
 
-- [ ] test — Add or update tool collapse behavior coverage
+- [x] test — Add or update tool collapse behavior coverage
   - Files:
-    - `packages/tui-ink/test/store.test.ts`
-    - `packages/tui-ink/test/integration.test.ts`
+    - `packages/tui-ink/test/tool-part.test.ts` (new — 13 tests)
+    - `packages/tui-ink/test/store.test.ts` (existing collapse tests unchanged, still pass)
   - Cover:
     - default collapsed success tools
     - expanded errors
     - expand/collapse toggling
     - running-to-completed transition
 
-- [ ] validation — Stop and verify milestone 2
+- [x] validation — Stop and verify milestone 2
   - Run `bun typecheck`.
   - Run `bun test test/`.
   - Manually verify:
@@ -378,13 +378,32 @@ Checklist:
 
 Done when:
 
-- [ ] Successful tool rows are collapsed by default
-- [ ] Running tools are concise one-line rows
-- [ ] Errors expand automatically
-- [ ] Tool rows no longer default to raw JSON noise
-- [ ] Tool behavior is covered by tests
+- [x] Successful tool rows are collapsed by default
+- [x] Running tools are concise one-line rows
+- [x] Errors expand automatically
+- [x] Tool rows no longer default to raw JSON noise
+- [x] Tool behavior is covered by tests
 
 Milestone notes:
+
+### Implementation notes (2026-04-14)
+
+**`kind()` — 4 icons**: `file_read` is covered by `read`, `file_write` by `write`. The `⊕` glob/grep icon is merged into `◇` (read/search). The default fallthrough from `◎` → `⬡` (mcp/other). No behaviour change for the most common tools.
+
+**`isOpen()` — extracted as exported pure helper**: Logic: `collapsed === false` → open; `collapsed === true` → closed; `undefined` → only open if `status === "error"`. This inverts the previous default (was: open when running/pending, closed when completed; now: closed for all, except errors).
+
+**`state.title` preference**: Changed condition from `state.status === "completed" && state.title` to `"title" in state && state.title`. This uses the TypeScript `in` type guard to narrowly access `title` across any state variant that carries it (running can include a title in practice).
+
+**Border change**: Replaced `borderStyle="round"` + `paddingX={1}` with `borderLeft={true}` + `paddingLeft={1}` for both the completed-output and pending/running-input body boxes. Error body already used `borderLeft` — unchanged. This aligns tool body boxes with the left-rail grammar used elsewhere in the transcript.
+
+**Running tool body**: The body element still exists for the running/pending case (shows input JSON when explicitly expanded), but the default `isOpen("running", undefined) = false` means it is never shown unless the user explicitly opens it. No JSON is rendered by default during execution.
+
+**Test file**: New `packages/tui-ink/test/tool-part.test.ts` — 13 tests covering all `isOpen` status×collapsed combinations and store toggle semantics.
+
+**Validation results**:
+
+- `bun typecheck`: PASS
+- `bun test test/`: 111 pass, 0 fail (was 98; +13 new tests)
 
 ## Milestone 3 — Transcript hierarchy and message chrome
 

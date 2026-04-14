@@ -54,14 +54,23 @@ function dur(start: number, end?: number) {
   return `${sec}s`
 }
 
+// 4 kind icons: ◇ read/search/glob/grep, ✎ write/edit, $ bash/execute, ⬡ mcp/other
 function kind(tool: string, theme: Theme) {
   const t = tool.toLowerCase()
-  if (t.includes("read") || t.includes("file_read")) return { icon: "◇", color: theme.cyan }
-  if (t.includes("write") || t.includes("edit") || t.includes("file_write")) return { icon: "✎", color: theme.yellow }
+  if (t.includes("read") || t.includes("glob") || t.includes("grep") || t.includes("search"))
+    return { icon: "◇", color: theme.cyan }
+  if (t.includes("write") || t.includes("edit")) return { icon: "✎", color: theme.yellow }
   if (t.includes("bash") || t.includes("shell") || t.includes("execute")) return { icon: "$", color: theme.green }
-  if (t.includes("glob") || t.includes("grep") || t.includes("search")) return { icon: "⊕", color: theme.lavender }
-  if (t.startsWith("mcp__")) return { icon: "⬡", color: theme.pink }
-  return { icon: "◎", color: theme.blue }
+  return { icon: "⬡", color: theme.pink }
+}
+
+// Pure helper: expanded when user explicitly opened (collapsed=false), or auto-expanded
+// for errors unless user explicitly closed them (collapsed=true).
+// Default (undefined): all non-error tools start collapsed.
+export function isOpen(status: string, collapsed: boolean | undefined): boolean {
+  if (collapsed === false) return true
+  if (collapsed === true) return false
+  return status === "error"
 }
 
 export function ToolPart({ part }: Props) {
@@ -70,9 +79,9 @@ export function ToolPart({ part }: Props) {
   const state = part.state
   const stat = STAT[state.status]
   const kid = kind(part.tool, theme)
-  const open = state.status !== "completed" || collapsed === false
+  const open = isOpen(state.status, collapsed)
   const sum = span(state.input)
-  const title = state.status === "completed" && state.title ? state.title : sum ? `${part.tool} ${sum}` : part.tool
+  const title = "title" in state && state.title ? state.title : sum ? `${part.tool} ${sum}` : part.tool
   const time = "time" in state ? dur(state.time.start, "end" in state.time ? state.time.end : undefined) : ""
   const body =
     state.status === "error" ? (
@@ -82,13 +91,13 @@ export function ToolPart({ part }: Props) {
         </Text>
       </Box>
     ) : state.status === "completed" ? (
-      <Box marginTop={1} paddingX={1} borderStyle="round" borderColor={theme.surface0} flexDirection="column">
+      <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.surface0} flexDirection="column">
         <Text wrap="wrap" color={theme.subtext}>
           {line(cut(state.output, 2000), 30)}
         </Text>
       </Box>
     ) : (
-      <Box marginTop={1} paddingX={1} borderStyle="round" borderColor={theme.surface0} flexDirection="column">
+      <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.surface0} flexDirection="column">
         <Text wrap="wrap" color={theme.overlay}>
           {json(state.input)}
         </Text>
