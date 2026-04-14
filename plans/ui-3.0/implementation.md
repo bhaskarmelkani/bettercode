@@ -684,7 +684,7 @@ Goal: support multi-line prompts and make dock state transitions predictable whe
 
 Checklist:
 
-- [ ] refactor — Define multi-line input rules before implementation
+- [x] refactor — Define multi-line input rules before implementation
   - Files:
     - `packages/tui-ink/src/hooks/useTextInput.ts`
     - `packages/tui-ink/src/components/Composer.tsx`
@@ -696,12 +696,12 @@ Checklist:
     - history behavior at top/bottom lines
     - visible line cap
 
-- [ ] UX change — Add explicit newline insertion
+- [x] UX change — Add explicit newline insertion
   - File: `packages/tui-ink/src/hooks/useTextInput.ts`
   - Support `Alt+Enter` or `Ctrl+J` for inserting `\n`.
   - Keep plain `Enter` as submit.
 
-- [ ] UX change — Render multi-line input and caret correctly
+- [x] UX change — Render multi-line input and caret correctly
   - Files:
     - `packages/tui-ink/src/components/Composer.tsx`
     - `packages/tui-ink/src/components/BottomDock.tsx`
@@ -709,17 +709,17 @@ Checklist:
   - Cap the visible input height to avoid the dock taking over the screen.
   - Keep the input readable on both `80x24` and `120x40`.
 
-- [ ] UX change — Make history and arrow behavior line-aware
+- [x] UX change — Make history and arrow behavior line-aware
   - File: `packages/tui-ink/src/hooks/useTextInput.ts`
   - Only trigger prompt history navigation when the cursor is at the top or bottom logical line.
   - Do not trigger history when the user is navigating inside multi-line content.
 
-- [ ] UX change — Compact stash, attachment, and helper metadata
+- [x] UX change — Compact stash, attachment, and helper metadata
   - File: `packages/tui-ink/src/components/Composer.tsx`
   - Keep stash and attachment indicators visible but secondary to the input.
   - Do not let these indicators push the cursor out of view unnecessarily.
 
-- [ ] UX change — Stabilize bottom-dock behavior when permissions or questions appear
+- [x] UX change — Stabilize bottom-dock behavior when permissions or questions appear
   - Files:
     - `packages/tui-ink/src/components/BottomDock.tsx`
     - `packages/tui-ink/src/components/PermissionPrompt.tsx`
@@ -731,7 +731,7 @@ Checklist:
   - Keep dock growth/clamping predictable.
   - Avoid confusing focus handoffs when a prompt arrives mid-stream.
 
-- [ ] test — Add focused multi-line and dock-state coverage where practical
+- [x] test — Add focused multi-line and dock-state coverage where practical
   - Files:
     - `packages/tui-ink/test/text-input.test.ts`
     - add a composer-focused test file if needed
@@ -740,7 +740,7 @@ Checklist:
     - multi-line caret movement helpers if testable
     - history guard behavior around multi-line input
 
-- [ ] validation — Stop and verify milestone 6
+- [x] validation — Stop and verify milestone 6
   - Run `bun typecheck`.
   - Run `bun test test/`.
   - Manually verify:
@@ -753,12 +753,72 @@ Checklist:
 
 Done when:
 
-- [ ] Multi-line prompts work without breaking plain Enter submit
-- [ ] Composer metadata stays secondary to the input
-- [ ] Permission/question prompts feel like the active surface when shown
-- [ ] Dock behavior is predictable during prompt-state changes
+- [x] Multi-line prompts work without breaking plain Enter submit
+- [x] Composer metadata stays secondary to the input
+- [x] Permission/question prompts feel like the active surface when shown
+- [x] Dock behavior is predictable during prompt-state changes
 
 Milestone notes:
+
+### Implementation notes (2026-04-14)
+
+**Multi-line input rules (Task 1 — documented before coding):**
+
+- `Alt+Enter` (`key.meta && key.return`) inserts `\n` at cursor.
+- Plain `Enter` submits (unchanged).
+- Up/Down arrows check `cursorLineIdx` before triggering history nav: history only fires when cursor is on the first (`Up`) or last (`Down`) logical line.
+- Visible line cap: `MAX_VISIBLE = 5`. A `viewStart` sliding window keeps the cursor line always visible.
+- Dock height grows by `min(4, inputLines - 1)` extra rows for multi-line content (capped at `base + 4 = 8`).
+
+**New pure helpers in `useTextInput.ts` (Task 2):**
+
+- `lineCount(value)` — total line count (min 1), used to sync `composerLines` to store.
+- `cursorLineIdx(value, cursor)` — 0-indexed line the cursor is on.
+- `cursorLineUp(value, cursor)` — moves cursor up one line, same column, clamped.
+- `cursorLineDown(value, cursor)` — moves cursor down one line, same column, clamped.
+- `newline()` hook action — calls `textInsertAt(value, cursor, "\n")`.
+- `lineUp()` / `lineDown()` hook actions — use the two pure helpers.
+
+**Multi-line rendering (Task 3):**
+
+- `allLines = value.split("\n")`, `curLine = cursorLineIdx(value, cursor)`.
+- `viewStart = max(0, curLine - MAX_VISIBLE + 1)` keeps cursor line in view.
+- `visLines = allLines.slice(viewStart, viewStart + MAX_VISIBLE)`.
+- `allStarts` precomputed for fast per-line start offsets.
+- Per-line caret rendering: the cursor line renders as left/caret/right slices; other lines render as plain text.
+- `dockHeight()` in `BottomDock.tsx` accepts optional `inputLines` and adds `max(0, min(4, inputLines-1))` extra rows.
+- `SessionScreen.tsx` reads `composerLines` from store and passes as `inputLines` to `dockHeight()`.
+- `store.ts` got `composerLines: number` (initial: 1) and `setComposerLines(n)`.
+
+**History guard (Task 4):**
+
+- `key.upArrow`: if `value.includes("\n") && cursorLineIdx > 0` → `lineUp()` (no history). Otherwise history nav.
+- `key.downArrow`: if `value.includes("\n") && cursorLineIdx < lineCount - 1` → `lineDown()`. Otherwise history nav.
+
+**Stash/attachment metadata (Task 5):** No changes needed — already compact (single row each, at `theme.overlay`/dim).
+
+**Inactive-state dimming (Task 6):**
+
+- Caret blink `useEffect` depends on `[generating, active]`: stops blinking and sets `caretOn=false` when `!active || generating`.
+- Separator line color: `active ? theme.surface1 : theme.mantle` — darker when composer is inactive.
+- `›` glyph color: `active ? theme.cyan : theme.overlay`.
+- All text in input lines: `active ? theme.text : theme.overlay`.
+- Result: when permissions/questions are active, the composer visually recedes to overlay-weight text; the PermissionPrompt/QuestionPrompt with their colored badges (yellow/cyan) read as the active surface.
+- `Ctrl+Home` to first line was not needed — existing `Ctrl+A`/`Ctrl+E` cover home/end. `Alt+Enter` is the only safe newline shortcut (`Ctrl+J` indistinguishable from Enter in Ink v5).
+
+**Tests (Task 7):**
+
+- Added 22 new tests to `text-input.test.ts` across 5 new describe blocks:
+  - `lineCount` (5 tests)
+  - `cursorLineIdx` (5 tests)
+  - `cursorLineUp` (4 tests)
+  - `cursorLineDown` (5 tests)
+  - `newline insertion via textInsertAt` (3 tests)
+
+**Validation results:**
+
+- `bun typecheck`: PASS
+- `bun test test/`: 171 pass, 0 fail (was 149; +22 new tests)
 
 ## Milestone 7 — Structural cleanup and ownership
 

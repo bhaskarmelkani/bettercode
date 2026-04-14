@@ -65,11 +65,12 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const generating = status?.type === "busy" || composerStatus === "generating"
   // Error is only meaningful via composerStatus — session status doesn't carry error visibility.
   const isError = composerStatus === "error"
+  const composerLines = useAppStore((s) => s.composerLines)
 
   const SIDEBAR_WIDTH = 32
   const SIDEBAR_MIN = 120
 
-  const dockRows = dockHeight({ rows, dialog, permissions, questions })
+  const dockRows = dockHeight({ rows, dialog, permissions, questions, inputLines: composerLines })
   const listHeight = Math.max(1, rows - 2 - dockRows)
   const mainWidth = Math.max(1, sidebarOpen ? columns - SIDEBAR_WIDTH : columns)
 

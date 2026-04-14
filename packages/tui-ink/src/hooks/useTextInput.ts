@@ -39,6 +39,41 @@ export function textDelWord(value: string, cursor: number): [string, number] {
   return [value.slice(0, i) + value.slice(cursor), i]
 }
 
+// M6 multi-line pure helpers — exported for tests.
+
+// Total line count (minimum 1).
+export function lineCount(value: string): number {
+  return value.split("\n").length
+}
+
+// 0-indexed line the cursor is on.
+export function cursorLineIdx(value: string, cursor: number): number {
+  return value.slice(0, cursor).split("\n").length - 1
+}
+
+// Move cursor up one line (same column, clamped to line length). Returns new cursor position.
+export function cursorLineUp(value: string, cursor: number): number {
+  const prefix = value.slice(0, cursor)
+  const chunks = prefix.split("\n")
+  if (chunks.length === 1) return cursor // already on first line
+  const col = chunks[chunks.length - 1]!.length
+  const prev = chunks[chunks.length - 2]!
+  const prevStart = prefix.length - col - 1 - prev.length
+  return prevStart + Math.min(col, prev.length)
+}
+
+// Move cursor down one line (same column, clamped to line length). Returns new cursor position.
+export function cursorLineDown(value: string, cursor: number): number {
+  const prefix = value.slice(0, cursor)
+  const col = prefix.split("\n").at(-1)!.length
+  const suffix = value.slice(cursor)
+  const nl = suffix.indexOf("\n")
+  if (nl === -1) return cursor // already on last line
+  const nextStart = cursor + nl + 1
+  const nextLine = value.slice(nextStart).split("\n")[0]!
+  return nextStart + Math.min(col, nextLine.length)
+}
+
 /**
  * Cursor-aware text-editing state for the Composer.
  * Owns value + cursor + all primitive mutations.
@@ -90,6 +125,19 @@ export function useTextInput(initial = "") {
 
   const clear = () => setState({ value: "", cursor: 0 })
 
+  // Insert a newline at the cursor (Alt+Enter).
+  const newline = () =>
+    setState((s) => {
+      const [v, c] = textInsertAt(s.value, s.cursor, "\n")
+      return { value: v, cursor: c }
+    })
+
+  // Move cursor up one logical line (multi-line navigation).
+  const lineUp = () => setState((s) => ({ ...s, cursor: cursorLineUp(s.value, s.cursor) }))
+
+  // Move cursor down one logical line (multi-line navigation).
+  const lineDown = () => setState((s) => ({ ...s, cursor: cursorLineDown(s.value, s.cursor) }))
+
   return {
     value: state.value,
     cursor: state.cursor,
@@ -103,5 +151,8 @@ export function useTextInput(initial = "") {
     home,
     end,
     clear,
+    newline,
+    lineUp,
+    lineDown,
   }
 }

@@ -2,9 +2,21 @@
  * Tests for useTextInput pure helpers.
  * M4 baseline: append-only textInsert / textDel (kept for compat).
  * M5 additions: cursor-aware textInsertAt, textDelAt, textDelForward, textDelWord.
+ * M6 additions: lineCount, cursorLineIdx, cursorLineUp, cursorLineDown, newline via textInsertAt.
  */
 import { describe, test, expect } from "bun:test"
-import { textInsert, textDel, textInsertAt, textDelAt, textDelForward, textDelWord } from "../src/hooks/useTextInput"
+import {
+  textInsert,
+  textDel,
+  textInsertAt,
+  textDelAt,
+  textDelForward,
+  textDelWord,
+  lineCount,
+  cursorLineIdx,
+  cursorLineUp,
+  cursorLineDown,
+} from "../src/hooks/useTextInput"
 
 // ---------------------------------------------------------------------------
 // M4 baseline — kept for backward compat
@@ -211,5 +223,121 @@ describe("composerAppend contract", () => {
     const [v, c] = textInsertAt(value, value.length, appended)
     expect(v).toBe("fix the bug")
     expect(c).toBe(11)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// M6 multi-line pure helpers
+// ---------------------------------------------------------------------------
+
+describe("lineCount", () => {
+  test("empty string returns 1", () => {
+    expect(lineCount("")).toBe(1)
+  })
+
+  test("single line with no newline returns 1", () => {
+    expect(lineCount("hello")).toBe(1)
+  })
+
+  test("two lines", () => {
+    expect(lineCount("hello\nworld")).toBe(2)
+  })
+
+  test("three lines", () => {
+    expect(lineCount("a\nb\nc")).toBe(3)
+  })
+
+  test("trailing newline counts as an extra line", () => {
+    expect(lineCount("hello\n")).toBe(2)
+  })
+})
+
+describe("cursorLineIdx", () => {
+  test("cursor at start of single line returns 0", () => {
+    expect(cursorLineIdx("hello", 0)).toBe(0)
+  })
+
+  test("cursor at end of single line returns 0", () => {
+    expect(cursorLineIdx("hello", 5)).toBe(0)
+  })
+
+  test("cursor at start of second line returns 1", () => {
+    // "hello\nworld" — second line starts at index 6
+    expect(cursorLineIdx("hello\nworld", 6)).toBe(1)
+  })
+
+  test("cursor at end of second line returns 1", () => {
+    expect(cursorLineIdx("hello\nworld", 11)).toBe(1)
+  })
+
+  test("cursor on third line returns 2", () => {
+    // "a\nb\nc" — third line starts at index 4
+    expect(cursorLineIdx("a\nb\nc", 4)).toBe(2)
+  })
+})
+
+describe("cursorLineUp", () => {
+  test("single line — cursor stays unchanged", () => {
+    expect(cursorLineUp("hello", 3)).toBe(3)
+  })
+
+  test("second line col 2 → same col on first line", () => {
+    // "hello\nworld", cursor=8 → on "world" at col 2 ("wo")
+    expect(cursorLineUp("hello\nworld", 8)).toBe(2)
+  })
+
+  test("second line col exceeds first line length → clamp to first line end", () => {
+    // "hi\nworld", cursor=8 → on "world" at col 5, first line "hi" length 2 → clamp to 2
+    expect(cursorLineUp("hi\nworld", 8)).toBe(2)
+  })
+
+  test("second line col 0 → first line col 0", () => {
+    expect(cursorLineUp("hello\nworld", 6)).toBe(0)
+  })
+})
+
+describe("cursorLineDown", () => {
+  test("last line — cursor stays unchanged", () => {
+    expect(cursorLineDown("hello\nworld", 8)).toBe(8)
+  })
+
+  test("first line col 2 → same col on second line", () => {
+    // "hello\nworld", cursor=2 → col 2, next line "world" → nextStart=6+min(2,5)=8
+    expect(cursorLineDown("hello\nworld", 2)).toBe(8)
+  })
+
+  test("first line col exceeds second line length → clamp to second line end", () => {
+    // "hello\nhi", cursor=4 → col 4, next line "hi" length 2 → nextStart=6+min(4,2)=8
+    expect(cursorLineDown("hello\nhi", 4)).toBe(8)
+  })
+
+  test("first line col 0 → second line col 0", () => {
+    expect(cursorLineDown("hello\nworld", 0)).toBe(6)
+  })
+
+  test("single line — cursor stays unchanged", () => {
+    expect(cursorLineDown("hello", 2)).toBe(2)
+  })
+})
+
+describe("newline insertion via textInsertAt", () => {
+  test("insert newline at end splits to two lines", () => {
+    const [v, c] = textInsertAt("hello", 5, "\n")
+    expect(v).toBe("hello\n")
+    expect(c).toBe(6)
+    expect(lineCount(v)).toBe(2)
+  })
+
+  test("insert newline in middle splits line", () => {
+    const [v, c] = textInsertAt("hello world", 5, "\n")
+    expect(v).toBe("hello\n world")
+    expect(c).toBe(6)
+    expect(lineCount(v)).toBe(2)
+  })
+
+  test("insert two newlines creates three lines", () => {
+    const [v1] = textInsertAt("abc", 3, "\n")
+    const [v2] = textInsertAt(v1, v1.length, "\n")
+    expect(lineCount(v2)).toBe(3)
   })
 })

@@ -118,6 +118,10 @@ export interface AppState {
   // Composer append from server events
   composerAppend: string
 
+  // Transient: current number of visible input lines (for dock height)
+  composerLines: number
+  setComposerLines: (n: number) => void
+
   // Prompt history (persisted across sessions)
   promptHistory: string[]
   promptStash: string | null
@@ -250,6 +254,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentThemeName: DEFAULT_THEME,
   toasts: [],
   composerAppend: "",
+  composerLines: 1,
   currentModel: undefined,
   currentAgent: undefined,
   recentModels: [],
@@ -272,6 +277,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   removeToast: (id) => set((prev) => ({ toasts: prev.toasts.filter((t) => t.id !== id) })),
   setComposerAppend: (text) => set({ composerAppend: text }),
+  setComposerLines: (n) => set({ composerLines: n }),
   pushPromptHistory: (text) =>
     set((prev) => {
       const deduped = [text, ...prev.promptHistory.filter((h) => h !== text)].slice(0, 200)

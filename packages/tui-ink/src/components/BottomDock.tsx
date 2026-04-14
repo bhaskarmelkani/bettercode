@@ -26,13 +26,16 @@ export function dockHeight(input: {
   dialog?: Dialog
   permissions?: PermissionRequest[]
   questions?: QuestionRequest[]
+  inputLines?: number
 }) {
   if (input.dialog && PANELS.has(input.dialog.type)) {
     return Math.max(1, Math.min(input.rows - 3, paneRows))
   }
   if (input.permissions?.length) return Math.max(1, Math.min(input.rows - 3, base + perm))
   if (input.questions?.length) return Math.max(1, Math.min(input.rows - 3, base + quest))
-  return Math.max(1, Math.min(input.rows - 3, base))
+  // base + extra rows for each additional input line (capped at MAX_VISIBLE - 1 = 4 extra)
+  const extra = Math.max(0, Math.min(4, (input.inputLines ?? 1) - 1))
+  return Math.max(1, Math.min(input.rows - 3, base + extra))
 }
 
 interface Props {
@@ -89,13 +92,7 @@ export function BottomDock({
     <Box flexDirection="column" height={height} width={columns}>
       {permissions?.length ? <PermissionPrompt request={permissions[0]!} columns={columns} /> : null}
       {!permissions?.length && questions?.length ? <QuestionPrompt request={questions[0]!} columns={columns} /> : null}
-      <Composer
-        onSubmit={onSubmit}
-        onAbort={onAbort}
-        active={active}
-        generating={generating}
-        width={columns}
-      />
+      <Composer onSubmit={onSubmit} onAbort={onAbort} active={active} generating={generating} width={columns} />
     </Box>
   )
 }

@@ -5,8 +5,19 @@ import { SlashMenu, type SlashCommand } from "./SlashMenu"
 import { useAppStore } from "../store"
 import { useCommands } from "../commands/useCommands"
 import { registry } from "../commands/registry"
-import { useTextInput, textInsertAt, textDelAt, textDelForward, textDelWord } from "../hooks/useTextInput"
+import {
+  useTextInput,
+  textInsertAt,
+  textDelAt,
+  textDelForward,
+  textDelWord,
+  cursorLineIdx,
+  lineCount,
+} from "../hooks/useTextInput"
 import type { FilePartInput } from "@opencode-ai/sdk/v2"
+
+// Maximum visible input lines before scrolling within the composer.
+const MAX_VISIBLE = 5
 
 // Built-in slash commands always available in session context
 const BUILTIN: SlashCommand[] = [
@@ -26,8 +37,23 @@ interface Props {
 
 export function Composer({ onSubmit, onAbort, active, generating, width }: Props) {
   const theme = useTheme()
-  const { value, cursor, setValue, insert, del, deleteForward, deleteWord, moveLeft, moveRight, home, end, clear } =
-    useTextInput()
+  const {
+    value,
+    cursor,
+    setValue,
+    insert,
+    del,
+    deleteForward,
+    deleteWord,
+    moveLeft,
+    moveRight,
+    home,
+    end,
+    clear,
+    newline,
+    lineUp,
+    lineDown,
+  } = useTextInput()
   const [draft, setDraft] = useState("")
   const [histIdx, setHistIdx] = useState<number | null>(null)
   const [slashIdx, setSlashIdx] = useState(0)
@@ -38,6 +64,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
   const stash = useAppStore((s) => s.promptStash)
   const pushPromptHistory = useAppStore((s) => s.pushPromptHistory)
   const setPromptStash = useAppStore((s) => s.setPromptStash)
+  const setComposerLines = useAppStore((s) => s.setComposerLines)
 
   // @ mention state
   const [mentionActive, setMentionActive] = useState(false)
@@ -56,10 +83,10 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
   const agent = useAppStore((s) => s.mode)
   const regCmds = useCommands()
 
-  // Blink caret when idle
+  // Blink caret when idle and active. Freeze (off) when inactive or generating.
   useEffect(() => {
-    if (generating) {
-      setCaretOn(true)
+    if (!active || generating) {
+      setCaretOn(false)
       return
     }
     const t = setInterval(() => setCaretOn((v) => !v), 530)
@@ -67,7 +94,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
       clearInterval(t)
       setCaretOn(true)
     }
-  }, [generating])
+  }, [generating, active])
 
   // Handle server-appended text
   useEffect(() => {
@@ -75,6 +102,11 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
     setValue((v) => v + composerAppend)
     useAppStore.getState().setComposerAppend("")
   }, [composerAppend])
+
+  // Sync visible line count to store so SessionScreen can adjust dockHeight.
+  useEffect(() => {
+    setComposerLines(Math.min(MAX_VISIBLE, lineCount(value)))
+  }, [value])
 
   // File search for @ mentions
   useEffect(() => {
@@ -236,6 +268,12 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
         return
       }
 
+      // Alt+Enter → insert newline (multi-line input)
+      if (key.meta && key.return) {
+        newline()
+        return
+      }
+
       // Handle @ mention navigation
       if (mentionVisible) {
         if (key.upArrow) {
@@ -264,6 +302,12 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
           setSlashIdx((i) => Math.max(0, i - 1))
           return
         }
+        // Multi-line: move cursor up within input if not on first line.
+        if (value.includes("\n") && cursorLineIdx(value, cursor) > 0) {
+          lineUp()
+          return
+        }
+        // Single-line or on first line: history navigation.
         if (hist.length === 0) return
         if (histIdx === null) {
           setDraft(value)
@@ -283,6 +327,15 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
           setSlashIdx((i) => Math.min(slashOptions.length - 1, i + 1))
           return
         }
+        // Multi-line: move cursor down within input if not on last line.
+        if (value.includes("\n")) {
+          const idx = cursorLineIdx(value, cursor)
+          if (idx < lineCount(value) - 1) {
+            lineDown()
+            return
+          }
+        }
+        // Single-line or on last line: history navigation.
         if (histIdx === null) return
         if (histIdx < hist.length - 1) {
           const idx = histIdx + 1
@@ -421,6 +474,17 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
     ? "Generating... (↑↓ scroll · ctrl+c abort)"
     : "Type a message... (/ for commands, @ for files)"
 
+  // Compute visible window for multi-line input.
+  const allLines = value.split("\n")
+  const curLine = cursorLineIdx(value, cursor)
+  const viewStart = Math.max(0, curLine - MAX_VISIBLE + 1)
+  const visLines = allLines.slice(viewStart, viewStart + MAX_VISIBLE)
+  // Precompute start position of each line in `value`.
+  const allStarts = allLines.reduce<number[]>((acc, _, i) => {
+    acc.push(i === 0 ? 0 : acc[i - 1]! + allLines[i - 1]!.length + 1)
+    return acc
+  }, [])
+
   return (
     <Box flexDirection="column" flexShrink={0} position="relative">
       {attachments.length > 0 && (
@@ -469,24 +533,44 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
         {slashVisible && <SlashMenu width={width} options={slashOptions} focused={slashIdx} />}
 
         {/* Separator — between transcript and input */}
-        <Text color={theme.surface1}>{"─".repeat(width)}</Text>
+        <Text color={active ? theme.surface1 : theme.mantle}>{"─".repeat(width)}</Text>
 
-        {/* Input row */}
-        <Box flexDirection="row">
-          <Text color={generating ? theme.yellow : theme.cyan}>{generating ? "◎ " : "› "}</Text>
-          {generating ? (
+        {/* Input area — single or multi-line */}
+        {generating ? (
+          <Box flexDirection="row">
+            <Text color={theme.yellow}>{"◎ "}</Text>
             <Text color={theme.overlay}>{placeholder}</Text>
-          ) : (
-            <>
-              {cursor > 0 && <Text color={theme.text}>{value.slice(0, cursor)}</Text>}
-              <Text backgroundColor={caretOn ? theme.cyan : undefined} color={caretOn ? theme.base : theme.text}>
-                {cursor < value.length ? value[cursor] : " "}
-              </Text>
-              {cursor < value.length && <Text color={theme.text}>{value.slice(cursor + 1)}</Text>}
-              {!value && <Text color={theme.overlay}>{placeholder}</Text>}
-            </>
-          )}
-        </Box>
+          </Box>
+        ) : (
+          <Box flexDirection="column">
+            {visLines.map((line, vi) => {
+              const absIdx = viewStart + vi
+              const lineStart = allStarts[absIdx]!
+              const onLine = absIdx === curLine
+              const col = onLine ? cursor - lineStart : -1
+              const txt = active ? theme.text : theme.overlay
+              const glyph = active ? theme.cyan : theme.overlay
+
+              return (
+                <Box key={absIdx} flexDirection="row">
+                  <Text color={glyph}>{vi === 0 && viewStart === 0 ? "› " : "  "}</Text>
+                  {onLine ? (
+                    <>
+                      {col > 0 && <Text color={txt}>{line.slice(0, col)}</Text>}
+                      <Text backgroundColor={caretOn ? theme.cyan : undefined} color={caretOn ? theme.base : txt}>
+                        {col < line.length ? line[col] : " "}
+                      </Text>
+                      {col < line.length && <Text color={txt}>{line.slice(col + 1)}</Text>}
+                      {!value && <Text color={theme.overlay}>{placeholder}</Text>}
+                    </>
+                  ) : (
+                    <Text color={txt}>{line || " "}</Text>
+                  )}
+                </Box>
+              )
+            })}
+          </Box>
+        )}
       </Box>
     </Box>
   )
