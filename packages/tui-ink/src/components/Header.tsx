@@ -14,20 +14,32 @@ export function Header({ projectName, gitBranch, sessionCount, status }: HeaderP
   const theme = useTheme()
   const statusColor = status === "generating" ? theme.yellow : status === "error" ? theme.red : theme.green
   const count = `${sessionCount} session${sessionCount === 1 ? "" : "s"}`
+  const bg = theme.mantle
 
   return (
     <Box height={1} justifyContent="space-between">
-      <Text color={theme.cyan} bold>
+      <Text color={theme.cyan} bold backgroundColor={bg}>
         {projectName}
       </Text>
-      <Text color={theme.overlay}> ─ </Text>
-      <Text color={theme.subtext}>{gitBranch}</Text>
-      <Text color={theme.overlay}> ─ </Text>
-      <Text color={theme.subtext}>{count}</Text>
+      <Text color={theme.overlay} backgroundColor={bg}>
+        {" "}
+        ─{" "}
+      </Text>
+      <Text color={theme.subtext} backgroundColor={bg}>
+        {gitBranch}
+      </Text>
+      <Text color={theme.overlay} backgroundColor={bg}>
+        {" "}
+        ─{" "}
+      </Text>
+      <Text color={theme.subtext} backgroundColor={bg}>
+        {count}
+      </Text>
       {status === "generating" ? (
         <Spinner label=" generating..." />
       ) : (
-        <Text color={statusColor}>
+        <Text color={statusColor} backgroundColor={bg}>
+          {" "}
           ● {status === "error" ? "error" : "ready"}
         </Text>
       )}

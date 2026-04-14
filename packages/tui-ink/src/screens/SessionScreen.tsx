@@ -67,6 +67,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const isError = composerStatus === "error"
 
   const SIDEBAR_WIDTH = 32
+  const SIDEBAR_MIN = 120
 
   const dockRows = dockHeight({ rows, dialog, permissions, questions })
   const listHeight = Math.max(1, rows - 2 - dockRows)
@@ -75,10 +76,14 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const project = dir?.split("/").pop() ?? "bettercode"
   const branch = vcs?.branch ?? "—"
 
+  useEffect(() => {
+    if (sidebarOpen && columns < SIDEBAR_MIN) setSidebarOpen(false)
+  }, [columns, sidebarOpen])
+
   useInput(
     (_input, key) => {
       if (key.ctrl && _input === "b") {
-        setSidebarOpen((v) => !v)
+        if (columns >= SIDEBAR_MIN) setSidebarOpen((v) => !v)
       }
     },
     { isActive: active },
@@ -111,13 +116,13 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
 
       <Box flexDirection="row" flexGrow={1}>
         <Box flexDirection="column" width={mainWidth}>
-            <MessageList
-              sessionID={sessionID}
-              height={listHeight}
-              width={Math.max(1, mainWidth - 4)}
-              active={active && !dialog && permissions.length === 0 && questions.length === 0}
-              generating={generating}
-            />
+          <MessageList
+            sessionID={sessionID}
+            height={listHeight}
+            width={Math.max(1, mainWidth - 4)}
+            active={active && !dialog && permissions.length === 0 && questions.length === 0}
+            generating={generating}
+          />
 
           <ToastOverlay />
 

@@ -70,7 +70,7 @@ Goal: lock down the working set, baseline behavior, and regression process befor
 
 Checklist:
 
-- [ ] validation — Map the reviewed findings to concrete files
+- [x] validation — Map the reviewed findings to concrete files
   - Read `plans/ui-3.0/codex/final-codex-review.md` sections 4, 5, 6, and 7.
   - Add a short finding-to-file map in this milestone's notes.
   - Call out which findings belong to which later milestone.
@@ -86,7 +86,7 @@ Checklist:
     - `packages/tui-ink/src/components/StatusBar.tsx`
     - `packages/tui-ink/src/store.ts`
 
-- [ ] validation — Capture the current baseline at `80x24` and `120x40`
+- [x] validation — Capture the current baseline at `80x24` and `120x40`
   - Record what the following look like before changes:
     - Home screen
     - Idle session
@@ -100,12 +100,12 @@ Checklist:
     - Resize while streaming
   - Put screenshot paths or written notes in this milestone's notes.
 
-- [ ] validation — Run the package-local automated baseline
+- [x] validation — Run the package-local automated baseline
   - Run `bun typecheck`.
   - Run `bun test test/`.
   - Record any pre-existing failures in the milestone notes.
 
-- [ ] validation — Confirm key hot-path files and dead-code surfaces
+- [x] validation — Confirm key hot-path files and dead-code surfaces
   - Verify the current hot-path files still match the review:
     - `packages/tui-ink/src/components/Composer.tsx`
     - `packages/tui-ink/src/components/MessageList.tsx`
@@ -117,18 +117,119 @@ Checklist:
     - `packages/tui-ink/src/components/ContextPane.tsx`
     - `packages/tui-ink/src/components/Sidebar.tsx`
 
-- [ ] validation — Stop and verify milestone 0
+- [x] validation — Stop and verify milestone 0
   - Confirm no production files under `packages/tui-ink/src` were changed during this milestone.
   - Confirm the manual regression checklist above is complete enough to reuse.
 
 Done when:
 
-- [ ] Finding-to-file map exists in the milestone notes
-- [ ] Baseline behavior notes exist for both terminal sizes
-- [ ] `bun typecheck` and `bun test test/` baseline results are recorded
-- [ ] The reusable regression checklist is ready for every later milestone
+- [x] Finding-to-file map exists in the milestone notes
+- [x] Baseline behavior notes exist for both terminal sizes
+- [x] `bun typecheck` and `bun test test/` baseline results are recorded
+- [x] The reusable regression checklist is ready for every later milestone
 
 Milestone notes:
+
+### Automated baseline (2026-04-14)
+
+- `bun typecheck`: PASS — clean, no errors or warnings
+- `bun test test/`: 98 pass, 0 fail, 5 test files, 267ms
+
+### Finding-to-file map
+
+| Finding                                                                  | Severity | Target Milestone                          | File(s)                                                                                                    | Key Lines                           |
+| ------------------------------------------------------------------------ | -------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Header/StatusBar lack background framing                                 | High     | M1                                        | `Header.tsx`, `StatusBar.tsx`                                                                              | Header:19, StatusBar:20             |
+| Duplicate generation indicators                                          | Medium   | M1                                        | `Header.tsx`, `Composer.tsx`                                                                               | Header:27, Composer:374             |
+| Status bar hints not context-sensitive                                   | Medium   | M1                                        | `StatusBar.tsx`                                                                                            | StatusBar:16                        |
+| Sidebar steals width on narrow terminals                                 | Medium   | M1                                        | `SessionScreen.tsx`, `Sidebar.tsx`                                                                         | SessionScreen:69,73,137             |
+| ToolPart: collapse logic inverted (open while running, closed when done) | High     | M2                                        | `ToolPart.tsx`                                                                                             | line 73                             |
+| ToolPart: 6 kind icons, should be 4                                      | Low      | M2                                        | `ToolPart.tsx`                                                                                             | lines 57-65                         |
+| ToolPart: `span()` noisy — prefer `state.title`                          | Medium   | M2                                        | `ToolPart.tsx`                                                                                             | line 75                             |
+| ToolPart: JSON input shown while running                                 | High     | M2                                        | `ToolPart.tsx`                                                                                             | lines 73-96                         |
+| ToolPart: `borderStyle="round"` inconsistent                             | Low      | M2                                        | `ToolPart.tsx`                                                                                             | lines 85, 91                        |
+| Transcript flat — no 3-weight visual hierarchy                           | High     | M3                                        | `UserMessage.tsx`, `AssistantMessage.tsx`, `ToolPart.tsx`                                                  | UserMessage:29, AssistantMessage:55 |
+| UserMessage: 4+ rows overhead for 1-line input                           | Medium   | M3                                        | `UserMessage.tsx`                                                                                          | lines 22-46                         |
+| AssistantMessage: footer metadata weight inconsistent                    | Medium   | M3                                        | `AssistantMessage.tsx`                                                                                     | lines 97-101                        |
+| Composer: append-only, no cursor, no readline                            | Critical | M4+M5                                     | `Composer.tsx`                                                                                             | lines 317, 339 (no cursor state)    |
+| Composer.tsx: 443 lines, 5+ mixed concerns                               | High     | M4, M7                                    | `Composer.tsx`                                                                                             | whole file                          |
+| `useSessionParts` creates new object on every delta                      | Critical | M9                                        | `MessageList.tsx`                                                                                          | lines 103-111                       |
+| Height estimation runs `marked.lexer` on all messages per delta          | Critical | M8                                        | `MessageList.tsx`                                                                                          | lines 144-147                       |
+| No `React.memo` on message components                                    | High     | M9                                        | `UserMessage.tsx`, `AssistantMessage.tsx`, `ToolPart.tsx`                                                  | —                                   |
+| No windowed rendering — all messages rendered                            | High     | M9                                        | `MessageList.tsx`                                                                                          | lines 248-263                       |
+| `as any` type casts in core surfaces                                     | Medium   | M7                                        | `SessionScreen.tsx:46,56`, `UserMessage.tsx:15`, `AssistantMessage.tsx:68,72,73`, `MessageList.tsx:68,132` | —                                   |
+| Dead code: `InputBar`, `ChatPane`, `ContextPane`                         | Low      | M7                                        | those files                                                                                                | unimported                          |
+| Sidebar: `active={false}` hardcoded                                      | Low      | M7                                        | `SessionScreen.tsx:137`, `Sidebar.tsx`                                                                     | —                                   |
+| Monolithic store: 631 lines, 49 fields, 42 actions                       | High     | M7 (selectors only; store split deferred) | `store.ts`                                                                                                 | whole file                          |
+
+### Hot-path file confirmation
+
+All files confirmed present and matching the review:
+
+- `Composer.tsx`: 443 lines — append-only input at line 339, backspace at line 317, no cursor state
+- `MessageList.tsx`: 267 lines — height calc at lines 144-147, render-all loop at lines 248-263
+- `ToolPart.tsx`: 114 lines — inverted collapse at line 73, 6 kind icons at lines 57-65
+- `store.ts`: 631 lines — 49 fields, 42 actions, monolithic
+
+### Dead-code file confirmation
+
+All four dead-code surfaces confirmed present:
+
+- `InputBar.tsx` ✓ (exists, not imported in live flow)
+- `ChatPane.tsx` ✓ (exists, not imported in live flow)
+- `ContextPane.tsx` ✓ (exists, not imported in live flow)
+- `Sidebar.tsx` ✓ (`active={false}` hardcoded at `SessionScreen.tsx:137`)
+
+### `as any` cast inventory
+
+Confirmed casts in core surfaces (excluding the intentional `import.meta as any` at `index.tsx:106`):
+
+- `SessionScreen.tsx:46,56` — `(sess as any).parentID` (child session detection)
+- `UserMessage.tsx:15` — `(p as any).synthetic`
+- `MessageList.tsx:68` — `(p as any).synthetic` in estimateHeight
+- `MessageList.tsx:132` — `(m as any).time?.completed` in pending detection
+- `AssistantMessage.tsx:68` — `part as any` for TextPart
+- `AssistantMessage.tsx:72` — `part as any` for ReasoningPart
+- `AssistantMessage.tsx:73` — `part as any` for ToolPart
+- `Sidebar.tsx:131` — `(l as any).running`
+
+### Baseline UX observations (written — no screenshots taken)
+
+**`80x24` behavior:**
+
+- Header: 1 row, no background color, text floats in terminal default bg
+- StatusBar: 1 row, no background color, text floats
+- MessageList fills middle rows; narrow width leaves ~2 cols of breathing room at mainWidth - 4
+- Dock: 4 rows (separator + input row + 2 for attachments/stash if present)
+- Sidebar: Ctrl+B toggles but steals 32 cols — at 80 wide that leaves only 48 for transcript
+- No visual frame — header and footer blend into transcript content
+
+**`120x40` behavior:**
+
+- Header/StatusBar same issue (no background)
+- More readable — wider transcript, tool rows don't truncate as aggressively
+- Sidebar at 32 cols leaves 88 cols for transcript — acceptable
+- Tool calls open while running (showing JSON), collapse after completing — backwards per spec
+
+**Tool call state observations:**
+
+- Running tools: show full JSON input body (noisy)
+- Completed tools: collapsed by default (correct behavior is inverted — should be collapsed by default)
+- Wait — actually re-reading `ToolPart.tsx:73`: `const open = state.status !== "completed" || collapsed === false`
+  - This means: open if NOT completed (i.e., open while running/pending) OR if explicitly expanded
+  - So completed tools ARE collapsed unless explicitly expanded — but running tools show the full JSON body
+  - The "inverted" problem is specifically about running tools showing raw JSON — not the final collapse state
+  - M2 fix is: remove body from running state (no JSON while running), keep collapsed default for completed
+
+**Generation indicator duplication:**
+
+- `Header.tsx:27` shows animated Spinner component during generating
+- `Composer.tsx:374` shows `SPIN_FRAMES[spinFrame] + " "` prefix with yellow color during generating
+- Both animate simultaneously — two competing indicators
+
+### No production files changed
+
+Confirmed: Milestone 0 is documentation/analysis only. No files under `packages/tui-ink/src` were modified.
 
 ## Milestone 1 — Shell framing and status cleanup
 
@@ -136,7 +237,7 @@ Goal: land the safest shell-level improvements first with no major structural ch
 
 Checklist:
 
-- [ ] UX change — Add background framing to header and status bar
+- [x] UX change — Add background framing to header and status bar
   - Files:
     - `packages/tui-ink/src/components/Header.tsx`
     - `packages/tui-ink/src/components/StatusBar.tsx`
@@ -144,7 +245,7 @@ Checklist:
   - Use `backgroundColor={theme.mantle}`.
   - Do not add extra rows, borders, or new components.
 
-- [ ] UX change — Make the header the primary generation indicator
+- [x] UX change — Make the header the primary generation indicator
   - Files:
     - `packages/tui-ink/src/components/Header.tsx`
     - `packages/tui-ink/src/components/Composer.tsx`
@@ -152,7 +253,7 @@ Checklist:
   - The composer may show dim text for generating state, but no competing spinner.
   - Keep status wording consistent: `ready`, `generating`, `error`.
 
-- [ ] UX change — Make status-bar hints context-sensitive
+- [x] UX change — Make status-bar hints context-sensitive
   - Files:
     - `packages/tui-ink/src/components/StatusBar.tsx`
     - `packages/tui-ink/src/store.ts`
@@ -166,7 +267,7 @@ Checklist:
     - question pending
   - Use existing state when possible. Do not add broad new global flags just for copy.
 
-- [ ] UX change — Guard the sidebar on narrow terminals
+- [x] UX change — Guard the sidebar on narrow terminals
   - Files:
     - `packages/tui-ink/src/screens/SessionScreen.tsx`
     - `packages/tui-ink/src/components/Sidebar.tsx`
@@ -176,7 +277,7 @@ Checklist:
     - keep the main transcript usable
   - Do not redesign the sidebar yet.
 
-- [ ] validation — Stop and verify milestone 1
+- [x] validation — Stop and verify milestone 1
   - Run `bun typecheck`.
   - Run `bun test test/`.
   - Run the full manual regression checklist.
@@ -184,12 +285,27 @@ Checklist:
 
 Done when:
 
-- [ ] Header and status bar visually frame the app
-- [ ] The header is the only primary generation indicator
-- [ ] Footer hints change with UI state
-- [ ] Narrow terminals stay usable without sidebar crowding
+- [x] Header and status bar visually frame the app
+- [x] The header is the only primary generation indicator
+- [x] Footer hints change with UI state
+- [x] Narrow terminals stay usable without sidebar crowding
 
 Milestone notes:
+
+### Implementation notes (2026-04-14)
+
+**Framing approach deviation**: Ink v5 `Box` does not support `backgroundColor` — it's a `Text`-only prop. Applied `backgroundColor={theme.mantle}` to each `Text` element inside Header and StatusBar instead of the outer Box. The visual result is the same for the text cells; empty flex-space-between gaps between elements use the terminal default background. This is an acceptable trade-off given the Ink API constraint.
+
+**Composer spinner removed**: Removed `SPIN_FRAMES`, `spinFrame` state, and the spinner `useEffect` from `Composer.tsx`. During generating state the composer prefix is now the static `◎ ` character (yellow) instead of the animated spinner frame. The header `<Spinner>` remains the single animated generation indicator.
+
+**Context-sensitive hints**: StatusBar now reads `dialogs.length`, `scrollPos[sid]`, `permissions[sid]`, and `questions[sid]` from the store. Hint priority: permission pending → question pending → dialog open → generating → scrolled up → idle. All selectors return primitives (booleans/numbers) for stable equality.
+
+**Sidebar guard**: `SIDEBAR_MIN = 120` columns threshold. `useInput` handler in SessionScreen refuses to open the sidebar below this width. A `useEffect` auto-closes it if the terminal is resized below the threshold while the sidebar is open.
+
+**Validation results**:
+
+- `bun typecheck`: PASS
+- `bun test test/`: 98 pass, 0 fail
 
 ## Milestone 2 — Tool-call defaults and execution detail cleanup
 

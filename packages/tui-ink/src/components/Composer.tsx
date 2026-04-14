@@ -7,8 +7,6 @@ import { useCommands } from "../commands/useCommands"
 import { registry } from "../commands/registry"
 import type { FilePartInput } from "@opencode-ai/sdk/v2"
 
-const SPIN_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-
 // Built-in slash commands always available in session context
 const BUILTIN: SlashCommand[] = [
   { name: "undo", description: "Revert last message" },
@@ -31,7 +29,6 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
   const [draft, setDraft] = useState("")
   const [histIdx, setHistIdx] = useState<number | null>(null)
   const [slashIdx, setSlashIdx] = useState(0)
-  const [spinFrame, setSpinFrame] = useState(0)
   const [caretOn, setCaretOn] = useState(true)
 
   // Persisted history and stash from store
@@ -57,16 +54,6 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
   const agent = useAppStore((s) => s.mode)
   const regCmds = useCommands()
 
-  // Animate spinner while generating
-  useEffect(() => {
-    if (!generating) {
-      setSpinFrame(0)
-      return
-    }
-    const t = setInterval(() => setSpinFrame((f) => (f + 1) % SPIN_FRAMES.length), 100)
-    return () => clearInterval(t)
-  }, [generating])
-
   // Blink caret when idle
   useEffect(() => {
     if (generating) {
@@ -74,7 +61,10 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
       return
     }
     const t = setInterval(() => setCaretOn((v) => !v), 530)
-    return () => { clearInterval(t); setCaretOn(true) }
+    return () => {
+      clearInterval(t)
+      setCaretOn(true)
+    }
   }, [generating])
 
   // Handle server-appended text
@@ -371,7 +361,9 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
     { isActive: active && !generating },
   )
 
-  const placeholder = generating ? "Generating... (↑↓ scroll · ctrl+c abort)" : "Type a message... (/ for commands, @ for files)"
+  const placeholder = generating
+    ? "Generating... (↑↓ scroll · ctrl+c abort)"
+    : "Type a message... (/ for commands, @ for files)"
 
   return (
     <Box flexDirection="column" flexShrink={0} position="relative">
@@ -398,7 +390,13 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
 
       <Box flexDirection="column" position="relative">
         {mentionVisible && (
-          <Box position="absolute" width={width} marginTop={-Math.min(6, mentionResults.length)} flexDirection="column" paddingX={1}>
+          <Box
+            position="absolute"
+            width={width}
+            marginTop={-Math.min(6, mentionResults.length)}
+            flexDirection="column"
+            paddingX={1}
+          >
             {mentionResults.slice(0, 6).map((path, i) => (
               <Text
                 key={path}
@@ -412,18 +410,14 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
           </Box>
         )}
         {/* Claude-like: keep the input row fixed; show suggestions as an overlay above it. */}
-        {slashVisible && (
-          <SlashMenu width={width} options={slashOptions} focused={slashIdx} />
-        )}
+        {slashVisible && <SlashMenu width={width} options={slashOptions} focused={slashIdx} />}
 
         {/* Separator — between transcript and input */}
         <Text color={theme.surface1}>{"─".repeat(width)}</Text>
 
         {/* Input row */}
         <Box flexDirection="row">
-          <Text color={generating ? theme.yellow : theme.cyan}>
-            {generating ? SPIN_FRAMES[spinFrame] + " " : "› "}
-          </Text>
+          <Text color={generating ? theme.yellow : theme.cyan}>{generating ? "◎ " : "› "}</Text>
           {generating ? (
             <Text color={theme.overlay}>{placeholder}</Text>
           ) : (
@@ -437,7 +431,6 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
           )}
         </Box>
       </Box>
-
     </Box>
   )
 }
