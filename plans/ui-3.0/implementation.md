@@ -556,32 +556,32 @@ Goal: make the composer editor-grade for single-line editing before adding multi
 
 Checklist:
 
-- [ ] UX change — Add explicit cursor state
+- [x] UX change — Add explicit cursor state
   - Files:
     - `packages/tui-ink/src/hooks/useTextInput.ts`
     - `packages/tui-ink/src/components/Composer.tsx`
   - Add `cursor` tracking.
   - Render the caret at the actual cursor position, not only at the end.
 
-- [ ] UX change — Insert text at the cursor instead of appending to the end
+- [x] UX change — Insert text at the cursor instead of appending to the end
   - File: `packages/tui-ink/src/hooks/useTextInput.ts`
   - Replace append-only insertion with cursor-aware insertion.
   - Cursor should advance after insertion.
 
-- [ ] UX change — Delete backward and forward at the cursor
+- [x] UX change — Delete backward and forward at the cursor
   - File: `packages/tui-ink/src/hooks/useTextInput.ts`
   - Backspace should delete before the cursor.
   - Delete should delete after the cursor.
   - Keep safe behavior at start/end boundaries.
 
-- [ ] UX change — Add left/right cursor movement
+- [x] UX change — Add left/right cursor movement
   - Files:
     - `packages/tui-ink/src/hooks/useTextInput.ts`
     - `packages/tui-ink/src/components/Composer.tsx`
   - Left/right arrows should move the cursor within the text.
   - Verify these keys still route elsewhere when the composer is inactive.
 
-- [ ] UX change — Add readline-style keybindings
+- [x] UX change — Add readline-style keybindings
   - File: `packages/tui-ink/src/hooks/useTextInput.ts`
   - Implement:
     - `Ctrl+A` home
@@ -589,7 +589,7 @@ Checklist:
     - `Ctrl+W` delete previous word
   - Keep existing `Ctrl+U`, `Ctrl+X`, and `Ctrl+Y` behavior working.
 
-- [ ] UX change — Keep server-appended composer text deterministic
+- [x] UX change — Keep server-appended composer text deterministic
   - Files:
     - `packages/tui-ink/src/components/Composer.tsx`
     - `packages/tui-ink/src/store.ts`
@@ -599,7 +599,7 @@ Checklist:
     - move cursor to end
   - Record the choice in milestone notes.
 
-- [ ] test — Expand `text-input.test.ts` for cursor-aware editing
+- [x] test — Expand `text-input.test.ts` for cursor-aware editing
   - File: `packages/tui-ink/test/text-input.test.ts`
   - Add coverage for:
     - insert in middle
@@ -610,7 +610,7 @@ Checklist:
     - delete previous word
     - empty input edge cases
 
-- [ ] validation — Stop and verify milestone 5
+- [x] validation — Stop and verify milestone 5
   - Run `bun typecheck`.
   - Run `bun test test/`.
   - Manually verify:
@@ -623,12 +623,60 @@ Checklist:
 
 Done when:
 
-- [ ] Cursor-aware editing works in the composer
-- [ ] Readline-style single-line controls work
-- [ ] Existing composer features still work
-- [ ] The cursor-aware hook is covered by tests
+- [x] Cursor-aware editing works in the composer
+- [x] Readline-style single-line controls work
+- [x] Existing composer features still work
+- [x] The cursor-aware hook is covered by tests
 
 Milestone notes:
+
+### Implementation notes (2026-04-14)
+
+**Hook redesign**: `useTextInput` now manages `{ value, cursor }` as a single combined state object (via `useState<{ value: string; cursor: number }>`). Atomic updates prevent cursor/value divergence.
+
+**New pure helpers (all exported for testing)**:
+
+- `textInsertAt(value, cursor, input)` → `[value, cursor]` — inserts at cursor, advances cursor by `input.length`
+- `textDelAt(value, cursor)` → `[value, cursor]` — backspace at cursor, guards at boundary 0
+- `textDelForward(value, cursor)` → `[value, cursor]` — delete-forward, guards at `value.length`
+- `textDelWord(value, cursor)` → `[value, cursor]` — Ctrl+W: skip trailing spaces, then delete back to previous word boundary (bash-style)
+
+**Old pure helpers kept**: `textInsert` and `textDel` remain exported unchanged for M4 test backward compat. They are not used internally by the hook.
+
+**`setValue` contract**: Always moves cursor to `v.length` (end of new value). This covers all call sites in Composer: history nav, selectMention, handleSlashSelect, composerAppend. Documented in milestone notes as the chosen behavior.
+
+**`composerAppend` behavior**: `setValue(v => v + composerAppend)` appends server-provided text at the end and moves cursor to end — no change in behavior, just confirmed to be correct.
+
+**Composer input handler changes**:
+
+- `key.backspace || key.delete` split into two separate guards: `key.backspace` → `del()`, `key.delete` → `deleteForward()`
+- `next` value computations changed from `value.slice(0,-1)` / `value + input` to cursor-aware: `textDelAt(value, cursor)[0]`, `textDelForward(value, cursor)[0]`, `textInsertAt(value, cursor, input)[0]`, `textDelWord(value, cursor)[0]`
+- `charBefore` check in `@` trigger: changed from `value.slice(-1)` to `cursor > 0 ? value[cursor - 1] : ""`
+- New keybindings added (in order, before `if (key.ctrl || key.meta) return`):
+  - `key.leftArrow` → `moveLeft()`
+  - `key.rightArrow` → `moveRight()`
+  - `key.ctrl && input === "a"` → `home()`
+  - `key.ctrl && input === "e"` → `end()`
+  - `key.ctrl && input === "w"` → `deleteWord()` (with mention tracking update)
+- `Ctrl+W` also updates mention tracking the same way backspace does.
+
+**Caret rendering**: Changed from append-only to split-at-cursor:
+
+- `value.slice(0, cursor)` rendered as `theme.text` text (left of caret)
+- caret block renders `value[cursor]` (or space at end) with `backgroundColor={caretOn ? theme.cyan : undefined}` and `color={caretOn ? theme.base : theme.text}` so the char is still readable when caret is off
+- `value.slice(cursor + 1)` rendered as `theme.text` text (right of caret)
+
+**`textDelWord` boundary behavior (documented)**:
+
+- Cursor at space between two words (e.g., position 6 in "hello world"): deletes the space AND the preceding word (bash-style, leaves "world"). This is the standard bash/zsh Ctrl+W behavior.
+- Two tests were corrected during implementation after observing the actual algorithm output.
+
+**New test count**: 24 new tests added to `text-input.test.ts` across 5 new describe blocks. Total: 149 pass.
+
+**Validation results**:
+
+- `bun typecheck`: PASS
+- `bun test test/`: 149 pass, 0 fail (was 125; +24 new tests)
 
 ## Milestone 6 — Multi-line composer and bottom-dock state handling
 

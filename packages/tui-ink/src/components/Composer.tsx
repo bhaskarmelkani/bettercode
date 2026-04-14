@@ -5,7 +5,7 @@ import { SlashMenu, type SlashCommand } from "./SlashMenu"
 import { useAppStore } from "../store"
 import { useCommands } from "../commands/useCommands"
 import { registry } from "../commands/registry"
-import { useTextInput } from "../hooks/useTextInput"
+import { useTextInput, textInsertAt, textDelAt, textDelForward, textDelWord } from "../hooks/useTextInput"
 import type { FilePartInput } from "@opencode-ai/sdk/v2"
 
 // Built-in slash commands always available in session context
@@ -26,7 +26,8 @@ interface Props {
 
 export function Composer({ onSubmit, onAbort, active, generating, width }: Props) {
   const theme = useTheme()
-  const { value, setValue, insert, del, clear } = useTextInput()
+  const { value, cursor, setValue, insert, del, deleteForward, deleteWord, moveLeft, moveRight, home, end, clear } =
+    useTextInput()
   const [draft, setDraft] = useState("")
   const [histIdx, setHistIdx] = useState<number | null>(null)
   const [slashIdx, setSlashIdx] = useState(0)
@@ -304,12 +305,64 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
         return
       }
 
-      if (key.backspace || key.delete) {
-        // Compute next value for mention tracking before mutating state
-        const next = value.slice(0, -1)
+      if (key.backspace) {
+        // Compute cursor-aware next value for mention tracking before mutating state
+        const next = textDelAt(value, cursor)[0]
         del()
         setSlashIdx(0)
         // Update mention query when backspacing
+        if (mentionActive) {
+          const atIdx = next.lastIndexOf("@")
+          if (atIdx >= 0) {
+            setMentionQuery(next.slice(atIdx + 1))
+          } else {
+            setMentionActive(false)
+            setMentionQuery("")
+          }
+        }
+        return
+      }
+
+      if (key.delete) {
+        // Forward delete — Delete key (not Backspace)
+        const next = textDelForward(value, cursor)[0]
+        deleteForward()
+        setSlashIdx(0)
+        if (mentionActive) {
+          const atIdx = next.lastIndexOf("@")
+          if (atIdx >= 0) {
+            setMentionQuery(next.slice(atIdx + 1))
+          } else {
+            setMentionActive(false)
+            setMentionQuery("")
+          }
+        }
+        return
+      }
+
+      if (key.leftArrow) {
+        moveLeft()
+        return
+      }
+
+      if (key.rightArrow) {
+        moveRight()
+        return
+      }
+
+      if (key.ctrl && input === "a") {
+        home()
+        return
+      }
+
+      if (key.ctrl && input === "e") {
+        end()
+        return
+      }
+
+      if (key.ctrl && input === "w") {
+        const next = textDelWord(value, cursor)[0]
+        deleteWord()
         if (mentionActive) {
           const atIdx = next.lastIndexOf("@")
           if (atIdx >= 0) {
@@ -328,14 +381,14 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
       if (input && (input.startsWith("[<") || input.startsWith("[M"))) return
 
       if (input) {
-        // Compute next value for mention tracking before mutating state
-        const next = value + input
+        // Compute cursor-aware next value for mention tracking before mutating state
+        const next = textInsertAt(value, cursor, input)[0]
         insert(input)
         setSlashIdx(0)
 
-        // Check for @ trigger
+        // Check for @ trigger — char before cursor position
         if (input === "@") {
-          const charBefore = value.slice(-1)
+          const charBefore = cursor > 0 ? value[cursor - 1] : ""
           if (!charBefore || /\s/.test(charBefore)) {
             setMentionActive(true)
             setMentionQuery("")
@@ -425,10 +478,11 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
             <Text color={theme.overlay}>{placeholder}</Text>
           ) : (
             <>
-              {value && <Text color={theme.text}>{value}</Text>}
-              <Text backgroundColor={caretOn ? theme.cyan : undefined} color={theme.base}>
-                {" "}
+              {cursor > 0 && <Text color={theme.text}>{value.slice(0, cursor)}</Text>}
+              <Text backgroundColor={caretOn ? theme.cyan : undefined} color={caretOn ? theme.base : theme.text}>
+                {cursor < value.length ? value[cursor] : " "}
               </Text>
+              {cursor < value.length && <Text color={theme.text}>{value.slice(cursor + 1)}</Text>}
               {!value && <Text color={theme.overlay}>{placeholder}</Text>}
             </>
           )}
