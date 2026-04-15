@@ -28,7 +28,7 @@ export const UserMessage = React.memo(function UserMessage({ parts, isQueued }: 
       gap={1}
     >
       <Text bold color={theme.cyan}>
-        •
+        ●
       </Text>
       <Box flexDirection="column" flexShrink={1}>
         <MarkdownRenderer text={text.text} bold={true} />

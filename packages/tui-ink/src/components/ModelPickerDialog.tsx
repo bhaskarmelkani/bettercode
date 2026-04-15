@@ -72,7 +72,7 @@ export function ModelPickerDialog({ rows, columns }: Props) {
   const safeIdx = Math.min(idx, Math.max(0, total - 1))
   const start = Math.max(0, safeIdx - Math.floor(maxVisible / 2))
   const visible = entries.slice(start, start + maxVisible)
-  const prompt = "› "
+  const prompt = "> "
   const value = query || "search models..."
 
   useInput((input, key) => {
@@ -136,23 +136,13 @@ export function ModelPickerDialog({ rows, columns }: Props) {
         const selected = real === safeIdx
         const current = e.isCurrent
         return (
-          <Box key={`${e.providerID}/${e.modelID}`} flexDirection="column">
-            <Box>
-              <Text color={selected ? theme.cyan : theme.overlay}>{selected ? "▶ " : "  "}</Text>
-              <Text color={current ? theme.green : selected ? theme.text : theme.subtext} bold={selected}>
-                {e.name}
-              </Text>
-              <Text color={theme.overlay}>{`  ${e.providerID}`}</Text>
-              {current && <Text color={theme.green}> ✓</Text>}
-              {e.isRecent && !current && <Text color={theme.surface2}>{" ★"}</Text>}
-            </Box>
-            {selected && (
-              <Box paddingLeft={4}>
-                <Text color={theme.subtext}>
-                  model: <Text color={theme.text}>{e.modelID}</Text>
-                </Text>
-              </Box>
-            )}
+          <Box key={`${e.providerID}/${e.modelID}`} flexDirection="row">
+            <Text color={selected ? theme.cyan : theme.overlay}>{selected ? "> " : "  "}</Text>
+            <Text color={current ? theme.green : selected ? theme.text : theme.subtext} bold={selected}>
+              {e.name}
+            </Text>
+            <Text color={theme.overlay}>{`  ${e.providerID}`}</Text>
+            {current && <Text color={theme.green}> ✓</Text>}
           </Box>
         )
       })}

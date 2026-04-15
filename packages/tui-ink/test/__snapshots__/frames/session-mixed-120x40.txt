@@ -1,6 +1,6 @@
 bettercode ─ feat/ui-snapshots ─ 2 sessions                                                                        ready
 
- • Can we make the TUI snapshot-friendly so agents can inspect spacing, hierarchy, and prompts?
+ ● Can we make the TUI snapshot-friendly so agents can inspect spacing, hierarchy, and prompts?
 
      ◆ Yes. We can render deterministic Ink frames and save them as review artifacts.
 
@@ -13,14 +13,14 @@ bettercode ─ feat/ui-snapshots ─ 2 sessions                                 
 
    build · gpt-5.4 · 1.4s · 2.5k tokens
 
- • Great. Start with representative screens before we add deeper PTY interaction tests.
+ ● Great. Start with representative screens before we add deeper PTY interaction tests.
 
      ◆ This first pass focuses on static frames that expose the main visual structure: header, transcript, dock,
        prompts, and status lane.
 
    build · gpt-5.4 · 1.4s · 2.5k tokens
 
-     ▸ edits 2 files +3 -2
+     ▸ edits 2 files +3 -2  ctrl+g: expand
 
      ~ packages/tui-ink/src/screens/SessionScreen.tsx +2 -1
 
@@ -37,4 +37,4 @@ bettercode ─ feat/ui-snapshots ─ 2 sessions                                 
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
    Type a message... (/ for commands, @ for files)
- ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · ctrl+g: toggle edits · ctrl+b: capabilities
+ ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · ctrl+g: expand/collapse edits · ctrl+b: capabilities

@@ -4,7 +4,7 @@ bettercode ─ feat/ui-snapshots ─ 3 sessions                                r
 
 
                  bettercode
-                 2 providers connected to bettercode
+                 2 providers · bettercode
 
 
                  recent sessions

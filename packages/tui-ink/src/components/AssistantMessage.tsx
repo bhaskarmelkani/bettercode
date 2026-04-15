@@ -17,6 +17,7 @@ interface Props {
   isLast: boolean
   diffs?: SnapshotFileDiff[]
   diffOpen?: boolean
+  onToggleDiff?: () => void
 }
 
 function dur(start?: number, end?: number) {
@@ -41,6 +42,7 @@ export const AssistantMessage = React.memo(function AssistantMessage({
   isLast,
   diffs = [],
   diffOpen = false,
+  onToggleDiff,
 }: Props) {
   const theme = useTheme()
   if (message.role !== "assistant") return null
@@ -110,7 +112,7 @@ export const AssistantMessage = React.memo(function AssistantMessage({
         </Box>
       )}
 
-      <MessageDiff diffs={diffs} open={diffOpen} />
+      <MessageDiff diffs={diffs} open={diffOpen} onToggle={onToggleDiff} />
     </Box>
   )
 })

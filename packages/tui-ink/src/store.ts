@@ -113,6 +113,14 @@ export interface AppState {
   // Display toggles
   showThinking: boolean
 
+  // Auto-accept all permissions for this session (no individual prompts)
+  autoAcceptPermissions: boolean
+  toggleAutoAcceptPermissions: () => void
+
+  // Bootstrap retry tick — incrementing this re-triggers useSDK bootstrap
+  reconnectTick: number
+  retryBootstrap: () => void
+
   // Active primary agent
   mode: "plan" | "build"
   setMode: (mode: "plan" | "build") => void
@@ -281,6 +289,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   questions: {},
   composerStatus: "idle",
   showThinking: false,
+  autoAcceptPermissions: false,
+  reconnectTick: 0,
   mode: "build",
   currentThemeName: DEFAULT_THEME,
   toasts: [],
@@ -300,6 +310,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSyncStatus: (s) => set({ syncStatus: s }),
   setComposerStatus: (s) => set({ composerStatus: s }),
   setShowThinking: (v) => set({ showThinking: v }),
+  toggleAutoAcceptPermissions: () => set((prev) => ({ autoAcceptPermissions: !prev.autoAcceptPermissions })),
+  retryBootstrap: () => set((prev) => ({ syncStatus: "loading", reconnectTick: prev.reconnectTick + 1 })),
   setTheme: (name) => set({ currentThemeName: name }),
   addToast: (t) => {
     const id = `${Date.now()}-${Math.random()}`
@@ -463,14 +475,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { collapsedDiffs: { ...prev.collapsedDiffs, [messageID]: !open } }
     }),
 
-  upsertPermission: (req) =>
+  upsertPermission: (req) => {
+    if (get().autoAcceptPermissions) {
+      // Auto-accept mode: reply immediately without surfacing the prompt
+      get().replyPermission(req.id, "always")
+      return
+    }
     set((prev) => {
       const arr = [...(prev.permissions[req.sessionID] ?? [])]
       const { found, index } = bsearch(arr, req.id, (x) => x.id)
       if (found) arr[index] = req
       else arr.splice(index, 0, req)
       return { permissions: { ...prev.permissions, [req.sessionID]: arr } }
-    }),
+    })
+  },
 
   removePermission: (sessionID, requestID) =>
     set((prev) => {
@@ -498,9 +516,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   sendPrompt: async (sessionID, text, files) => {
-    const { client, currentModel, currentAgent, mode, commands } = get()
+    const { client, currentModel, currentAgent, mode, commands, providerConnected } = get()
     if (!client) return
     const cmd = parseCmd(text)
+    // Guard: cannot send a regular prompt with no model/provider configured.
+    // Slash commands (especially /provider) must still be allowed through.
+    if (!cmd && !currentModel && providerConnected.length === 0) {
+      get().addToast({
+        title: "No provider connected",
+        message: "Type /provider to configure an API key before sending a message.",
+        variant: "warning",
+        duration: 5000,
+      })
+      return
+    }
     if (cmd?.name === "clear") return
     const local = cmd ? registry.all().find((item) => item.slash === cmd.name && item.enabled !== false) : undefined
     if (local) {

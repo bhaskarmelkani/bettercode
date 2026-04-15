@@ -398,14 +398,16 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
         {/* Slash menu — absolute overlay above the input */}
         {slash.visible && <SlashMenu width={width} options={slash.options} focused={slash.idx} />}
 
-        {/* Context line — generating status or empty */}
-        <Box height={1}>
-          {generating ? (
-            <Spinner label=" generating  ↑↓ scroll · ctrl+c abort" />
-          ) : (
-            <Text> </Text>
-          )}
-        </Box>
+        {/* Context line — generating status or empty; hidden when slash/mention overlay is open */}
+        {!slash.visible && !mentions.visible && (
+          <Box height={1}>
+            {generating ? (
+              <Spinner label=" generating  ↑↓ scroll · ctrl+c abort" />
+            ) : (
+              <Text> </Text>
+            )}
+          </Box>
+        )}
 
         {/* Separator — prominent divider between content and input */}
         <Text color={theme.surface2}>{"─".repeat(width)}</Text>
@@ -413,7 +415,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
         {/* Input area — single or multi-line */}
         {generating ? (
           <Box flexDirection="row">
-            <Text color={theme.overlay}>{"›"}</Text>
+            <Text color={theme.overlay}>{">"}</Text>
             <Text>{"  "}</Text>
             <Text color={theme.overlay} dimColor>{"waiting for response..."}</Text>
           </Box>
@@ -432,7 +434,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
               return (
                 <Box key={absIdx} flexDirection="row">
                   <Text color={glyph} backgroundColor={field}>
-                    {vi === 0 && viewStart === 0 ? "›" : " "}
+                    {vi === 0 && viewStart === 0 ? ">" : " "}
                   </Text>
                   <Text backgroundColor={field}>
                     {"  "}

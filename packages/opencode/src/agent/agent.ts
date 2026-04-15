@@ -84,7 +84,8 @@ export namespace Agent {
           const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
 
           const defaults = Permission.fromConfig({
-            "*": "allow",
+            // No wildcard "allow" — unspecified permissions (write, edit, bash, execute)
+            // default to "ask" so users are prompted before destructive operations.
             doom_loop: "ask",
             external_directory: {
               "*": "ask",
@@ -93,6 +94,7 @@ export namespace Agent {
             question: "deny",
             plan_enter: "deny",
             plan_exit: "deny",
+            // Reads are allowed by default; .env files require explicit approval.
             // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
             read: {
               "*": "allow",

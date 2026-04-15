@@ -27,6 +27,7 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   const scroll = useAppStore((s) => s.scrollPos[sid] ?? 0)
   const perms = useAppStore((s) => (s.permissions[sid]?.length ?? 0) > 0)
   const qs = useAppStore((s) => (s.questions[sid]?.length ?? 0) > 0)
+  const autoAccept = useAppStore((s) => s.autoAcceptPermissions)
   const edits = useAppStore((s) => (s.messages[sid] ?? []).some((msg) => msg.role === "assistant" && (s.messageDiff[msg.id]?.length ?? 0) > 0))
 
   const branch = cut(vcs?.branch ?? "—", 28)
@@ -45,7 +46,7 @@ export function StatusBar({ width, sidebarOpen }: Props) {
       : generating
         ? "↑↓ scroll · ctrl+c abort"
         : edits
-          ? "ctrl+g: toggle edits · ctrl+b: capabilities"
+          ? "ctrl+g: expand/collapse edits · ctrl+b: capabilities"
         : scroll > 0
           ? "ctrl+↓: snap bottom"
           : "ctrl+k: commands · /: slash · ctrl+b: capabilities"
@@ -68,6 +69,7 @@ export function StatusBar({ width, sidebarOpen }: Props) {
       <Text color={theme.overlay}>{" · "}</Text>
       <Text color={theme.overlay}>{hint}</Text>
       {fill > 0 ? <Text>{" ".repeat(fill)}</Text> : null}
+      {autoAccept && <Text color={theme.yellow}>{" auto-accept "}</Text>}
     </Box>
   )
 }

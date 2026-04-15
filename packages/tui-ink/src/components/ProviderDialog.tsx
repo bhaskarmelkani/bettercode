@@ -41,7 +41,7 @@ type Step =
       cursor: number
       error: string | null
     }
-  | { type: "oauth-auto"; provider: Provider; methodIndex: number; auth: ProviderAuthAuthorization; waiting: boolean }
+  | { type: "oauth-auto"; provider: Provider; methodIndex: number; auth: ProviderAuthAuthorization; status: "waiting" | "timed-out" | "failed" }
   | {
       type: "oauth-code"
       provider: Provider
@@ -109,28 +109,36 @@ export function ProviderDialog({ rows, columns }: Props) {
       return
     }
     if (auth.method === "auto") {
-      setStep({ type: "oauth-auto", provider, methodIndex, auth, waiting: true })
+      setStep({ type: "oauth-auto", provider, methodIndex, auth, status: "waiting" })
     } else {
       setStep({ type: "oauth-code", provider, methodIndex, auth, input: "", cursor: 0, error: false })
     }
   }
 
-  // OAuth auto: trigger callback poll on mount
+  // OAuth auto: trigger callback poll on mount, with 3-minute timeout
+  const OAUTH_TIMEOUT_MS = 3 * 60 * 1000
   useEffect(() => {
-    if (step.type !== "oauth-auto" || !step.waiting) return
+    if (step.type !== "oauth-auto" || step.status !== "waiting") return
     let cancelled = false
+
+    const timer = setTimeout(() => {
+      if (!cancelled) setStep((s) => s.type === "oauth-auto" ? { ...s, status: "timed-out" } : s)
+    }, OAUTH_TIMEOUT_MS)
+
     oauthCallback(step.provider.id, step.methodIndex).then((ok) => {
+      clearTimeout(timer)
       if (cancelled) return
       if (ok) {
         showFeedback(`${step.provider.name} connected!`)
         setStep({ type: "list" })
       } else {
-        showFeedback("OAuth failed")
-        setStep({ type: "list" })
+        setStep((s) => s.type === "oauth-auto" ? { ...s, status: "failed" } : s)
       }
     })
+
     return () => {
       cancelled = true
+      clearTimeout(timer)
     }
   }, [step.type === "oauth-auto" ? step.auth.url : ""])
 
@@ -378,9 +386,13 @@ export function ProviderDialog({ rows, columns }: Props) {
         return
       }
 
-      // ── oauth-auto: any key cancels ──
+      // ── oauth-auto ──
       if (step.type === "oauth-auto") {
-        setStep({ type: "list" })
+        if (step.status !== "waiting" && input === "r") {
+          startOAuth(step.provider, step.methodIndex, {})
+        } else {
+          setStep({ type: "list" })
+        }
       }
     },
     { isActive: true },
@@ -517,10 +529,20 @@ export function ProviderDialog({ rows, columns }: Props) {
             <Text color={theme.blue}>{step.auth.url}</Text>
           </Box>
           <Box marginTop={1}>
-            <Text color={theme.yellow}>Waiting for authorization...</Text>
+            {step.status === "waiting" ? (
+              <Text color={theme.yellow}>Waiting for authorization...</Text>
+            ) : step.status === "timed-out" ? (
+              <Text color={theme.yellow}>Authorization timed out.</Text>
+            ) : (
+              <Text color={theme.red}>OAuth failed.</Text>
+            )}
           </Box>
           <Box marginTop={1}>
-            <Text color={theme.overlay}>any key to cancel</Text>
+            {step.status === "waiting" ? (
+              <Text color={theme.overlay}>any key to cancel</Text>
+            ) : (
+              <Text color={theme.overlay}>r: retry · any other key: cancel</Text>
+            )}
           </Box>
         </>
       )}

@@ -480,6 +480,7 @@ describe("store — model / agent selection", () => {
       } as never,
       mode: "build",
       currentAgent: "review",
+      providerConnected: ["anthropic"],
     })
 
     await useAppStore.getState().sendPrompt("s1", "hello")

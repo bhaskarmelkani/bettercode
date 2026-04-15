@@ -1,7 +1,8 @@
 import React from "react"
-import { Box, Text } from "ink"
+import { Box, Text, useInput } from "ink"
 import type { FilePartInput, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
 import type { Dialog } from "../store"
+import { useAppStore } from "../store"
 import { useTheme } from "../theme-context"
 import { Composer } from "./Composer"
 import { CommandPalette } from "./CommandPalette"
@@ -11,10 +12,11 @@ import { ModelPickerDialog } from "./ModelPickerDialog"
 import { AgentPickerDialog } from "./AgentPickerDialog"
 import { McpDialog } from "./McpDialog"
 import { ThemePickerDialog } from "./ThemePickerDialog"
+import { HelpDialog } from "./HelpDialog"
 import { PermissionPrompt } from "./PermissionPrompt"
 import { QuestionPrompt } from "./QuestionPrompt"
 
-const PANELS = new Set(["command-palette", "session-list", "provider", "model-picker", "agent-picker", "mcp", "theme"])
+const PANELS = new Set(["command-palette", "session-list", "provider", "model-picker", "agent-picker", "mcp", "theme", "help", "alert"])
 
 const base = 4
 const perm = 5
@@ -50,6 +52,21 @@ interface Props {
   questions?: QuestionRequest[]
 }
 
+function AlertPane({ dialog, rows, columns }: { dialog: Extract<Dialog, { type: "alert" }>; rows: number; columns: number }) {
+  const theme = useTheme()
+  const popDialog = useAppStore((s) => s.popDialog)
+  useInput((input, key) => {
+    if (key.escape || input === "q" || key.return) popDialog()
+  })
+  return (
+    <Box height={rows} width={columns} flexDirection="column" paddingX={2} paddingY={1}>
+      {dialog.title && <Text color={theme.text} bold>{dialog.title}</Text>}
+      <Text color={theme.subtext} wrap="wrap">{dialog.message}</Text>
+      <Box marginTop={1}><Text color={theme.overlay}>enter / esc to close</Text></Box>
+    </Box>
+  )
+}
+
 function pane(dialog: Dialog, rows: number, columns: number) {
   if (dialog.type === "command-palette") return <CommandPalette rows={rows} columns={columns} />
   if (dialog.type === "session-list") return <SessionListDialog rows={rows} columns={columns} />
@@ -58,6 +75,8 @@ function pane(dialog: Dialog, rows: number, columns: number) {
   if (dialog.type === "agent-picker") return <AgentPickerDialog rows={rows} columns={columns} />
   if (dialog.type === "mcp") return <McpDialog rows={rows} columns={columns} />
   if (dialog.type === "theme") return <ThemePickerDialog rows={rows} columns={columns} />
+  if (dialog.type === "help") return <HelpDialog rows={rows} columns={columns} />
+  if (dialog.type === "alert") return <AlertPane dialog={dialog} rows={rows} columns={columns} />
   return null
 }
 

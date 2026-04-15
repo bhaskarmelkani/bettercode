@@ -3,18 +3,45 @@ import { Box, Text } from "ink"
 import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
 import { useTheme } from "../theme-context"
 
+const PATCH_ROWS = 25
+
 interface Props {
   diffs: SnapshotFileDiff[]
   open: boolean
+  onToggle?: () => void
 }
 
-function line(text: string, rows: number) {
-  const out = text.split(/\r?\n/)
-  if (out.length <= rows) return text
-  return `${out.slice(0, rows).join("\n")}\n… ${out.length - rows} more lines`
+function PatchLines({ patch }: { patch: string }) {
+  const theme = useTheme()
+  const all = patch.split(/\r?\n/)
+  const visible =
+    all.length > PATCH_ROWS ? [...all.slice(0, PATCH_ROWS), `… ${all.length - PATCH_ROWS} more lines`] : all
+  return (
+    <>
+      {visible.map((ln, i) => (
+        <Text
+          key={i}
+          color={
+            ln.startsWith("+++") || ln.startsWith("---")
+              ? theme.subtext
+              : ln.startsWith("+")
+                ? theme.green
+                : ln.startsWith("-")
+                  ? theme.red
+                  : ln.startsWith("@@")
+                    ? theme.cyan
+                    : theme.overlay
+          }
+          wrap="wrap"
+        >
+          {ln}
+        </Text>
+      ))}
+    </>
+  )
 }
 
-export function MessageDiff({ diffs, open }: Props) {
+export function MessageDiff({ diffs, open, onToggle }: Props) {
   const theme = useTheme()
   if (diffs.length === 0) return null
 
@@ -30,6 +57,7 @@ export function MessageDiff({ diffs, open }: Props) {
         </Text>
         <Text color={theme.green}>{`+${add}`}</Text>
         <Text color={theme.red}>{`-${del}`}</Text>
+        {onToggle && <Text color={theme.overlay}> ctrl+g: expand</Text>}
       </Box>
 
       {diffs.map((item) => (
@@ -49,9 +77,7 @@ export function MessageDiff({ diffs, open }: Props) {
 
           {open && (
             <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.surface0} flexDirection="column">
-              <Text color={theme.overlay} wrap="wrap">
-                {line(item.patch, 12)}
-              </Text>
+              <PatchLines patch={item.patch} />
             </Box>
           )}
         </Box>

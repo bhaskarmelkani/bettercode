@@ -128,9 +128,11 @@ export function QuestionPrompt({ request, columns, rows }: Props) {
         ]
       : []),
   ]
-  const hs = items.map((item) => {
+  // Height per item: label + description only for focused item + custom input row
+  const hs = items.map((item, i) => {
+    const isFocused = i === (typing && showCustom ? opts.length : optIdx)
     const lead = wraps(item.label, label)
-    const tail = item.description ? wraps(item.description, desc) + 1 : 0
+    const tail = isFocused && item.description ? wraps(item.description, desc) : 0
     const input = item.custom && typing ? 1 : 0
     return lead + tail + input
   })
@@ -165,30 +167,24 @@ export function QuestionPrompt({ request, columns, rows }: Props) {
           const sel = i === optIdx && !typing
           const own = item.custom
           const active = own && (optIdx === opts.length || typing)
+          const focused = sel || active
           return (
-            <Box
-              key={item.key}
-              flexDirection="column"
-              borderLeft={sel || active}
-              borderColor={theme.cyan}
-              paddingLeft={sel || active ? 1 : 2}
-              marginBottom={item.description ? 1 : 0}
-            >
+            <Box key={item.key} flexDirection="column" paddingLeft={2}>
               <Box>
-                <Text color={sel || active ? theme.cyan : theme.overlay}>{sel || active ? "▶ " : "  "}</Text>
-                <Text color={sel || active ? theme.text : own ? theme.overlay : theme.subtext} bold={sel || active} wrap="wrap">
+                <Text color={focused ? theme.cyan : theme.overlay}>{focused ? "> " : "  "}</Text>
+                <Text color={focused ? theme.text : own ? theme.overlay : theme.subtext} bold={focused} wrap="wrap">
                   {item.label}
                 </Text>
               </Box>
-              {item.description && (
-                <Box paddingLeft={2}>
-                  <Text color={theme.overlay} wrap="wrap">
+              {focused && item.description && (
+                <Box paddingLeft={4}>
+                  <Text color={theme.subtext} wrap="wrap">
                     {item.description}
                   </Text>
                 </Box>
               )}
               {own && typing ? (
-                <Box paddingLeft={2}>
+                <Box paddingLeft={4}>
                   <TextInput
                     key={`${request.id}:${qIdx}`}
                     defaultValue={custom}

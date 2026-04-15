@@ -1,7 +1,6 @@
 {
   "name": "@opencode-ai/tui-ink",
   "version": "0.0.1",
-  "private": true,
   "type": "module",
   "main": "./src/index.tsx",
   "exports": {
@@ -9,6 +8,7 @@
   },
   "scripts": {
     "dev": "bun run src/index.tsx",
+    "build": "bun build src/index.tsx --outdir dist --target bun",
     "snapshots": "bun run script/snapshot.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test test/",

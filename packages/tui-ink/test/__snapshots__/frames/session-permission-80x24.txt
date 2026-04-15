@@ -1,6 +1,6 @@
 bettercode ─ feat/ui-snapshots ─ 1 session                                 ready
 
- • Please update the snapshot harness and save the results.
+ ● Please update the snapshot harness and save the results.
 
      ◆ I need permission before writing new test artifacts.
 
@@ -13,12 +13,12 @@ bettercode ─ feat/ui-snapshots ─ 1 session                                 r
 
 
 
-   permission  answer below
+   Allow editing files in            packages/tui-ink/src/**, packages/tui-in…
+  packages/tui-ink?
 
-  Allow editing files in packages/tui-ink?
 
-  packages/tui-ink/src/**, packages/tui-ink/test/**
+  y allow once  a always  n deny  t auto-accept all
 
-   y  allow once
+  stash: Draft: keep the dock compact on 80x24 (ctrl+y to restore)
 
- ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · y: allow · a: allow all…
+ ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · y: allow · a: allow all…─

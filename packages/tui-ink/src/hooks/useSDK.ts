@@ -217,6 +217,7 @@ async function bootstrap(client: ReturnType<typeof createOpencodeClient>, direct
 export function useSDK({ url, directory, headers }: Opts) {
   const setClient = useAppStore((s) => s.setClient)
   const setSyncStatus = useAppStore((s) => s.setSyncStatus)
+  const reconnectTick = useAppStore((s) => s.reconnectTick)
 
   // Keep a ref so the inner async loop can check liveness without stale closure
   const abortRef = useRef<AbortController | null>(null)
@@ -281,5 +282,6 @@ export function useSDK({ url, directory, headers }: Opts) {
       abort.abort()
       abortRef.current = null
     }
-  }, [url, directory])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, directory, reconnectTick])
 }

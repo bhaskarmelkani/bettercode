@@ -9,46 +9,74 @@ interface Props {
   columns: number
 }
 
+function permColor(permission: string, theme: ReturnType<typeof useTheme>) {
+  const p = permission.toLowerCase()
+  if (p.includes("write") || p.includes("edit") || p.includes("delete")) return theme.red
+  if (p.includes("execute") || p.includes("bash") || p.includes("run")) return theme.yellow
+  return theme.cyan
+}
+
 export function PermissionPrompt({ request, columns }: Props) {
   const theme = useTheme()
   const reply = useAppStore((s) => s.replyPermission)
+  const toggleAutoAccept = useAppStore((s) => s.toggleAutoAcceptPermissions)
 
   useInput((input) => {
     if (input === "y") reply(request.id, "once")
     else if (input === "a") reply(request.id, "always")
     else if (input === "n" || input === "r") reply(request.id, "reject")
+    else if (input === "t") {
+      toggleAutoAccept()
+      reply(request.id, "always")
+    }
   })
 
-  const patterns = request.patterns.join(", ")
+  const color = permColor(request.permission, theme)
+
+  // Metadata entries — exclude "pattern" since we show request.patterns separately
+  const meta = Object.entries(request.metadata ?? {}).filter(
+    ([k, v]) => k !== "pattern" && typeof v === "string" && v,
+  ) as [string, string][]
 
   return (
     <Box flexDirection="column" width={columns} paddingX={2} paddingY={1} flexShrink={0}>
-      <Box marginBottom={1}>
-        <Text backgroundColor={theme.yellow} color={theme.base}>
-          {" permission "}
+      {/* Header: colored permission badge + patterns on the same line */}
+      <Box gap={1} marginBottom={request.patterns.length > 0 || meta.length > 0 ? 1 : 0}>
+        <Text backgroundColor={color} color={theme.base}>
+          {` ${request.permission} `}
         </Text>
-        <Text color={theme.overlay}> answer below</Text>
+        {request.patterns.length > 0 && (
+          <Text color={theme.subtext} wrap="truncate-end">
+            {request.patterns.join(", ")}
+          </Text>
+        )}
       </Box>
-      <Text color={theme.text} wrap="wrap">
-        {request.permission}
-      </Text>
-      {patterns && (
-        <Box marginTop={1}>
-          <Text color={theme.subtext} wrap="wrap">
-            {patterns}
+
+      {/* Extra metadata (tool name, extra context) */}
+      {meta.map(([k, v]) => (
+        <Box key={k}>
+          <Text color={theme.overlay}>{k}: </Text>
+          <Text color={theme.subtext} wrap="truncate-end">
+            {v}
           </Text>
         </Box>
-      )}
-      <Box marginTop={1} flexDirection="column">
-        <Text backgroundColor={theme.mantle} color={theme.subtext}>
-          {" y  allow once".padEnd(Math.max(0, columns), " ")}
+      ))}
+
+      {/* Inline action hints */}
+      <Box marginTop={1} gap={2}>
+        <Text>
+          <Text color={theme.text} bold>y</Text>
+          <Text color={theme.overlay}> allow once</Text>
         </Text>
-        <Text backgroundColor={theme.mantle} color={theme.subtext}>
-          {" a  always allow".padEnd(Math.max(0, columns), " ")}
+        <Text>
+          <Text color={theme.text} bold>a</Text>
+          <Text color={theme.overlay}> always</Text>
         </Text>
-        <Text backgroundColor={theme.mantle} color={theme.subtext}>
-          {" n  reject".padEnd(Math.max(0, columns), " ")}
+        <Text>
+          <Text color={theme.text} bold>n</Text>
+          <Text color={theme.overlay}> deny</Text>
         </Text>
+        <Text color={theme.surface2}>t auto-accept all</Text>
       </Box>
     </Box>
   )

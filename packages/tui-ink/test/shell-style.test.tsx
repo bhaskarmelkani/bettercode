@@ -122,7 +122,6 @@ describe("shell style regressions", () => {
 
     expect(frame.text).toContain("Model current: gpt-5-mini")
     expect(frame.text).toContain("GPT-5 mini (0x)  github-copilot ✓")
-    expect(frame.text).toContain("model: gpt-5-mini")
   })
 
   test("shell source files keep background-free styling invariants", async () => {
@@ -140,7 +139,6 @@ describe("shell style regressions", () => {
     expect(slash).toContain('cmd.source === "skill" ? "SKILL"')
     expect(slash).toContain('cmd.source === "command" ? "CMD"')
     expect(slash).toContain('"LOCAL"')
-    expect(prompt).toContain("backgroundColor={theme.yellow}")
-    expect(prompt).toContain("backgroundColor={theme.mantle}")
+    expect(prompt).toContain("backgroundColor={color}")
   })
 })

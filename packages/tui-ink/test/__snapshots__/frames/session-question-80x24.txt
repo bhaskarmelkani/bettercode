@@ -1,5 +1,5 @@
 bettercode ─ feat/ui-snapshots ─ 1 session                                 ready
- • Which snapshot should we inspect first?
+ ● Which snapshot should we inspect first?
 
      ◆ Choose the surface that best reflects the current UI risk.
 
@@ -11,11 +11,11 @@ bettercode ─ feat/ui-snapshots ─ 1 session                                 r
 
   Which snapshot should we inspect first?
 
-   ▶  home
-     check startup hierarchy and dock spacing
-
+    > home
+        check startup hierarchy and dock spacing
       session
-      inspect transcript balance and tool density
+      prompts
+      Type a custom answer
 
 
   stash: Draft: keep the dock compact on 80x24 (ctrl+y to restore)

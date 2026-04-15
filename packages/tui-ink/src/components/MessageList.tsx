@@ -199,6 +199,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const savedPos = useAppStore((s) => s.scrollPos[sessionID] ?? 0)
   const setScrollPos = useAppStore((s) => s.setScrollPos)
   const loadMessageDiff = useAppStore((s) => s.loadMessageDiff)
+  const toggleDiffCollapse = useAppStore((s) => s.toggleDiffCollapse)
   const messageDiff = useAppStore((s) => s.messageDiff)
   const collapsedDiffs = useAppStore((s) => s.collapsedDiffs)
   const collapsedTools = useAppStore((s) => s.collapsedTools)
@@ -387,6 +388,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
               isLast={msg.id === last?.id}
               diffs={messageDiff[msg.id] ?? EMPTY_DIFF}
               diffOpen={!(collapsedDiffs[msg.id] ?? true)}
+              onToggleDiff={(messageDiff[msg.id]?.length ?? 0) > 0 ? () => toggleDiffCollapse(msg.id) : undefined}
             />
           )
         })}

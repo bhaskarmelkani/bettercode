@@ -32,6 +32,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const composerStatus = useAppStore((s) => s.composerStatus)
   const loadMessages = useAppStore((s) => s.loadMessages)
   const toggleDiffCollapse = useAppStore((s) => s.toggleDiffCollapse)
+  const retryBootstrap = useAppStore((s) => s.retryBootstrap)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Lazy-load messages when this session becomes active
@@ -90,12 +91,29 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
       if (key.ctrl && _input === "b") {
         if (columns >= SIDEBAR_MIN) setSidebarOpen((v) => !v)
       }
+      if (syncStatus === "partial" && _input === "r") {
+        retryBootstrap()
+        return
+      }
       if (key.ctrl && _input === "g") {
+        // Cycle through all assistant messages that have diffs, toggling one at a time.
+        // If all are collapsed, expand the most recent; otherwise collapse all.
         const state = useAppStore.getState()
-        const hit = [...(state.messages[sessionID] ?? [])]
-          .reverse()
-          .find((msg) => msg.role === "assistant" && (state.messageDiff[msg.id]?.length ?? 0) > 0)
-        if (hit) toggleDiffCollapse(hit.id)
+        const withDiffs = (state.messages[sessionID] ?? []).filter(
+          (msg) => msg.role === "assistant" && (state.messageDiff[msg.id]?.length ?? 0) > 0,
+        )
+        if (withDiffs.length === 0) return
+        const allCollapsed = withDiffs.every((msg) => state.collapsedDiffs[msg.id] !== false)
+        if (allCollapsed) {
+          // Expand only the most recent
+          const last = withDiffs[withDiffs.length - 1]
+          if (last) toggleDiffCollapse(last.id)
+        } else {
+          // Collapse all that are open
+          for (const msg of withDiffs) {
+            if (state.collapsedDiffs[msg.id] === false) toggleDiffCollapse(msg.id)
+          }
+        }
       }
     },
     { isActive: active },
@@ -121,7 +139,8 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
     return (
       <Box height={rows} width={columns} justifyContent="center" alignItems="center" flexDirection="column">
         <Text color={theme.red}>Server connection failed.</Text>
-        <Text color={theme.subtext}>Check that the bettercode server is running, then restart.</Text>
+        <Text color={theme.subtext}>Check that the server is running, then restart bettercode.</Text>
+        <Text color={theme.overlay}>r: retry</Text>
       </Box>
     )
   }
