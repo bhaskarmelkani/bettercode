@@ -1,0 +1,40 @@
+
+
+
+
+
+
+
+
+
+
+
+
+                                   bettercode
+
+                                   ⎇ feat/ui-snapshots  ·  2 providers  ·  bettercode
+
+
+                                   recent sessions
+                                     · Build snapshot harness
+                                     · Tighten transcript hierarchy
+                                     · Refine dock prompts
+
+
+                                   start with a prompt or resume a recent session
+
+
+
+
+
+
+
+
+
+
+
+  stash: Draft: keep the dock compact on 80x24 (ctrl+y to restore)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Type a message... (/ for commands, @ for files)
+ ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · ctrl+k: commands

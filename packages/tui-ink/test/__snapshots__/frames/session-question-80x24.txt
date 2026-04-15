@@ -1,0 +1,24 @@
+
+ • Which snapshot should we inspect first?
+
+     ◆ Choose the surface that best reflects the current UI risk.
+
+   build · gpt-5.4 · 1.4s · 2.5k tokens
+
+
+
+   question  answer below
+
+  Which snapshot should we inspect first?
+
+   ▶  home
+     check startup hierarchy and dock spacing
+
+      session
+      inspect transcript balance and tool density
+
+
+  stash: Draft: keep the dock compact on 80x24 (ctrl+y to restore)
+
+────────────────────────────────────────────────────────────────────────────────
+ ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · ↑↓: navigate · enter: s…
