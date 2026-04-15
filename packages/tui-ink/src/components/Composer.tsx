@@ -31,12 +31,13 @@ const LEAD = 3
 interface Props {
   onSubmit: (text: string, files?: FilePartInput[]) => void
   onAbort: () => void
+  onSteer?: (text: string, files?: FilePartInput[]) => void
   active: boolean
   generating: boolean
   width: number
 }
 
-export function Composer({ onSubmit, onAbort, active, generating, width }: Props) {
+export function Composer({ onSubmit, onAbort, onSteer, active, generating, width }: Props) {
   const theme = useTheme()
   const {
     value,
@@ -72,9 +73,9 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
   const mentions = useMentions(value, cursor, setValue)
   const slash = useSlashCommands(value, mentions.active, clear, setValue)
 
-  // Blink caret when idle and active. Freeze (off) when inactive or generating.
+  // Blink caret when active. Freeze (off) when inactive.
   useEffect(() => {
-    if (!active || generating) {
+    if (!active) {
       setCaretOn(false)
       return
     }
@@ -83,7 +84,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
       clearInterval(t)
       setCaretOn(true)
     }
-  }, [generating, active])
+  }, [active])
 
   // Handle server-appended text
   useEffect(() => {
@@ -97,9 +98,9 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
     setComposerLines(Math.min(MAX_VISIBLE, lineCount(value)))
   }, [value])
 
-  function submit(text: string) {
+  function buildSubmission(text: string) {
     const trimmed = text.trim()
-    if (!trimmed) return
+    if (!trimmed) return null
     pushPromptHistory(trimmed)
     setHistIdx(null)
     setDraft("")
@@ -107,15 +108,121 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
     slash.setIdx(0)
     mentions.setAttachments([])
     const files = mentions.buildFileParts()
-    onSubmit(trimmed, files.length > 0 ? files : undefined)
+    return { trimmed, files: files.length > 0 ? files : undefined }
   }
 
-  // When generating: only Ctrl+C (abort) is handled. This frees up arrow keys
-  // so the message list can be scrolled while the model is responding.
+  function submit(text: string) {
+    const result = buildSubmission(text)
+    if (result) onSubmit(result.trimmed, result.files)
+  }
+
+  function steer(text: string) {
+    const result = buildSubmission(text)
+    if (result) onSteer?.(result.trimmed, result.files)
+  }
+
+  // When generating: handle text editing and queue/steer submission.
+  // Arrow keys are intentionally NOT consumed so they flow to MessageList for scrolling.
   useInput(
     (input, key) => {
       if (key.ctrl && input === "c") {
         onAbort()
+        return
+      }
+
+      // Ctrl+S → steer (send immediately, bypassing queue)
+      if (key.ctrl && input === "s") {
+        steer(value)
+        return
+      }
+
+      if (key.ctrl && input === "u") {
+        clear()
+        setHistIdx(null)
+        slash.setIdx(0)
+        mentions.clear()
+        return
+      }
+
+      if (key.ctrl && input === "x") {
+        if (value) {
+          setPromptStash(value)
+          clear()
+          setHistIdx(null)
+          slash.setIdx(0)
+        }
+        return
+      }
+
+      if (key.ctrl && input === "y") {
+        if (stash) {
+          setValue((v) => v + stash)
+          setPromptStash(null)
+        }
+        return
+      }
+
+      if (key.ctrl && input === "a") {
+        home()
+        return
+      }
+
+      if (key.ctrl && input === "e") {
+        end()
+        return
+      }
+
+      if (key.ctrl && input === "w") {
+        const next = textDelWord(value, cursor)[0]
+        deleteWord()
+        mentions.update(next)
+        return
+      }
+
+      if (key.return) {
+        submit(value)
+        return
+      }
+
+      if (key.backspace) {
+        const next = textDelAt(value, cursor)[0]
+        del()
+        slash.setIdx(0)
+        mentions.update(next)
+        return
+      }
+
+      if (key.delete) {
+        const next = textDelKey(value, cursor)[0]
+        deleteKey()
+        slash.setIdx(0)
+        mentions.update(next)
+        return
+      }
+
+      if (key.leftArrow || key.rightArrow) {
+        // Allow left/right within composer while generating
+        if (key.leftArrow) moveLeft()
+        else moveRight()
+        return
+      }
+
+      // Terminal escape sequences (Shift+Enter → newline)
+      if (input && /^\[[\d;]+[A-Za-z~]$/.test(input)) {
+        if (SHIFT_ENTER.has(input)) newline()
+        return
+      }
+
+      if (key.ctrl || key.meta) return
+
+      if (input && (input.startsWith("[<") || input.startsWith("[M"))) return
+
+      if (input) {
+        const next = textInsertAt(value, cursor, input)[0]
+        insert(input)
+        slash.setIdx(0)
+        if (mentions.trigger(input)) return
+        mentions.update(next)
       }
     },
     { isActive: active && generating },
@@ -336,7 +443,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
   )
 
   const placeholder = generating
-    ? "Generating... (↑↓ scroll · ctrl+c abort)"
+    ? "Type to queue... (↑↓ scroll · ctrl+s steer · ctrl+c abort)"
     : "Type a message... (/ for commands, @ for files)"
 
   // Compute visible window for multi-line input.
@@ -402,7 +509,7 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
         {!slash.visible && !mentions.visible && (
           <Box height={1}>
             {generating ? (
-              <Spinner label=" generating  ↑↓ scroll · ctrl+c abort" />
+              <Spinner label=" generating  ↑↓ scroll · enter: queue · ctrl+s: steer · ctrl+c: abort" />
             ) : (
               <Text> </Text>
             )}
@@ -412,68 +519,60 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
         {/* Separator — prominent divider between content and input */}
         <Text color={theme.surface2}>{"─".repeat(width)}</Text>
 
-        {/* Input area — single or multi-line */}
-        {generating ? (
-          <Box flexDirection="row">
-            <Text color={theme.overlay}>{">"}</Text>
-            <Text>{"  "}</Text>
-            <Text color={theme.overlay} dimColor>{"waiting for response..."}</Text>
-          </Box>
-        ) : (
-          <Box flexDirection="column">
-            {visLines.map((line, vi) => {
-              const absIdx = viewStart + vi
-              const lineStart = allStarts[absIdx]!
-              const onLine = absIdx === curLine
-              const col = onLine ? cursor - lineStart : -1
-              const txt = active ? theme.text : theme.subtext
-              const glyph = active ? theme.cyan : theme.overlay
-              const body = !value ? placeholder : line || " "
-              const fill = Math.max(0, width - LEAD - body.length)
+        {/* Input area — always live (supports typing while generating for queue/steer) */}
+        <Box flexDirection="column">
+          {visLines.map((line, vi) => {
+            const absIdx = viewStart + vi
+            const lineStart = allStarts[absIdx]!
+            const onLine = absIdx === curLine
+            const col = onLine ? cursor - lineStart : -1
+            const txt = active ? theme.text : theme.subtext
+            const glyph = active ? theme.cyan : theme.overlay
+            const body = !value ? placeholder : line || " "
+            const fill = Math.max(0, width - LEAD - body.length)
 
-              return (
-                <Box key={absIdx} flexDirection="row">
-                  <Text color={glyph} backgroundColor={field}>
-                    {vi === 0 && viewStart === 0 ? ">" : " "}
-                  </Text>
-                  <Text backgroundColor={field}>
-                    {"  "}
-                  </Text>
-                  {onLine ? (
-                    <>
-                      {col > 0 && (
-                        <Text color={txt} backgroundColor={field}>
-                          {line.slice(0, col)}
-                        </Text>
-                      )}
-                      <Text backgroundColor={caretOn ? theme.cyan : field} color={caretOn ? theme.base : txt}>
-                        {col < line.length ? line[col] : " "}
-                      </Text>
-                      {col < line.length && (
-                        <Text color={txt} backgroundColor={field}>
-                          {line.slice(col + 1)}
-                        </Text>
-                      )}
-                      {!value && (
-                        <Text color={theme.subtext} backgroundColor={field}>
-                          {placeholder}
-                        </Text>
-                      )}
-                      {fill > 0 ? <Text backgroundColor={field}>{" ".repeat(fill)}</Text> : null}
-                    </>
-                  ) : (
-                    <>
+            return (
+              <Box key={absIdx} flexDirection="row">
+                <Text color={glyph} backgroundColor={field}>
+                  {vi === 0 && viewStart === 0 ? ">" : " "}
+                </Text>
+                <Text backgroundColor={field}>
+                  {"  "}
+                </Text>
+                {onLine ? (
+                  <>
+                    {col > 0 && (
                       <Text color={txt} backgroundColor={field}>
-                        {line || " "}
+                        {line.slice(0, col)}
                       </Text>
-                      {fill > 0 ? <Text backgroundColor={field}>{" ".repeat(fill)}</Text> : null}
-                    </>
-                  )}
-                </Box>
-              )
-            })}
-          </Box>
-        )}
+                    )}
+                    <Text backgroundColor={caretOn ? theme.cyan : field} color={caretOn ? theme.base : txt}>
+                      {col < line.length ? line[col] : " "}
+                    </Text>
+                    {col < line.length && (
+                      <Text color={txt} backgroundColor={field}>
+                        {line.slice(col + 1)}
+                      </Text>
+                    )}
+                    {!value && (
+                      <Text color={theme.subtext} backgroundColor={field}>
+                        {placeholder}
+                      </Text>
+                    )}
+                    {fill > 0 ? <Text backgroundColor={field}>{" ".repeat(fill)}</Text> : null}
+                  </>
+                ) : (
+                  <>
+                    <Text color={txt} backgroundColor={field}>
+                      {line || " "}
+                    </Text>
+                    {fill > 0 ? <Text backgroundColor={field}>{" ".repeat(fill)}</Text> : null}
+                  </>
+                )}
+              </Box>
+            )
+          })}
+        </Box>
       </Box>
     </Box>
   )

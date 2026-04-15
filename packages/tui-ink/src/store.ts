@@ -53,6 +53,12 @@ export type Toast = {
   duration: number
 }
 
+export type PromptQueueItem = {
+  id: string
+  text: string
+  files?: FilePartInput[]
+}
+
 export interface AppState {
   // SDK
   client: OpencodeClient | null
@@ -104,6 +110,9 @@ export interface AppState {
 
   // Composer status (used by legacy stream rendering)
   composerStatus: "idle" | "generating" | "error"
+
+  // Per-session prompt queue (messages typed while generating)
+  promptQueue: Record<string, PromptQueueItem[]>
 
   // Model / agent selection
   currentModel: { providerID: string; modelID: string } | undefined
@@ -190,6 +199,10 @@ export interface AppState {
   removePermission: (sessionID: string, requestID: string) => void
   upsertQuestion: (req: QuestionRequest) => void
   removeQuestion: (sessionID: string, requestID: string) => void
+
+  enqueuePrompt: (sessionID: string, text: string, files?: FilePartInput[]) => void
+  dequeuePrompt: (sessionID: string, id: string) => void
+  clearQueue: (sessionID: string) => void
 
   sendPrompt: (sessionID: string, text: string, files?: FilePartInput[]) => Promise<void>
   abortSession: (sessionID: string) => Promise<void>
@@ -288,6 +301,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   permissions: {},
   questions: {},
   composerStatus: "idle",
+  promptQueue: {},
   showThinking: false,
   autoAcceptPermissions: false,
   reconnectTick: 0,
@@ -514,6 +528,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (found) arr.splice(index, 1)
       return { questions: { ...prev.questions, [sessionID]: arr } }
     }),
+
+  enqueuePrompt: (sessionID, text, files) =>
+    set((prev) => ({
+      promptQueue: {
+        ...prev.promptQueue,
+        [sessionID]: [...(prev.promptQueue[sessionID] ?? []), { id: crypto.randomUUID(), text, files }],
+      },
+    })),
+
+  dequeuePrompt: (sessionID, id) =>
+    set((prev) => ({
+      promptQueue: {
+        ...prev.promptQueue,
+        [sessionID]: (prev.promptQueue[sessionID] ?? []).filter((item) => item.id !== id),
+      },
+    })),
+
+  clearQueue: (sessionID) =>
+    set((prev) => ({ promptQueue: { ...prev.promptQueue, [sessionID]: [] } })),
 
   sendPrompt: async (sessionID, text, files) => {
     const { client, currentModel, currentAgent, mode, commands, providerConnected } = get()

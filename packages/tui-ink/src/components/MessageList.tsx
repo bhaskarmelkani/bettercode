@@ -251,8 +251,8 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   maxRowOffsetRef.current = maxRowOffset
 
   // Absolute top position of the content box inside the clipping container.
-  // rowOffset=0  → absoluteTop = -(totalHeight-height)  → shows BOTTOM of content
-  // rowOffset=max → absoluteTop = 0                     → shows TOP of content
+  // Short content (fits in viewport): start at top (blank space falls naturally below last message).
+  // Long content: negative margin scrolls content up; rowOffset=0 shows bottom, max shows top.
   const absoluteTop = totalHeight > height ? -(totalHeight - height - clampedOffset) : 0
 
   // ---------------------------------------------------------------------------

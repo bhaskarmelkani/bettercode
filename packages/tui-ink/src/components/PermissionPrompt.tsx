@@ -9,6 +9,25 @@ interface Props {
   columns: number
 }
 
+const permLabels: Record<string, string> = {
+  glob: "search files",
+  read: "read file",
+  write: "write file",
+  edit: "edit file",
+  patch: "patch file",
+  bash: "run command",
+  execute: "run command",
+  delete: "delete file",
+  list: "list directory",
+  fetch: "fetch url",
+  web: "web request",
+  mcp: "mcp tool",
+}
+
+function permLabel(permission: string) {
+  return permLabels[permission.toLowerCase()] ?? permission
+}
+
 function permColor(permission: string, theme: ReturnType<typeof useTheme>) {
   const p = permission.toLowerCase()
   if (p.includes("write") || p.includes("edit") || p.includes("delete")) return theme.red
@@ -43,7 +62,7 @@ export function PermissionPrompt({ request, columns }: Props) {
       {/* Header: colored permission badge + patterns on the same line */}
       <Box gap={1} marginBottom={request.patterns.length > 0 || meta.length > 0 ? 1 : 0}>
         <Text backgroundColor={color} color={theme.base}>
-          {` ${request.permission} `}
+          {` ${permLabel(request.permission)} `}
         </Text>
         {request.patterns.length > 0 && (
           <Text color={theme.subtext} wrap="truncate-end">

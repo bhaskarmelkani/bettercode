@@ -27,6 +27,10 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const vcs = useAppStore((s) => s.vcs)
   const sendPrompt = useAppStore((s) => s.sendPrompt)
   const abortSession = useAppStore((s) => s.abortSession)
+  const enqueuePrompt = useAppStore((s) => s.enqueuePrompt)
+  const dequeuePrompt = useAppStore((s) => s.dequeuePrompt)
+  const clearQueue = useAppStore((s) => s.clearQueue)
+  const queue = useAppStore(useShallow((s) => s.promptQueue[sessionID] ?? []))
   const dir = useAppStore((s) => s.directory)
   const status = useAppStore((s) => s.sessionStatus[sessionID])
   const composerStatus = useAppStore((s) => s.composerStatus)
@@ -74,7 +78,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const SIDEBAR_WIDTH = 32
   const SIDEBAR_MIN = 120
 
-  const dockRows = dockHeight({ rows, dialog, permissions, questions, inputLines: composerLines })
+  const dockRows = dockHeight({ rows, dialog, permissions, questions, inputLines: composerLines, queueLength: queue.length })
   const listHeight = Math.max(1, rows - 2 - dockRows)
   const mainWidth = Math.max(1, sidebarOpen ? columns - SIDEBAR_WIDTH : columns)
 
@@ -119,8 +123,16 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
     { isActive: active },
   )
 
-  const handleSubmit = async (text: string) => {
-    await sendPrompt(sessionID, text)
+  const handleSubmit = async (text: string, files?: import("@opencode-ai/sdk/v2").FilePartInput[]) => {
+    if (generating) {
+      enqueuePrompt(sessionID, text, files)
+    } else {
+      await sendPrompt(sessionID, text, files)
+    }
+  }
+
+  const handleSteer = async (text: string, files?: import("@opencode-ai/sdk/v2").FilePartInput[]) => {
+    await sendPrompt(sessionID, text, files)
   }
 
   const handleAbort = () => {
@@ -177,8 +189,12 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
               generating={generating}
               onSubmit={handleSubmit}
               onAbort={handleAbort}
+              onSteer={handleSteer}
               permissions={permissions}
               questions={questions}
+              queue={queue}
+              onDequeue={(id) => dequeuePrompt(sessionID, id)}
+              onClearQueue={() => clearQueue(sessionID)}
             />
           </ErrorBoundary>
         </Box>

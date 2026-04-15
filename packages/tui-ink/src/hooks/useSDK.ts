@@ -71,12 +71,20 @@ function dispatch(e: Event) {
       store.setSessionStatus(e.properties.sessionID, e.properties.status)
       break
 
-    case "session.idle":
+    case "session.idle": {
       // Flush any buffered deltas before marking idle so the final chunk renders
       flushDeltas()
-      store.setSessionStatus(e.properties.sessionID, { type: "idle" })
+      const sid = e.properties.sessionID
+      store.setSessionStatus(sid, { type: "idle" })
       store.setComposerStatus("idle")
+      // Process next queued prompt, if any
+      const next = store.promptQueue[sid]?.[0]
+      if (next) {
+        store.dequeuePrompt(sid, next.id)
+        store.sendPrompt(sid, next.text, next.files)
+      }
       break
+    }
 
     case "session.error":
       flushDeltas()

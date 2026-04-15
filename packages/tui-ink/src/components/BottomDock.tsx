@@ -1,10 +1,11 @@
 import React from "react"
 import { Box, Text, useInput } from "ink"
 import type { FilePartInput, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
-import type { Dialog } from "../store"
+import type { Dialog, PromptQueueItem } from "../store"
 import { useAppStore } from "../store"
 import { useTheme } from "../theme-context"
 import { Composer } from "./Composer"
+import { PromptQueue, queueRows } from "./PromptQueue"
 import { CommandPalette } from "./CommandPalette"
 import { SessionListDialog } from "./SessionListDialog"
 import { ProviderDialog } from "./ProviderDialog"
@@ -29,6 +30,7 @@ export function dockHeight(input: {
   permissions?: PermissionRequest[]
   questions?: QuestionRequest[]
   inputLines?: number
+  queueLength?: number
 }) {
   if (input.dialog && PANELS.has(input.dialog.type)) {
     return Math.max(1, Math.min(input.rows - 3, paneRows))
@@ -37,7 +39,8 @@ export function dockHeight(input: {
   if (input.questions?.length) return Math.max(1, Math.min(input.rows - 3, base + quest))
   // base + extra rows for each additional input line (capped at 14 extra = 15 visible lines)
   const extra = Math.max(0, Math.min(14, (input.inputLines ?? 1) - 1))
-  return Math.max(1, Math.min(input.rows - 3, base + extra))
+  const queue = queueRows(input.queueLength ?? 0)
+  return Math.max(1, Math.min(input.rows - 3, base + extra + queue))
 }
 
 interface Props {
@@ -48,8 +51,12 @@ interface Props {
   generating: boolean
   onSubmit: (text: string, files?: FilePartInput[]) => void | Promise<void>
   onAbort: () => void
+  onSteer?: (text: string, files?: FilePartInput[]) => void
   permissions?: PermissionRequest[]
   questions?: QuestionRequest[]
+  queue?: PromptQueueItem[]
+  onDequeue?: (id: string) => void
+  onClearQueue?: () => void
 }
 
 function AlertPane({ dialog, rows, columns }: { dialog: Extract<Dialog, { type: "alert" }>; rows: number; columns: number }) {
@@ -88,8 +95,12 @@ export function BottomDock({
   generating,
   onSubmit,
   onAbort,
+  onSteer,
   permissions,
   questions,
+  queue,
+  onDequeue,
+  onClearQueue,
 }: Props) {
   const theme = useTheme()
   const dlg = dialog && PANELS.has(dialog.type) ? dialog : undefined
@@ -107,13 +118,27 @@ export function BottomDock({
     )
   }
 
+  const showQueue = !permissions?.length && !questions?.length && !!queue?.length
   return (
     <Box flexDirection="column" height={height} width={columns}>
       {permissions?.length ? <PermissionPrompt request={permissions[0]!} columns={columns} /> : null}
       {!permissions?.length && questions?.length ? (
         <QuestionPrompt request={questions[0]!} columns={columns} rows={Math.max(1, height - base)} />
       ) : null}
-      <Composer onSubmit={onSubmit} onAbort={onAbort} active={active} generating={generating} width={columns} />
+      {showQueue && (
+        <PromptQueue
+          items={queue!}
+          width={columns}
+        />
+      )}
+      <Composer
+        onSubmit={onSubmit}
+        onAbort={onAbort}
+        onSteer={onSteer}
+        active={active}
+        generating={generating}
+        width={columns}
+      />
     </Box>
   )
 }
