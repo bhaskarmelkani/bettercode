@@ -17,7 +17,7 @@ bettercode ─ feat/ui-snapshots ─ 2 sessions                                r
 
 
 
-  stash: Draft: keep the dock compact on 80x24 (ctrl+y to restore)
+  stash: Draft: keep the dock compact on 80x24 (stashed)
 
 ────────────────────────────────────────────────────────────────────────────────
    Type a message... (/ for commands, @ for files)

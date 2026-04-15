@@ -9,6 +9,7 @@ interface HeaderProps {
   sessionCount: number
   status: "idle" | "generating" | "error"
   width: number
+  hint?: string
 }
 
 function cut(text: string, max: number) {
@@ -18,13 +19,14 @@ function cut(text: string, max: number) {
   return `${text.slice(0, max - 1)}…`
 }
 
-export function Header({ projectName, gitBranch, sessionCount, status, width }: HeaderProps) {
+export function Header({ projectName, gitBranch, sessionCount, status, width, hint }: HeaderProps) {
   const theme = useTheme()
   const statusColor = status === "generating" ? theme.yellow : status === "error" ? theme.red : theme.green
   const project = cut(projectName, 24)
   const branch = cut(gitBranch, 24)
   const count = `${sessionCount} session${sessionCount === 1 ? "" : "s"}`
-  const right = status === "generating" ? "generating" : status === "error" ? "error" : "ready"
+  const spinnerLabel = status === "generating" ? ` ${hint ?? "generating"}` : undefined
+  const right = status === "generating" ? (hint ?? "generating") : status === "error" ? "error" : "ready"
   const leftLen = project.length + branch.length + count.length + 6
   const fill = Math.max(0, width - leftLen - right.length - (status === "generating" ? 1 : 0))
 
@@ -33,28 +35,12 @@ export function Header({ projectName, gitBranch, sessionCount, status, width }: 
       <Text color={theme.cyan} bold>
         {project}
       </Text>
-      <Text color={theme.overlay}>
-        {" "}
-        ─{" "}
-      </Text>
-      <Text color={theme.subtext}>
-        {branch}
-      </Text>
-      <Text color={theme.overlay}>
-        {" "}
-        ─{" "}
-      </Text>
-      <Text color={theme.subtext}>
-        {count}
-      </Text>
+      <Text color={theme.overlay}> ─ </Text>
+      <Text color={theme.subtext}>{branch}</Text>
+      <Text color={theme.overlay}> ─ </Text>
+      <Text color={theme.subtext}>{count}</Text>
       {fill > 0 ? <Text>{" ".repeat(fill)}</Text> : null}
-      {status === "generating" ? (
-        <Spinner label=" generating" />
-      ) : (
-        <Text color={statusColor}>
-          {right}
-        </Text>
-      )}
+      {status === "generating" ? <Spinner label={spinnerLabel} /> : <Text color={statusColor}>{right}</Text>}
     </Box>
   )
 }

@@ -13,6 +13,7 @@ import {
   textDelForward,
   textDelKey,
   textDelWord,
+  textKillLine,
   lineCount,
   cursorLineIdx,
   cursorLineUp,
@@ -222,6 +223,20 @@ describe("textDelWord — Ctrl+W delete word backward", () => {
     const [v, c] = textDelWord("abc   ", 6)
     expect(v).toBe("")
     expect(c).toBe(0)
+  })
+})
+
+describe("textKillLine — Ctrl+K kill to line end", () => {
+  test("kills to end of line", () => {
+    expect(textKillLine("hello world", 5)).toEqual(["hello", " world"])
+  })
+
+  test("kills newline when at end of line", () => {
+    expect(textKillLine("hello\nworld", 5)).toEqual(["helloworld", "\n"])
+  })
+
+  test("at end of string is no-op", () => {
+    expect(textKillLine("hello", 5)).toEqual(["hello", ""])
   })
 })
 

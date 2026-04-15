@@ -3,6 +3,7 @@ import { Box, Text } from "ink"
 import type { Message, Part } from "@opencode-ai/sdk/v2"
 import type { AssistantMsg } from "../types"
 import { useTheme } from "../theme-context"
+import { useAppStore } from "../store"
 import { TextPart } from "./parts/TextPart"
 import { ReasoningPart } from "./parts/ReasoningPart"
 import { ToolPart } from "./parts/ToolPart"
@@ -15,6 +16,7 @@ interface Props {
   parts: Part[]
   showThinking: boolean
   isLast: boolean
+  highlight?: boolean
   diffs?: SnapshotFileDiff[]
   diffOpen?: boolean
   onToggleDiff?: () => void
@@ -40,11 +42,13 @@ export const AssistantMessage = React.memo(function AssistantMessage({
   parts,
   showThinking,
   isLast,
+  highlight,
   diffs = [],
   diffOpen = false,
   onToggleDiff,
 }: Props) {
   const theme = useTheme()
+  const focusMode = useAppStore((s) => s.focusMode)
   if (message.role !== "assistant") return null
   const msg = message as AssistantMsg
 
@@ -65,12 +69,19 @@ export const AssistantMessage = React.memo(function AssistantMessage({
       marginTop={1}
       paddingLeft={2}
       borderLeft={true}
-      borderColor={theme.surface2}
+      borderColor={highlight ? theme.yellow : theme.surface2}
       flexShrink={0}
     >
-      {parts.map((part) => {
+      {parts.map((part, idx) => {
         if (part.type === "text") {
           if (part.synthetic || part.ignored) return null
+          if (focusMode) {
+            const last = parts.reduce(
+              (out, item, i) => (item.type === "text" && !item.synthetic && !item.ignored ? i : out),
+              -1,
+            )
+            if (idx !== last) return null
+          }
           const out = <TextPart key={part.id} part={part} lead={lead ? "◆" : undefined} />
           lead = false
           return out

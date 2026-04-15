@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react"
 import { Box, Text, useInput } from "ink"
+import type { ToolPart as ToolPartType } from "@opencode-ai/sdk/v2"
 import { useShallow } from "zustand/shallow"
 import { useAppStore } from "../store"
 import { Header } from "../components/Header"
 import { MessageList } from "../components/MessageList"
+import { SearchBar } from "../components/SearchBar"
 import { StatusBar } from "../components/StatusBar"
 import { Sidebar } from "../components/Sidebar"
 import { ToastOverlay } from "../components/ToastOverlay"
@@ -19,6 +21,8 @@ interface Props {
   active: boolean
   dialog?: Dialog
 }
+
+const HINTS = ["Thinking…", "Working…", "Processing…", "Reasoning…"]
 
 export function SessionScreen({ sessionID, rows, columns, active, dialog }: Props) {
   const theme = useTheme()
@@ -37,11 +41,19 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const loadMessages = useAppStore((s) => s.loadMessages)
   const toggleDiffCollapse = useAppStore((s) => s.toggleDiffCollapse)
   const retryBootstrap = useAppStore((s) => s.retryBootstrap)
+  const openSearch = useAppStore((s) => s.openSearch)
+  const searchMode = useAppStore((s) => s.searchMode)
+  const searchMatchCount = useAppStore((s) => s.searchMatchCount)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Lazy-load messages when this session becomes active
   useEffect(() => {
     loadMessages(sessionID)
+  }, [sessionID])
+
+  useEffect(() => {
+    useAppStore.getState().closeSearch()
+    if (useAppStore.getState().focusMode) useAppStore.getState().toggleFocusMode()
   }, [sessionID])
 
   // Permissions and questions for this session (and child sessions).
@@ -71,6 +83,25 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   // Derive generating from session status. composerStatus adds the brief
   // "optimistic" window between sendPrompt() and the first server event.
   const generating = status?.type === "busy" || composerStatus === "generating"
+  const hint = useAppStore((s) => {
+    if (!generating) return undefined
+    const last = (s.messages[sessionID] ?? []).findLast((m) => m.role === "assistant")
+    if (!last) return undefined
+    const tools = (s.parts[last.id] ?? []).filter((p): p is ToolPartType => p.type === "tool")
+    const running = tools.find((p) => p.state.status === "running")
+    const target = running ?? tools[tools.length - 1]
+    if (!target) return undefined
+    return "title" in target.state && target.state.title ? target.state.title : target.tool
+  })
+  const [verbIdx, setVerbIdx] = useState(0)
+
+  useEffect(() => {
+    if (!generating) return
+    const t = setInterval(() => setVerbIdx((i) => (i + 1) % HINTS.length), 2000)
+    return () => clearInterval(t)
+  }, [generating])
+
+  const spinnerHint = hint ?? HINTS[verbIdx]!
   // Error is only meaningful via composerStatus — session status doesn't carry error visibility.
   const isError = composerStatus === "error"
   const composerLines = useAppStore((s) => s.composerLines)
@@ -78,13 +109,22 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const SIDEBAR_WIDTH = 32
   const SIDEBAR_MIN = 120
 
-  const dockRows = dockHeight({ rows, dialog, permissions, questions, inputLines: composerLines, queueLength: queue.length })
-  const listHeight = Math.max(1, rows - 2 - dockRows)
+  const dockRows = dockHeight({
+    rows,
+    dialog,
+    permissions,
+    questions,
+    inputLines: composerLines,
+    queueLength: queue.length,
+  })
+  const searchRows = searchMode ? 1 : 0
+  const listHeight = Math.max(1, rows - 2 - dockRows - searchRows)
   const mainWidth = Math.max(1, sidebarOpen ? columns - SIDEBAR_WIDTH : columns)
 
   const project = dir?.split("/").pop() ?? "bettercode"
   const branch = vcs?.branch ?? "—"
-  const inputActive = active && !dialog && !sidebarOpen && permissions.length === 0 && questions.length === 0
+  const inputActive =
+    active && !dialog && !sidebarOpen && !searchMode && permissions.length === 0 && questions.length === 0
 
   useEffect(() => {
     if (sidebarOpen && columns < SIDEBAR_MIN) setSidebarOpen(false)
@@ -94,6 +134,14 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
     (_input, key) => {
       if (key.ctrl && _input === "b") {
         if (columns >= SIDEBAR_MIN) setSidebarOpen((v) => !v)
+      }
+      if (key.ctrl && _input === "o") {
+        useAppStore.getState().toggleFocusMode()
+        return
+      }
+      if (key.ctrl && _input === "f") {
+        openSearch()
+        return
       }
       if (syncStatus === "partial" && _input === "r") {
         retryBootstrap()
@@ -165,9 +213,11 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
         sessionCount={sessions.length}
         status={isError ? "error" : generating ? "generating" : "idle"}
         width={columns}
+        hint={generating ? spinnerHint : undefined}
       />
       <Box flexDirection="row" flexGrow={1}>
         <Box flexDirection="column" width={mainWidth}>
+          {searchMode && <SearchBar matchCount={searchMatchCount} active={active && searchMode} />}
           <ErrorBoundary label="transcript">
             <MessageList
               sessionID={sessionID}

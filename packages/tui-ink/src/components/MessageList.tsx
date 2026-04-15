@@ -7,6 +7,7 @@ import { useAppStore } from "../store"
 import { mouseScrollEvents } from "../mouseScrollEvents"
 import { lex } from "./markdown/MarkdownRenderer"
 import type { Token } from "./markdown/types"
+import { useTheme } from "../theme-context"
 
 const EMPTY_MESSAGES: Message[] = []
 const EMPTY_PARTS: Record<string, Part[]> = {}
@@ -89,10 +90,7 @@ function lines(input: string, width: number) {
 function fileRows(parts: Part[], width: number) {
   const files = parts.filter((part) => part.type === "file")
   if (files.length === 0) return 0
-  const badge = files.reduce(
-    (rows, file) => rows + Math.max(8, (file.filename ?? "").length + 8),
-    0,
-  )
+  const badge = files.reduce((rows, file) => rows + Math.max(8, (file.filename ?? "").length + 8), 0)
   return 1 + Math.max(1, Math.ceil(badge / Math.max(1, width)))
 }
 
@@ -116,7 +114,13 @@ function measure(items: Token[], width: number): number {
   }, 0)
 }
 
-export function estimateHeight(msg: Message, parts: Part[], width: number, diffs: SnapshotFileDiff[] = [], open = false): number {
+export function estimateHeight(
+  msg: Message,
+  parts: Part[],
+  width: number,
+  diffs: SnapshotFileDiff[] = [],
+  open = false,
+): number {
   const safeWidth = Math.max(1, width - 6)
   if (msg.role === "user") {
     const t = parts.find((p): p is TextPartType => p.type === "text" && !p.synthetic)
@@ -146,6 +150,17 @@ export function estimateHeight(msg: Message, parts: Part[], width: number, diffs
     }
   }
   return Math.max(2, h + (foot ? 2 : 0))
+}
+
+function stickyPromptText(messages: Message[], parts: Record<string, Part[]>): string {
+  const last = messages.findLast((msg) => msg.role === "user")
+  if (!last) return ""
+  const part = (parts[last.id] ?? EMPTY_ARRAY).find(
+    (item): item is TextPartType => item.type === "text" && !item.synthetic,
+  )
+  if (!part) return ""
+  const first = part.text.split("\n")[0] ?? ""
+  return first.length > 80 ? `${first.slice(0, 79)}…` : first
 }
 
 // ---------------------------------------------------------------------------
@@ -188,14 +203,18 @@ function useSessionParts(sessionID: string): Record<string, Part[]> {
 // Scroll step in rows
 // ---------------------------------------------------------------------------
 const SCROLL_STEP = 5
-const MOUSE_SCROLL_STEP = 3
 // Extra messages to render above/below the visible viewport
 const WIN_BUFFER = 2
 
 export const MessageList = React.memo(function MessageList({ sessionID, height, width, active, generating }: Props) {
+  const theme = useTheme()
   const messages = useAppStore((s) => s.messages[sessionID] ?? EMPTY_MESSAGES)
   const parts = useSessionParts(sessionID)
   const showThinking = useAppStore((s) => s.showThinking)
+  const searchMode = useAppStore((s) => s.searchMode)
+  const searchQuery = useAppStore((s) => s.searchQuery)
+  const searchMatchIdx = useAppStore((s) => s.searchMatchIdx)
+  const setSearchMatchCount = useAppStore((s) => s.setSearchMatchCount)
   const savedPos = useAppStore((s) => s.scrollPos[sessionID] ?? 0)
   const setScrollPos = useAppStore((s) => s.setScrollPos)
   const loadMessageDiff = useAppStore((s) => s.loadMessageDiff)
@@ -221,7 +240,9 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   // 0 = stick to bottom (latest), positive = scrolled up.
   const [rowOffset, setRowOffset] = useState(savedPos)
   const sticky = rowOffset === 0
+  const stickyPrompt = useMemo(() => (sticky ? "" : stickyPromptText(messages, parts)), [messages, parts, sticky])
   const prevMsgCount = useRef(messages.length)
+  const searchState = useRef({ open: false, pos: savedPos })
 
   // Compute totalHeight and per-message cumulative heights in one pass.
   // cumH[i] = sum of heights of messages 0..i-1; cumH[messages.length] = total base.
@@ -241,9 +262,51 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
     return [h[h.length - 1]!, h] as const
   }, [collapsedDiffs, messageDiff, messages, parts, width, pending])
 
+  const matches = useMemo(() => {
+    if (!searchMode || !searchQuery.trim()) return []
+    const q = searchQuery.toLowerCase()
+    return messages
+      .map((msg, i) => {
+        const text = (parts[msg.id] ?? EMPTY_ARRAY)
+          .filter((part): part is TextPartType => part.type === "text" && !part.synthetic && !part.ignored)
+          .map((part) => part.text)
+          .join(" ")
+          .toLowerCase()
+        return text.includes(q) ? i : -1
+      })
+      .filter((i) => i !== -1)
+  }, [messages, parts, searchMode, searchQuery])
+
   // Max rows we can scroll up before reaching the very top
   const maxRowOffset = Math.max(0, totalHeight - height)
   const clampedOffset = Math.min(rowOffset, maxRowOffset)
+
+  useEffect(() => {
+    setSearchMatchCount(matches.length)
+  }, [matches.length, setSearchMatchCount])
+
+  useEffect(() => {
+    if (matches.length === 0) return
+    const idx = ((searchMatchIdx % matches.length) + matches.length) % matches.length
+    const msgIdx = matches[idx]
+    if (msgIdx === undefined) return
+    const top = cumH[msgIdx] ?? 0
+    const bottom = cumH[msgIdx + 1] ?? 0
+    const center = (top + bottom) / 2
+    const target = Math.max(0, totalHeight - center - Math.floor(height / 2))
+    setRowOffset(Math.min(target, maxRowOffset))
+  }, [cumH, height, matches, maxRowOffset, searchMatchIdx, totalHeight])
+
+  useEffect(() => {
+    if (searchMode && !searchState.current.open) {
+      searchState.current = { open: true, pos: rowOffset }
+      return
+    }
+    if (!searchMode && searchState.current.open) {
+      searchState.current.open = false
+      setRowOffset(searchState.current.pos)
+    }
+  }, [rowOffset, searchMode])
 
   // Keep refs stable for subscriptions
   activeRef.current = active
@@ -304,12 +367,12 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
 
   // Mouse wheel scroll — stable subscription, uses refs to avoid re-subscribing
   useEffect(() => {
-    return mouseScrollEvents.on((direction) => {
+    return mouseScrollEvents.on((direction, rows) => {
       if (!activeRef.current) return
       if (direction === "up") {
-        setRowOffset((o) => Math.min(o + MOUSE_SCROLL_STEP, maxRowOffsetRef.current))
+        setRowOffset((o) => Math.min(o + rows, maxRowOffsetRef.current))
       } else {
-        setRowOffset((o) => Math.max(0, o - MOUSE_SCROLL_STEP))
+        setRowOffset((o) => Math.max(0, o - rows))
       }
     })
   }, [])
@@ -357,9 +420,21 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
 
   const last = messages[messages.length - 1]
   const win = messages.slice(winStart, winEnd)
+  const current =
+    matches.length === 0 ? -1 : matches[((searchMatchIdx % matches.length) + matches.length) % matches.length]!
 
   return (
     <Box height={height} overflowY="hidden" flexDirection="column">
+      {stickyPrompt && (
+        <Box position="absolute" width={width} flexDirection="row" paddingLeft={1} paddingRight={1}>
+          <Text color={theme.cyan} bold wrap="truncate-end">
+            {"▶ "}
+          </Text>
+          <Text color={theme.subtext} wrap="truncate-end">
+            {stickyPrompt}
+          </Text>
+        </Box>
+      )}
       {/* Scroll indicator — overlaid at the top-right when scrolled up */}
       {clampedOffset > 0 && (
         <Box position="absolute" width={width} flexDirection="row" justifyContent="flex-end">
@@ -375,9 +450,19 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
         {topSpacer > 0 && <Box height={topSpacer} />}
         {win.map((msg) => {
           const msgParts = parts[msg.id] ?? EMPTY_ARRAY
+          const idx = messages.indexOf(msg)
+          const highlight = matches.includes(idx)
+          const currentHighlight = idx === current
           if (msg.role === "user") {
             const isQueued = !!(pending && msg.id > pending)
-            return <UserMessage key={msg.id} parts={msgParts} isQueued={isQueued} />
+            return (
+              <UserMessage
+                key={msg.id}
+                parts={msgParts}
+                isQueued={isQueued}
+                highlight={currentHighlight || highlight}
+              />
+            )
           }
           return (
             <AssistantMessage
@@ -386,6 +471,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
               parts={msgParts}
               showThinking={showThinking}
               isLast={msg.id === last?.id}
+              highlight={currentHighlight || highlight}
               diffs={messageDiff[msg.id] ?? EMPTY_DIFF}
               diffOpen={!(collapsedDiffs[msg.id] ?? true)}
               onToggleDiff={(messageDiff[msg.id]?.length ?? 0) > 0 ? () => toggleDiffCollapse(msg.id) : undefined}

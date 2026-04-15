@@ -10,6 +10,7 @@ import {
   textDelAt,
   textDelKey,
   textDelWord,
+  textKillLine,
   cursorLineIdx,
   lineCount,
 } from "../hooks/useTextInput"
@@ -55,6 +56,9 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
     newline,
     lineUp,
     lineDown,
+    killLine,
+    yank,
+    yankPop,
   } = useTextInput()
   const [draft, setDraft] = useState("")
   const [histIdx, setHistIdx] = useState<number | null>(null)
@@ -155,10 +159,16 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
       }
 
       if (key.ctrl && input === "y") {
+        if (yank()) return
         if (stash) {
           setValue((v) => v + stash)
           setPromptStash(null)
         }
+        return
+      }
+
+      if (key.meta && input === "y") {
+        yankPop()
         return
       }
 
@@ -175,6 +185,13 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
       if (key.ctrl && input === "w") {
         const next = textDelWord(value, cursor)[0]
         deleteWord()
+        mentions.update(next)
+        return
+      }
+
+      if (key.ctrl && input === "k") {
+        const next = textKillLine(value, cursor)[0]
+        killLine()
         mentions.update(next)
         return
       }
@@ -255,10 +272,16 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
       if (key.ctrl && input === "y") {
+        if (yank()) return
         if (stash) {
           setValue((v) => v + stash)
           setPromptStash(null)
         }
+        return
+      }
+
+      if (key.meta && input === "y") {
+        yankPop()
         return
       }
 
@@ -417,6 +440,13 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
+      if (key.ctrl && input === "k") {
+        const next = textKillLine(value, cursor)[0]
+        killLine()
+        mentions.update(next)
+        return
+      }
+
       // Terminal escape sequences — must be checked before the ctrl/meta guard because
       // some terminals set key.meta=true for ESC-prefixed CSI sequences.
       if (input && /^\[[\d;]+[A-Za-z~]$/.test(input)) {
@@ -477,7 +507,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         <Box paddingLeft={2} marginBottom={0}>
           <Text color={theme.overlay} dimColor>
             stash: {stash.slice(0, 40)}
-            {stash.length > 40 ? "…" : ""} (ctrl+y to restore)
+            {stash.length > 40 ? "…" : ""} (stashed)
           </Text>
         </Box>
       )}
@@ -536,9 +566,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
                 <Text color={glyph} backgroundColor={field}>
                   {vi === 0 && viewStart === 0 ? ">" : " "}
                 </Text>
-                <Text backgroundColor={field}>
-                  {"  "}
-                </Text>
+                <Text backgroundColor={field}>{"  "}</Text>
                 {onLine ? (
                   <>
                     {col > 0 && (

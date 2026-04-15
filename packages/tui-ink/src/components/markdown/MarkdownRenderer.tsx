@@ -6,10 +6,32 @@ import { CodeBlock } from "./CodeBlock"
 import { InlineText } from "./InlineText"
 import type { Token } from "./types"
 
+const TOKEN_CACHE = new Map<string, Token[]>()
+const TOKEN_CACHE_MAX = 500
+const MD_MARKERS = /[*_`#\[\]!>|~\\]/
 const opts = { gfm: true, breaks: true } as const
 
+function cachedLex(text: string): Token[] {
+  const hit = TOKEN_CACHE.get(text)
+  if (hit) {
+    TOKEN_CACHE.delete(text)
+    TOKEN_CACHE.set(text, hit)
+    return hit
+  }
+  const result = marked.lexer(text, opts) as Token[]
+  if (TOKEN_CACHE.size >= TOKEN_CACHE_MAX) {
+    TOKEN_CACHE.delete(TOKEN_CACHE.keys().next().value!)
+  }
+  TOKEN_CACHE.set(text, result)
+  return result
+}
+
+function hasMarkdownSyntax(text: string): boolean {
+  return MD_MARKERS.test(text.slice(0, 500))
+}
+
 export function lex(text: string) {
-  return marked.lexer(text, opts) as Token[]
+  return cachedLex(text)
 }
 
 interface Props {
@@ -23,7 +45,12 @@ function isText(tok: Token) {
 
 export function MarkdownRenderer({ text, bold }: Props) {
   const theme = useTheme()
-  const tokens = useMemo(() => lex(text), [text])
+  const tokens = useMemo(() => {
+    if (!hasMarkdownSyntax(text)) {
+      return [{ type: "paragraph", raw: text, text, tokens: [{ type: "text", raw: text, text }] }] as Token[]
+    }
+    return cachedLex(text)
+  }, [text])
 
   const walk = (items: Token[], key: string): React.ReactNode[] => {
     return items.reduce<React.ReactNode[]>((out, tok, i) => {
@@ -141,4 +168,8 @@ export function MarkdownRenderer({ text, bold }: Props) {
   }
 
   return <Box flexDirection="column">{walk(tokens, "m")}</Box>
+}
+
+export function clearTokenCache(): void {
+  TOKEN_CACHE.clear()
 }

@@ -19,6 +19,6 @@ bettercode ─ feat/ui-snapshots ─ 1 session                                 r
 
   y allow once  a always  n deny  t auto-accept all
 
-  stash: Draft: keep the dock compact on 80x24 (ctrl+y to restore)
+  stash: Draft: keep the dock compact on 80x24 (stashed)
 
  ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · y: allow · a: allow all…─

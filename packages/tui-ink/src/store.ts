@@ -121,6 +121,18 @@ export interface AppState {
 
   // Display toggles
   showThinking: boolean
+  focusMode: boolean
+  searchMode: boolean
+  searchQuery: string
+  searchMatchIdx: number
+  searchMatchCount: number
+  toggleFocusMode: () => void
+  openSearch: () => void
+  closeSearch: () => void
+  setSearchQuery: (q: string) => void
+  nextSearchMatch: () => void
+  prevSearchMatch: () => void
+  setSearchMatchCount: (n: number) => void
 
   // Auto-accept all permissions for this session (no individual prompts)
   autoAcceptPermissions: boolean
@@ -303,6 +315,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   composerStatus: "idle",
   promptQueue: {},
   showThinking: false,
+  focusMode: false,
+  searchMode: false,
+  searchQuery: "",
+  searchMatchIdx: 0,
+  searchMatchCount: 0,
   autoAcceptPermissions: false,
   reconnectTick: 0,
   mode: "build",
@@ -324,6 +341,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSyncStatus: (s) => set({ syncStatus: s }),
   setComposerStatus: (s) => set({ composerStatus: s }),
   setShowThinking: (v) => set({ showThinking: v }),
+  toggleFocusMode: () => set((prev) => ({ focusMode: !prev.focusMode })),
+  openSearch: () => set({ searchMode: true, searchQuery: "", searchMatchIdx: 0, searchMatchCount: 0 }),
+  closeSearch: () => set({ searchMode: false, searchQuery: "", searchMatchIdx: 0, searchMatchCount: 0 }),
+  setSearchQuery: (q) => set({ searchQuery: q, searchMatchIdx: 0 }),
+  nextSearchMatch: () => set((prev) => ({ searchMatchIdx: prev.searchMatchIdx + 1 })),
+  prevSearchMatch: () => set((prev) => ({ searchMatchIdx: Math.max(0, prev.searchMatchIdx - 1) })),
+  setSearchMatchCount: (n) => set({ searchMatchCount: n }),
   toggleAutoAcceptPermissions: () => set((prev) => ({ autoAcceptPermissions: !prev.autoAcceptPermissions })),
   retryBootstrap: () => set((prev) => ({ syncStatus: "loading", reconnectTick: prev.reconnectTick + 1 })),
   setTheme: (name) => set({ currentThemeName: name }),
@@ -545,8 +569,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     })),
 
-  clearQueue: (sessionID) =>
-    set((prev) => ({ promptQueue: { ...prev.promptQueue, [sessionID]: [] } })),
+  clearQueue: (sessionID) => set((prev) => ({ promptQueue: { ...prev.promptQueue, [sessionID]: [] } })),
 
   sendPrompt: async (sessionID, text, files) => {
     const { client, currentModel, currentAgent, mode, commands, providerConnected } = get()

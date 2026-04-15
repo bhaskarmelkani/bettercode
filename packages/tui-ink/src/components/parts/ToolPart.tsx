@@ -26,6 +26,12 @@ function line(text: string, max: number) {
   return `${rows.slice(0, max).join("\n")}\n… ${rows.length - max} more lines`
 }
 
+function truncLines(text: string, maxCols: number, maxRows: number) {
+  const rows = text.split(/\r?\n/).map((row) => cut(row, maxCols))
+  if (rows.length <= maxRows) return rows.join("\n")
+  return `${rows.slice(0, maxRows).join("\n")}\n… ${rows.length - maxRows} more lines`
+}
+
 function span(input: Record<string, unknown>) {
   return cut(
     Object.entries(input)
@@ -64,6 +70,28 @@ function kind(tool: string, theme: Theme) {
   return { icon: "⬡", color: theme.pink }
 }
 
+function isWriteTool(tool: string) {
+  const t = tool.toLowerCase()
+  return t.includes("write") || t.includes("edit") || t.includes("patch")
+}
+
+function looksLikeDiff(text: string) {
+  return text.includes("@@") || text.startsWith("---") || text.startsWith("diff ")
+}
+
+interface DiffLineProps {
+  row: string
+  theme: Theme
+}
+
+function DiffLine({ row, theme }: DiffLineProps) {
+  if (row.startsWith("+") && !row.startsWith("+++")) return <Text color={theme.green}>{row}</Text>
+  if (row.startsWith("-") && !row.startsWith("---")) return <Text color={theme.red}>{row}</Text>
+  if (row.startsWith("@@")) return <Text color={theme.cyan}>{row}</Text>
+  if (row.startsWith("---") || row.startsWith("+++")) return <Text color={theme.overlay}>{row}</Text>
+  return <Text color={theme.subtext}>{row}</Text>
+}
+
 // Pure helper: expanded when user explicitly opened (collapsed=false), or auto-expanded
 // for errors unless user explicitly closed them (collapsed=true).
 // Default (undefined): all non-error tools start collapsed.
@@ -76,13 +104,15 @@ export function isOpen(status: string, collapsed: boolean | undefined): boolean 
 export const ToolPart = React.memo(function ToolPart({ part }: Props) {
   const theme = useTheme()
   const collapsed = useAppStore((s) => s.collapsedTools[part.id])
+  const focusMode = useAppStore((s) => s.focusMode)
   const state = part.state
   const stat = STAT[state.status]
   const kid = kind(part.tool, theme)
-  const open = isOpen(state.status, collapsed)
+  const open = focusMode ? false : isOpen(state.status, collapsed)
   const sum = span(state.input)
   const title = "title" in state && state.title ? state.title : sum ? `${part.tool} ${sum}` : part.tool
   const time = "time" in state ? dur(state.time.start, "end" in state.time ? state.time.end : undefined) : ""
+  const maxCols = Math.max(40, (process.stdout.columns ?? 120) - 6)
 
   return (
     <Box marginTop={0} paddingLeft={3} flexDirection="column" flexShrink={0}>
@@ -101,19 +131,42 @@ export const ToolPart = React.memo(function ToolPart({ part }: Props) {
         (state.status === "error" ? (
           <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.red} flexDirection="column">
             <Text wrap="wrap" color={theme.subtext}>
-              {line(cut(state.error, 2000), 30)}
+              {truncLines(state.error, maxCols, 30)}
             </Text>
           </Box>
         ) : state.status === "completed" ? (
-          <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.surface0} flexDirection="column">
-            <Text wrap="wrap" color={theme.subtext}>
-              {line(cut(state.output, 2000), 30)}
-            </Text>
-          </Box>
+          (() => {
+            if (isWriteTool(part.tool) && looksLikeDiff(state.output)) {
+              const rows = state.output.split(/\r?\n/).map((row) => cut(row, maxCols))
+              const visible = rows.slice(0, 30)
+              const extra = rows.length - visible.length
+              return (
+                <Box
+                  marginTop={1}
+                  paddingLeft={1}
+                  borderLeft={true}
+                  borderColor={theme.surface0}
+                  flexDirection="column"
+                >
+                  {visible.map((row, i) => (
+                    <DiffLine key={i} row={row} theme={theme} />
+                  ))}
+                  {extra > 0 && <Text color={theme.overlay}>… {extra} more lines</Text>}
+                </Box>
+              )
+            }
+            return (
+              <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.surface0} flexDirection="column">
+                <Text wrap="wrap" color={theme.subtext}>
+                  {truncLines(state.output, maxCols, 30)}
+                </Text>
+              </Box>
+            )
+          })()
         ) : (
           <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.surface0} flexDirection="column">
             <Text wrap="wrap" color={theme.overlay}>
-              {json(state.input)}
+              {truncLines(json(state.input), maxCols, 30)}
             </Text>
           </Box>
         ))}

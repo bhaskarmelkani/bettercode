@@ -28,28 +28,36 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   const perms = useAppStore((s) => (s.permissions[sid]?.length ?? 0) > 0)
   const qs = useAppStore((s) => (s.questions[sid]?.length ?? 0) > 0)
   const autoAccept = useAppStore((s) => s.autoAcceptPermissions)
-  const edits = useAppStore((s) => (s.messages[sid] ?? []).some((msg) => msg.role === "assistant" && (s.messageDiff[msg.id]?.length ?? 0) > 0))
+  const focusMode = useAppStore((s) => s.focusMode)
+  const searchMode = useAppStore((s) => s.searchMode)
+  const edits = useAppStore((s) =>
+    (s.messages[sid] ?? []).some((msg) => msg.role === "assistant" && (s.messageDiff[msg.id]?.length ?? 0) > 0),
+  )
 
   const branch = cut(vcs?.branch ?? "—", 28)
   const display = cut(model ? model.modelID : "no model", 24)
   const generating = session?.type === "busy" || composerStatus === "generating"
   const tone = agent === "plan" ? theme.yellow : theme.blue
   const mode = "shift + tab"
-  const raw = perms
-    ? "y: allow · a: allow all · n: deny"
-    : qs
-      ? "↑↓: navigate · enter: select · esc: reject"
-    : dlg
-      ? "esc: close · tab: navigate"
-      : sidebarOpen
-        ? "tab/←→: sidebar · ctrl+b: close"
-      : generating
-        ? "↑↓ scroll · ctrl+c abort"
-        : edits
-          ? "ctrl+g: expand/collapse edits · ctrl+b: capabilities"
-        : scroll > 0
-          ? "ctrl+↓: snap bottom"
-          : "ctrl+k: commands · /: slash · ctrl+b: capabilities"
+  const raw = focusMode
+    ? "ctrl+o: exit focus"
+    : searchMode
+      ? "enter/ctrl+n: next · ctrl+p: prev · esc: close"
+      : perms
+        ? "y: allow · a: allow all · n: deny"
+        : qs
+          ? "↑↓: navigate · enter: select · esc: reject"
+          : dlg
+            ? "esc: close · tab: navigate"
+            : sidebarOpen
+              ? "tab/←→: sidebar · ctrl+b: close"
+              : generating
+                ? "↑↓ scroll · ctrl+c abort"
+                : edits
+                  ? "ctrl+g: expand/collapse edits · ctrl+b: capabilities"
+                  : scroll > 0
+                    ? "ctrl+↓: snap bottom"
+                    : "ctrl+k: commands · /: slash · ctrl+b: capabilities"
 
   // fixed = " "(2) + git + " · "(3) + agent + " (" + mode + ")" + " · "(3) + display + " · "(3)
   const fixed = 2 + 2 + branch.length + 3 + agent.length + 2 + mode.length + 1 + 3 + display.length + 3
@@ -58,11 +66,13 @@ export function StatusBar({ width, sidebarOpen }: Props) {
 
   return (
     <Box height={1} flexDirection="row">
-      <Text color={theme.overlay}>{" "}</Text>
+      <Text color={theme.overlay}> </Text>
       <Text color={theme.overlay}>{"⎇ "}</Text>
       <Text color={theme.cyan}>{branch}</Text>
       <Text color={theme.overlay}>{" · "}</Text>
-      <Text color={tone} bold>{agent}</Text>
+      <Text color={tone} bold>
+        {agent}
+      </Text>
       <Text color={theme.overlay}>{` (${mode})`}</Text>
       <Text color={theme.overlay}>{" · "}</Text>
       <Text color={theme.subtext}>{display}</Text>

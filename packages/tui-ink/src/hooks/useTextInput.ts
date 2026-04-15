@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 
 // Append-only helpers — kept for M4 test backward compat.
 export function textInsert(value: string, input: string): string {
@@ -47,6 +47,14 @@ export function textDelWord(value: string, cursor: number): [string, number] {
   return [value.slice(0, i) + value.slice(cursor), i]
 }
 
+export function textKillLine(value: string, cursor: number): [string, string] {
+  if (cursor >= value.length) return [value, ""]
+  const nl = value.indexOf("\n", cursor)
+  const end = nl === -1 ? value.length : nl
+  if (cursor === end) return [value.slice(0, cursor) + value.slice(cursor + 1), "\n"]
+  return [value.slice(0, cursor) + value.slice(end), value.slice(cursor, end)]
+}
+
 // M6 multi-line pure helpers — exported for tests.
 
 // Total line count (minimum 1).
@@ -92,65 +100,138 @@ export function cursorLineDown(value: string, cursor: number): number {
  */
 export function useTextInput(initial = "") {
   const [state, setState] = useState({ value: initial, cursor: initial.length })
+  const ring = useRef<string[]>([])
+  const idx = useRef(0)
+  const span = useRef<{ start: number; end: number } | null>(null)
+  const op = useRef<"kill-head" | "kill-tail" | "yank" | null>(null)
 
-  const setValue = (next: string | ((prev: string) => string)) =>
+  const stop = () => {
+    idx.current = 0
+    span.current = null
+    op.current = null
+  }
+
+  const kill = (text: string, side: "head" | "tail") => {
+    if (!text) return
+    const kind = side === "head" ? "kill-head" : "kill-tail"
+    if (op.current === kind && ring.current.length > 0) {
+      ring.current[ring.current.length - 1] =
+        side === "head" ? text + ring.current[ring.current.length - 1]! : ring.current[ring.current.length - 1]! + text
+    } else {
+      ring.current = [...ring.current, text].slice(-20)
+    }
+    idx.current = 0
+    span.current = null
+    op.current = kind
+  }
+
+  const setValue = (next: string | ((prev: string) => string)) => (
+    stop(),
     setState((s) => {
       const v = typeof next === "function" ? next(s.value) : next
       return { value: v, cursor: v.length }
     })
+  )
 
-  const insert = (input: string) =>
+  const insert = (input: string) => (
+    stop(),
     setState((s) => {
       const [v, c] = textInsertAt(s.value, s.cursor, input)
       return { value: v, cursor: c }
     })
+  )
 
-  const del = () =>
+  const del = () => (
+    stop(),
     setState((s) => {
       const [v, c] = textDelAt(s.value, s.cursor)
       return { value: v, cursor: c }
     })
+  )
 
-  const deleteForward = () =>
+  const deleteForward = () => (
+    stop(),
     setState((s) => {
       const [v, c] = textDelForward(s.value, s.cursor)
       return { value: v, cursor: c }
     })
+  )
 
-  const deleteKey = () =>
+  const deleteKey = () => (
+    stop(),
     setState((s) => {
       const [v, c] = textDelKey(s.value, s.cursor)
       return { value: v, cursor: c }
     })
+  )
 
   const deleteWord = () =>
     setState((s) => {
       const [v, c] = textDelWord(s.value, s.cursor)
+      kill(s.value.slice(c, s.cursor), "head")
       return { value: v, cursor: c }
     })
 
-  const moveLeft = () => setState((s) => ({ ...s, cursor: Math.max(0, s.cursor - 1) }))
+  const killLine = () =>
+    setState((s) => {
+      const [v, text] = textKillLine(s.value, s.cursor)
+      kill(text, "tail")
+      return { value: v, cursor: s.cursor }
+    })
 
-  const moveRight = () => setState((s) => ({ ...s, cursor: Math.min(s.value.length, s.cursor + 1) }))
+  const yank = () => {
+    idx.current = 0
+    const text = ring.current[ring.current.length - 1 - idx.current] ?? ""
+    if (!text) return false
+    setState((s) => {
+      const start = s.cursor
+      const [v, c] = textInsertAt(s.value, start, text)
+      span.current = { start, end: c }
+      op.current = "yank"
+      return { value: v, cursor: c }
+    })
+    return true
+  }
 
-  const home = () => setState((s) => ({ ...s, cursor: 0 }))
+  const yankPop = () => {
+    if (op.current !== "yank" || !span.current || ring.current.length === 0) return false
+    idx.current = (idx.current + 1) % ring.current.length
+    const mark = span.current
+    const text = ring.current[ring.current.length - 1 - idx.current] ?? ""
+    setState((s) => {
+      const v = s.value.slice(0, mark.start) + text + s.value.slice(mark.end)
+      const end = mark.start + text.length
+      span.current = { start: mark.start, end }
+      op.current = "yank"
+      return { value: v, cursor: end }
+    })
+    return true
+  }
 
-  const end = () => setState((s) => ({ ...s, cursor: s.value.length }))
+  const moveLeft = () => (stop(), setState((s) => ({ ...s, cursor: Math.max(0, s.cursor - 1) })))
 
-  const clear = () => setState({ value: "", cursor: 0 })
+  const moveRight = () => (stop(), setState((s) => ({ ...s, cursor: Math.min(s.value.length, s.cursor + 1) })))
+
+  const home = () => (stop(), setState((s) => ({ ...s, cursor: 0 })))
+
+  const end = () => (stop(), setState((s) => ({ ...s, cursor: s.value.length })))
+
+  const clear = () => (stop(), setState({ value: "", cursor: 0 }))
 
   // Insert a newline at the cursor (Alt+Enter).
-  const newline = () =>
+  const newline = () => (
+    stop(),
     setState((s) => {
       const [v, c] = textInsertAt(s.value, s.cursor, "\n")
       return { value: v, cursor: c }
     })
+  )
 
   // Move cursor up one logical line (multi-line navigation).
-  const lineUp = () => setState((s) => ({ ...s, cursor: cursorLineUp(s.value, s.cursor) }))
+  const lineUp = () => (stop(), setState((s) => ({ ...s, cursor: cursorLineUp(s.value, s.cursor) })))
 
   // Move cursor down one logical line (multi-line navigation).
-  const lineDown = () => setState((s) => ({ ...s, cursor: cursorLineDown(s.value, s.cursor) }))
+  const lineDown = () => (stop(), setState((s) => ({ ...s, cursor: cursorLineDown(s.value, s.cursor) })))
 
   return {
     value: state.value,
@@ -169,5 +250,8 @@ export function useTextInput(initial = "") {
     newline,
     lineUp,
     lineDown,
+    killLine,
+    yank,
+    yankPop,
   }
 }

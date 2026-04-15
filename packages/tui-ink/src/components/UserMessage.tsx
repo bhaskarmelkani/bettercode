@@ -8,9 +8,10 @@ import { MarkdownRenderer } from "./markdown/MarkdownRenderer"
 interface Props {
   parts: Part[]
   isQueued?: boolean
+  highlight?: boolean
 }
 
-export const UserMessage = React.memo(function UserMessage({ parts, isQueued }: Props) {
+export const UserMessage = React.memo(function UserMessage({ parts, isQueued, highlight }: Props) {
   const theme = useTheme()
   const text = parts.find((p): p is TextPartType => p.type === "text" && !p.synthetic)
   const files = parts.filter((p) => p.type === "file") as FilePartType[]
@@ -23,7 +24,7 @@ export const UserMessage = React.memo(function UserMessage({ parts, isQueued }: 
       paddingLeft={1}
       flexShrink={0}
       borderLeft={true}
-      borderColor={theme.cyan}
+      borderColor={highlight ? theme.yellow : theme.cyan}
       flexDirection="row"
       gap={1}
     >
