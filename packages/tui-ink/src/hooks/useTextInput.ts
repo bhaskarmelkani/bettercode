@@ -1,4 +1,5 @@
 import { useRef, useState } from "react"
+import { useUndoBuffer } from "./useUndoBuffer"
 
 // Append-only helpers — kept for M4 test backward compat.
 export function textInsert(value: string, input: string): string {
@@ -104,6 +105,7 @@ export function useTextInput(initial = "") {
   const idx = useRef(0)
   const span = useRef<{ start: number; end: number } | null>(null)
   const op = useRef<"kill-head" | "kill-tail" | "yank" | null>(null)
+  const buf = useUndoBuffer(state.value, state.cursor)
 
   const stop = () => {
     idx.current = 0
@@ -218,6 +220,14 @@ export function useTextInput(initial = "") {
 
   const clear = () => (stop(), setState({ value: "", cursor: 0 }))
 
+  const undo = () => {
+    const snap = buf.undo()
+    if (!snap) return false
+    stop()
+    setState({ value: snap.text, cursor: snap.cursor })
+    return true
+  }
+
   // Insert a newline at the cursor (Alt+Enter).
   const newline = () => (
     stop(),
@@ -247,6 +257,7 @@ export function useTextInput(initial = "") {
     home,
     end,
     clear,
+    undo,
     newline,
     lineUp,
     lineDown,

@@ -11,7 +11,7 @@ interface Props {
 
 export function SearchBar({ matchCount, active }: Props) {
   const theme = useTheme()
-  const { value, cursor, insert, del, clear, home, end, moveLeft, moveRight } = useTextInput()
+  const { value, cursor, insert, del, deleteKey, clear, home, end, moveLeft, moveRight } = useTextInput()
   const setSearchQuery = useAppStore((s) => s.setSearchQuery)
   const matchIdx = useAppStore((s) => s.searchMatchIdx)
   const closeSearch = useAppStore((s) => s.closeSearch)
@@ -20,7 +20,7 @@ export function SearchBar({ matchCount, active }: Props) {
 
   useEffect(() => {
     setSearchQuery(value)
-  }, [setSearchQuery, value])
+  }, [value])
 
   useInput(
     (input, key) => {
@@ -59,6 +59,10 @@ export function SearchBar({ matchCount, active }: Props) {
       }
       if (key.backspace) {
         del()
+        return
+      }
+      if (key.delete) {
+        deleteKey()
         return
       }
       if (key.ctrl || key.meta) return

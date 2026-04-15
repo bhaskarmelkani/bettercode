@@ -89,6 +89,7 @@ export async function startTuiInk(opts: TuiInkOptions): Promise<void> {
           resolve()
         }}
       />,
+      { exitOnCtrlC: false },
     )
 
     process.on("SIGINT", () => {

@@ -4,7 +4,14 @@
  */
 import { describe, test, expect, beforeEach } from "bun:test"
 import type { Message, Part } from "@opencode-ai/sdk/v2"
-import { estimateHeight, cacheVersion, clearHeightCache } from "../src/components/MessageList"
+import {
+  estimateHeight,
+  cacheVersion,
+  clearHeightCache,
+  findWindow,
+  pagerOffset,
+  unseen,
+} from "../src/components/MessageList"
 import { makeMsg, makeTextPart, makeToolPart, makeTranscript } from "./fixtures"
 
 function visibleSlice(
@@ -28,8 +35,6 @@ function visibleSlice(
 
 // ---------------------------------------------------------------------------
 // Windowed rendering helpers — mirrors MessageList windowing logic.
-// Returns { winStart, winEnd, topSpacer, bottomSpacer } for a given scroll
-// state so we can verify the window is correct without rendering React.
 // ---------------------------------------------------------------------------
 function buildCumH(msgs: Message[], parts: Record<string, Part[]>, width: number): number[] {
   const h: number[] = [0]
@@ -39,28 +44,11 @@ function buildCumH(msgs: Message[], parts: Record<string, Part[]>, width: number
   return h
 }
 
-function findWindow(
-  cumH: number[],
-  totalHeight: number,
-  scrollTop: number,
-  viewH: number,
-  buffer = 2,
-): { winStart: number; winEnd: number; topSpacer: number; bottomSpacer: number } {
-  const n = cumH.length - 1 // number of messages
-  const viewEnd = scrollTop + viewH
-  let winFirst = n
-  let winLast = -1
-  for (let i = 0; i < n; i++) {
-    if (cumH[i + 1]! > scrollTop && cumH[i]! < viewEnd) {
-      if (i < winFirst) winFirst = i
-      winLast = i
-    }
+function span(cumH: number[]) {
+  return {
+    top: cumH.slice(0, -1),
+    bot: cumH.slice(1),
   }
-  const winStart = Math.max(0, winFirst - buffer)
-  const winEnd = Math.min(n, winLast + 1 + buffer)
-  const topSpacer = cumH[winStart]!
-  const bottomSpacer = totalHeight - cumH[winEnd]!
-  return { winStart, winEnd, topSpacer, bottomSpacer }
 }
 
 function scrollTopFromOffset(totalHeight: number, viewH: number, rowOffset: number): number {
@@ -335,11 +323,12 @@ describe("windowed rendering", () => {
     const width = 80
     const viewH = 24
     const cumH = buildCumH(msgs, parts, width)
+    const h = span(cumH)
     const base = cumH[cumH.length - 1]!
     const total = base + 2
     // rowOffset=0: scrolled to bottom
     const scrollTop = scrollTopFromOffset(total, viewH, 0)
-    const { winStart, winEnd } = findWindow(cumH, total, scrollTop, viewH)
+    const { winStart, winEnd } = findWindow(h.top, h.bot, total, scrollTop, viewH)
     expect(winEnd).toBe(50) // buffer extends to message.length
     expect(msgs.slice(winStart, winEnd).some((m) => m.id === msgs[49]!.id)).toBe(true)
   })
@@ -349,12 +338,13 @@ describe("windowed rendering", () => {
     const width = 80
     const viewH = 24
     const cumH = buildCumH(msgs, parts, width)
+    const h = span(cumH)
     const base = cumH[cumH.length - 1]!
     const total = base + 2
     // rowOffset=max: scrolled to top
     const maxRowOffset = Math.max(0, total - viewH)
     const scrollTop = scrollTopFromOffset(total, viewH, maxRowOffset)
-    const { winStart } = findWindow(cumH, total, scrollTop, viewH)
+    const { winStart } = findWindow(h.top, h.bot, total, scrollTop, viewH)
     expect(winStart).toBe(0)
   })
 
@@ -363,20 +353,20 @@ describe("windowed rendering", () => {
     const width = 80
     const viewH = 24
     const cumH = buildCumH(msgs, parts, width)
+    const h = span(cumH)
     const base = cumH[cumH.length - 1]!
     const total = base + 2
     // Mid-scroll
     const maxRowOffset = Math.max(0, total - viewH)
     const scrollTop = scrollTopFromOffset(total, viewH, Math.floor(maxRowOffset / 2))
-    const { winStart, winEnd, topSpacer, bottomSpacer } = findWindow(cumH, total, scrollTop, viewH)
+    const { winStart, winEnd, topSpacer, bottomSpacer } = findWindow(h.top, h.bot, total, scrollTop, viewH)
     const visH = cumH[winEnd]! - cumH[winStart]!
     expect(topSpacer + visH + bottomSpacer).toBe(total)
   })
 
   test("empty transcript: window is empty with full bottom spacer", () => {
-    const cumH = [0]
     const total = 2
-    const { winStart, winEnd, topSpacer, bottomSpacer } = findWindow(cumH, total, 0, 24)
+    const { winStart, winEnd, topSpacer, bottomSpacer } = findWindow([], [], total, 0, 24)
     expect(winStart).toBe(0)
     expect(winEnd).toBe(0)
     expect(topSpacer).toBe(0)
@@ -388,10 +378,11 @@ describe("windowed rendering", () => {
     const msgs = [makeMsg("m1", "user"), makeMsg("m2", "user"), makeMsg("m3", "user")]
     const parts: Record<string, Part[]> = {}
     const cumH = buildCumH(msgs, parts, 80)
+    const h = span(cumH)
     const base = cumH[3]!
     const total = base + 2
     // Very large viewport — all messages visible
-    const { topSpacer, winStart, winEnd } = findWindow(cumH, total, 0, 1000)
+    const { topSpacer, winStart, winEnd } = findWindow(h.top, h.bot, total, 0, 1000)
     expect(winStart).toBe(0)
     expect(winEnd).toBe(3)
     expect(topSpacer).toBe(0)
@@ -402,10 +393,11 @@ describe("windowed rendering", () => {
     const width = 80
     const viewH = 24
     const cumH = buildCumH(msgs, parts, width)
+    const h = span(cumH)
     const base = cumH[100]!
     const total = base + 2
     const scrollTop = scrollTopFromOffset(total, viewH, 0)
-    const { winStart, winEnd } = findWindow(cumH, total, scrollTop, viewH)
+    const { winStart, winEnd } = findWindow(h.top, h.bot, total, scrollTop, viewH)
     // Window should be much smaller than 100
     const rendered = winEnd - winStart
     expect(rendered).toBeLessThan(100)
@@ -417,13 +409,14 @@ describe("windowed rendering", () => {
     const width = 80
     const viewH = 24
     const cumH = buildCumH(msgs, parts, width)
+    const h = span(cumH)
     const base = cumH[50]!
     const total = base + 2
     // Scroll to middle
     const maxRowOffset = Math.max(0, total - viewH)
     const midOffset = Math.floor(maxRowOffset / 2)
     const scrollTop = scrollTopFromOffset(total, viewH, midOffset)
-    const { winStart, winEnd } = findWindow(cumH, total, scrollTop, viewH)
+    const { winStart, winEnd } = findWindow(h.top, h.bot, total, scrollTop, viewH)
     // Neither the first nor the last message should be in the window
     // (assuming there are enough messages)
     if (msgs.length > 20) {
@@ -437,13 +430,95 @@ describe("windowed rendering", () => {
     const width = 80
     const viewH = 24
     const cumH = buildCumH(msgs, parts, width)
+    const h = span(cumH)
     const base = cumH[500]!
     const total = base + 2
     const scrollTop = scrollTopFromOffset(total, viewH, 0)
-    const { winStart, winEnd } = findWindow(cumH, total, scrollTop, viewH)
+    const { winStart, winEnd } = findWindow(h.top, h.bot, total, scrollTop, viewH)
     const rendered = winEnd - winStart
     // Should render at most ~20 messages (24 rows / ~5 per message + buffer)
     expect(rendered).toBeLessThan(50)
     expect(rendered).toBeGreaterThan(0)
+  })
+
+  test("window keeps buffered rows outside the visible core", () => {
+    const { msgs, parts } = makeTranscript(50)
+    const width = 80
+    const viewH = 24
+    const cumH = buildCumH(msgs, parts, width)
+    const h = span(cumH)
+    const base = cumH[50]!
+    const total = base + 2
+    const maxRowOffset = Math.max(0, total - viewH)
+    const scrollTop = scrollTopFromOffset(total, viewH, Math.floor(maxRowOffset / 2))
+    const out = findWindow(h.top, h.bot, total, scrollTop, viewH)
+    expect(out.visStart).toBeGreaterThanOrEqual(out.winStart)
+    expect(out.visEnd).toBeLessThanOrEqual(out.winEnd)
+    expect(out.winStart).toBeLessThan(out.visStart)
+    expect(out.winEnd).toBeGreaterThan(out.visEnd)
+  })
+})
+
+describe("pagerOffset", () => {
+  const key = (over: Partial<Parameters<typeof pagerOffset>[1]> = {}) => ({
+    ctrl: false,
+    meta: false,
+    shift: false,
+    pageDown: false,
+    pageUp: false,
+    upArrow: false,
+    downArrow: false,
+    ...over,
+  })
+
+  test("plain pager keys are ignored while sticky at bottom", () => {
+    expect(pagerOffset("j", key(), 0, 100, 24, false)).toBeUndefined()
+    expect(pagerOffset("g", key(), 0, 100, 24, false)).toBeUndefined()
+  })
+
+  test("g jumps to top and G jumps to bottom when detached", () => {
+    expect(pagerOffset("g", key(), 12, 100, 24, false)).toBe(100)
+    expect(pagerOffset("G", key({ shift: true }), 12, 100, 24, false)).toBe(0)
+  })
+
+  test("j and k move one line at a time when detached", () => {
+    expect(pagerOffset("j", key(), 12, 100, 24, false)).toBe(11)
+    expect(pagerOffset("k", key(), 12, 100, 24, false)).toBe(13)
+  })
+
+  test("ctrl+d and ctrl+u move by half a page", () => {
+    expect(pagerOffset("d", key({ ctrl: true }), 20, 100, 24, false)).toBe(8)
+    expect(pagerOffset("u", key({ ctrl: true }), 20, 100, 24, false)).toBe(32)
+  })
+
+  test("space and b move by a full page", () => {
+    expect(pagerOffset(" ", key(), 20, 100, 24, false)).toBe(0)
+    expect(pagerOffset("b", key(), 20, 100, 24, false)).toBe(42)
+  })
+
+  test("q snaps back to bottom", () => {
+    expect(pagerOffset("q", key(), 20, 100, 24, false)).toBe(0)
+  })
+
+  test("existing page keys still work", () => {
+    expect(pagerOffset("", key({ pageUp: true }), 20, 100, 24, false)).toBe(25)
+    expect(pagerOffset("", key({ pageDown: true }), 20, 100, 24, false)).toBe(15)
+    expect(pagerOffset("", key({ ctrl: true, upArrow: true }), 20, 100, 24, false)).toBe(100)
+    expect(pagerOffset("", key({ ctrl: true, downArrow: true }), 20, 100, 24, false)).toBe(0)
+  })
+})
+
+describe("unseen", () => {
+  test("stays clear while sticky at bottom", () => {
+    expect(unseen(12, 8, 0)).toEqual({ count: 0, split: 12 })
+  })
+
+  test("counts only messages below the detach point", () => {
+    expect(unseen(12, 8, 4)).toEqual({ count: 4, split: 8 })
+  })
+
+  test("clamps stale seen markers into bounds", () => {
+    expect(unseen(3, 9, 2)).toEqual({ count: 0, split: 3 })
+    expect(unseen(3, -4, 2)).toEqual({ count: 3, split: 0 })
   })
 })

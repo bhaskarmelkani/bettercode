@@ -44,6 +44,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const openSearch = useAppStore((s) => s.openSearch)
   const searchMode = useAppStore((s) => s.searchMode)
   const searchMatchCount = useAppStore((s) => s.searchMatchCount)
+  const scrolled = useAppStore((s) => (s.scrollPos[sessionID] ?? 0) > 0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Lazy-load messages when this session becomes active
@@ -89,9 +90,8 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
     if (!last) return undefined
     const tools = (s.parts[last.id] ?? []).filter((p): p is ToolPartType => p.type === "tool")
     const running = tools.find((p) => p.state.status === "running")
-    const target = running ?? tools[tools.length - 1]
-    if (!target) return undefined
-    return "title" in target.state && target.state.title ? target.state.title : target.tool
+    if (!running) return undefined
+    return "title" in running.state && running.state.title ? running.state.title : running.tool
   })
   const [verbIdx, setVerbIdx] = useState(0)
 
@@ -133,6 +133,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   useInput(
     (_input, key) => {
       if (key.ctrl && _input === "b") {
+        if (scrolled) return
         if (columns >= SIDEBAR_MIN) setSidebarOpen((v) => !v)
       }
       if (key.ctrl && _input === "o") {
@@ -140,6 +141,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
         return
       }
       if (key.ctrl && _input === "f") {
+        if (scrolled) return
         openSearch()
         return
       }

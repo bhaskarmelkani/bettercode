@@ -2,6 +2,7 @@ import React from "react"
 import { Box, Text } from "ink"
 import { useTheme } from "../theme-context"
 import { useAppStore } from "../store"
+import { TokenWarning } from "./TokenWarning"
 
 interface Props {
   width: number
@@ -30,9 +31,16 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   const autoAccept = useAppStore((s) => s.autoAcceptPermissions)
   const focusMode = useAppStore((s) => s.focusMode)
   const searchMode = useAppStore((s) => s.searchMode)
+  const used = useAppStore((s) => s.contextUsage(s.currentSessionID)?.used)
+  const max = useAppStore((s) => s.contextUsage(s.currentSessionID)?.max)
+  const percent = useAppStore((s) => s.contextUsage(s.currentSessionID)?.percent)
   const edits = useAppStore((s) =>
     (s.messages[sid] ?? []).some((msg) => msg.role === "assistant" && (s.messageDiff[msg.id]?.length ?? 0) > 0),
   )
+  const usage = React.useMemo(() => {
+    if (used === undefined || max === undefined || percent === undefined) return
+    return { used, max, percent }
+  }, [max, percent, used])
 
   const branch = cut(vcs?.branch ?? "—", 28)
   const display = cut(model ? model.modelID : "no model", 24)
@@ -65,21 +73,24 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   const fill = Math.max(0, width - fixed - hint.length)
 
   return (
-    <Box height={1} flexDirection="row">
-      <Text color={theme.overlay}> </Text>
-      <Text color={theme.overlay}>{"⎇ "}</Text>
-      <Text color={theme.cyan}>{branch}</Text>
-      <Text color={theme.overlay}>{" · "}</Text>
-      <Text color={tone} bold>
-        {agent}
-      </Text>
-      <Text color={theme.overlay}>{` (${mode})`}</Text>
-      <Text color={theme.overlay}>{" · "}</Text>
-      <Text color={theme.subtext}>{display}</Text>
-      <Text color={theme.overlay}>{" · "}</Text>
-      <Text color={theme.overlay}>{hint}</Text>
-      {fill > 0 ? <Text>{" ".repeat(fill)}</Text> : null}
-      {autoAccept && <Text color={theme.yellow}>{" auto-accept "}</Text>}
+    <Box flexDirection="column">
+      {usage ? <TokenWarning width={width} usage={usage} /> : null}
+      <Box height={1} flexDirection="row">
+        <Text color={theme.overlay}> </Text>
+        <Text color={theme.overlay}>{"⎇ "}</Text>
+        <Text color={theme.cyan}>{branch}</Text>
+        <Text color={theme.overlay}>{" · "}</Text>
+        <Text color={tone} bold>
+          {agent}
+        </Text>
+        <Text color={theme.overlay}>{` (${mode})`}</Text>
+        <Text color={theme.overlay}>{" · "}</Text>
+        <Text color={theme.subtext}>{display}</Text>
+        <Text color={theme.overlay}>{" · "}</Text>
+        <Text color={theme.overlay}>{hint}</Text>
+        {fill > 0 ? <Text>{" ".repeat(fill)}</Text> : null}
+        {autoAccept && <Text color={theme.yellow}>{" auto-accept "}</Text>}
+      </Box>
     </Box>
   )
 }

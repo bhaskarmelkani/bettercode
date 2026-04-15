@@ -8,6 +8,7 @@ import { Header } from "../src/components/Header"
 import { StatusBar } from "../src/components/StatusBar"
 import { SlashMenu } from "../src/components/SlashMenu"
 import { ModelPickerDialog } from "../src/components/ModelPickerDialog"
+import { progressBar } from "../src/components/TokenWarning"
 
 function reset() {
   useAppStore.setState({
@@ -65,6 +66,72 @@ describe("shell style regressions", () => {
 
     expect(frame.text).toContain("⎇ bhaskar/ui-3.0 · build (shift + tab) · gpt-5-mini")
     expect(frame.text).toContain("ctrl+k: commands · /: slash")
+  })
+
+  test("token warning bar supports partial blocks", () => {
+    expect(progressBar(0.375, 4)).toBe("█▌  ")
+  })
+
+  test("status bar shows context warning and compact hint", async () => {
+    reset()
+    useAppStore.setState({
+      currentSessionID: "s-1",
+      currentModel: { providerID: "github-copilot", modelID: "gpt-5-mini" },
+      vcs: { branch: "bhaskar/ui-3.0" } as NonNullable<ReturnType<typeof useAppStore.getState>["vcs"]>,
+      sessionStatus: { "s-1": { type: "idle" } },
+      providers: [
+        {
+          id: "github-copilot",
+          name: "GitHub Copilot",
+          source: "api",
+          env: [],
+          options: {},
+          models: {
+            "gpt-5-mini": {
+              name: "GPT-5 mini",
+              cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+              limit: { context: 200_000, output: 8192 },
+              status: "active",
+              options: {},
+              headers: {},
+              release_date: "2026-01-01",
+            },
+          },
+        },
+      ] as ReturnType<typeof useAppStore.getState>["providers"],
+      messages: {
+        "s-1": [
+          {
+            id: "m-1",
+            sessionID: "s-1",
+            role: "assistant",
+            providerID: "github-copilot",
+            modelID: "gpt-5-mini",
+            mode: "build",
+            agent: "build",
+            path: { cwd: "/tmp", root: "/tmp" },
+            cost: 0,
+            tokens: {
+              total: 180_000,
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+          },
+        ],
+      },
+    })
+
+    const frame = await capture(
+      <ThemeProvider>
+        <StatusBar width={100} />
+      </ThemeProvider>,
+      { columns: 100, rows: 2 },
+    )
+
+    expect(frame.text).toContain("Context critical — 10% remaining")
+    expect(frame.text).toContain("/compact")
   })
 
   test("slash menu keeps source labels without row slab backgrounds", async () => {

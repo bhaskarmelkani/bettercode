@@ -14,8 +14,10 @@ import {
   cursorLineIdx,
   lineCount,
 } from "../hooks/useTextInput"
+import { useHistorySearch } from "../hooks/useHistorySearch"
 import { useMentions } from "../hooks/useMentions"
 import { useSlashCommands } from "../hooks/useSlashCommands"
+import { editPrompt } from "../utils/promptEditor"
 import type { FilePartInput } from "@opencode-ai/sdk/v2"
 
 // Maximum visible input lines before scrolling within the composer.
@@ -38,6 +40,21 @@ interface Props {
   width: number
 }
 
+type Key = {
+  ctrl?: boolean
+  meta?: boolean
+  shift?: boolean
+  tab?: boolean
+  return?: boolean
+  escape?: boolean
+  backspace?: boolean
+  delete?: boolean
+  upArrow?: boolean
+  downArrow?: boolean
+  leftArrow?: boolean
+  rightArrow?: boolean
+}
+
 export function Composer({ onSubmit, onAbort, onSteer, active, generating, width }: Props) {
   const theme = useTheme()
   const {
@@ -53,6 +70,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
     home,
     end,
     clear,
+    undo,
     newline,
     lineUp,
     lineDown,
@@ -63,6 +81,8 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
   const [draft, setDraft] = useState("")
   const [histIdx, setHistIdx] = useState<number | null>(null)
   const [caretOn, setCaretOn] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [base, setBase] = useState("")
 
   // Persisted history and stash from store
   const hist = useAppStore((s) => s.promptHistory)
@@ -71,11 +91,14 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
   const setPromptStash = useAppStore((s) => s.setPromptStash)
   const setComposerLines = useAppStore((s) => s.setComposerLines)
   const composerAppend = useAppStore((s) => s.composerAppend)
+  const composerSeed = useAppStore((s) => s.composerSeed)
   const setMode = useAppStore((s) => s.setMode)
   const agent = useAppStore((s) => s.mode)
+  const addToast = useAppStore((s) => s.addToast)
 
   const mentions = useMentions(value, cursor, setValue)
   const slash = useSlashCommands(value, mentions.active, clear, setValue)
+  const search = useHistorySearch(hist)
 
   // Blink caret when active. Freeze (off) when inactive.
   useEffect(() => {
@@ -96,6 +119,13 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
     setValue((v) => v + composerAppend)
     useAppStore.getState().setComposerAppend("")
   }, [composerAppend])
+
+  useEffect(() => {
+    if (!composerSeed) return
+    if (value && value !== composerSeed.text) setPromptStash(value)
+    restore(composerSeed.text)
+    useAppStore.getState().clearComposerSeed()
+  }, [composerSeed, value])
 
   // Sync visible line count to store so SessionScreen can adjust dockHeight.
   useEffect(() => {
@@ -125,6 +155,75 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
     if (result) onSteer?.(result.trimmed, result.files)
   }
 
+  function reset() {
+    setHistIdx(null)
+    slash.setIdx(0)
+  }
+
+  function restore(text: string) {
+    setValue(text)
+    reset()
+    mentions.update(text)
+  }
+
+  function cancelSearch() {
+    search.cancel()
+    restore(base)
+  }
+
+  function acceptSearch() {
+    const text = search.accept()
+    restore(text || base)
+  }
+
+  function startSearch() {
+    if (!search.active) setBase(value)
+    mentions.clear()
+    slash.setIdx(0)
+    search.start()
+  }
+
+  async function openEditor() {
+    setBusy(true)
+    try {
+      const next = await editPrompt(value)
+      restore(next)
+    } catch (err) {
+      addToast({
+        message: err instanceof Error ? err.message : "failed to open editor",
+        variant: "error",
+        duration: 3000,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function handleSearch(input: string, key: Key) {
+    if (!search.active) return false
+    if (key.ctrl && input === "r") {
+      search.next()
+      return true
+    }
+    if (key.escape || (key.ctrl && input === "g")) {
+      cancelSearch()
+      return true
+    }
+    if (key.return || (key.ctrl && input === "j")) {
+      acceptSearch()
+      return true
+    }
+    if (key.backspace || key.delete) {
+      search.back()
+      return true
+    }
+    if (!key.ctrl && !key.meta && input && !input.startsWith("[") && !input.startsWith("\u001b")) {
+      search.input(input)
+      return true
+    }
+    return true
+  }
+
   // When generating: handle text editing and queue/steer submission.
   // Arrow keys are intentionally NOT consumed so they flow to MessageList for scrolling.
   useInput(
@@ -134,6 +233,8 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
+      if (handleSearch(input, key)) return
+
       // Ctrl+S → steer (send immediately, bypassing queue)
       if (key.ctrl && input === "s") {
         steer(value)
@@ -142,8 +243,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
 
       if (key.ctrl && input === "u") {
         clear()
-        setHistIdx(null)
-        slash.setIdx(0)
+        reset()
         mentions.clear()
         return
       }
@@ -152,8 +252,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         if (value) {
           setPromptStash(value)
           clear()
-          setHistIdx(null)
-          slash.setIdx(0)
+          reset()
         }
         return
       }
@@ -169,6 +268,22 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
 
       if (key.meta && input === "y") {
         yankPop()
+        return
+      }
+
+      if (key.ctrl && (input === "z" || input === "_")) {
+        undo()
+        reset()
+        return
+      }
+
+      if (key.ctrl && input === "r") {
+        startSearch()
+        return
+      }
+
+      if (key.ctrl && input === "g" && value) {
+        void openEditor()
         return
       }
 
@@ -242,7 +357,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         mentions.update(next)
       }
     },
-    { isActive: active && generating },
+    { isActive: active && generating && !busy },
   )
 
   // Full editing input — inactive while generating so arrow keys go to MessageList.
@@ -253,10 +368,11 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
+      if (handleSearch(input, key)) return
+
       if (key.ctrl && input === "u") {
         clear()
-        setHistIdx(null)
-        slash.setIdx(0)
+        reset()
         mentions.clear()
         return
       }
@@ -266,8 +382,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         if (value) {
           setPromptStash(value)
           clear()
-          setHistIdx(null)
-          slash.setIdx(0)
+          reset()
         }
         return
       }
@@ -282,6 +397,22 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
 
       if (key.meta && input === "y") {
         yankPop()
+        return
+      }
+
+      if (key.ctrl && (input === "z" || input === "_")) {
+        undo()
+        reset()
+        return
+      }
+
+      if (key.ctrl && input === "r") {
+        startSearch()
+        return
+      }
+
+      if (key.ctrl && input === "g" && value) {
+        void openEditor()
         return
       }
 
@@ -335,7 +466,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
-      if (key.upArrow) {
+      if (key.upArrow && !key.shift) {
         if (slash.visible) {
           slash.setIdx((i) => Math.max(0, i - 1))
           return
@@ -349,18 +480,18 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         if (hist.length === 0) return
         if (histIdx === null) {
           setDraft(value)
-          const idx = hist.length - 1
+          const idx = 0
           setHistIdx(idx)
           setValue(hist[idx] ?? "")
-        } else if (histIdx > 0) {
-          const idx = histIdx - 1
+        } else if (histIdx < hist.length - 1) {
+          const idx = histIdx + 1
           setHistIdx(idx)
           setValue(hist[idx] ?? "")
         }
         return
       }
 
-      if (key.downArrow) {
+      if (key.downArrow && !key.shift) {
         if (slash.visible) {
           slash.setIdx((i) => Math.min(slash.options.length - 1, i + 1))
           return
@@ -375,8 +506,8 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         }
         // Single-line or on last line: history navigation.
         if (histIdx === null) return
-        if (histIdx < hist.length - 1) {
-          const idx = histIdx + 1
+        if (histIdx > 0) {
+          const idx = histIdx - 1
           setHistIdx(idx)
           setValue(hist[idx] ?? "")
         } else {
@@ -469,7 +600,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         mentions.update(next)
       }
     },
-    { isActive: active && !generating },
+    { isActive: active && !generating && !busy },
   )
 
   const placeholder = generating
@@ -513,7 +644,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
       )}
 
       <Box flexDirection="column" position="relative">
-        {mentions.visible && (
+        {!search.active && mentions.visible && (
           <Box
             position="absolute"
             width={width}
@@ -533,10 +664,10 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
           </Box>
         )}
         {/* Slash menu — absolute overlay above the input */}
-        {slash.visible && <SlashMenu width={width} options={slash.options} focused={slash.idx} />}
+        {!search.active && slash.visible && <SlashMenu width={width} options={slash.options} focused={slash.idx} />}
 
         {/* Context line — generating status or empty; hidden when slash/mention overlay is open */}
-        {!slash.visible && !mentions.visible && (
+        {!search.active && !slash.visible && !mentions.visible && (
           <Box height={1}>
             {generating ? (
               <Spinner label=" generating  ↑↓ scroll · enter: queue · ctrl+s: steer · ctrl+c: abort" />
@@ -550,7 +681,15 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         <Text color={theme.surface2}>{"─".repeat(width)}</Text>
 
         {/* Input area — always live (supports typing while generating for queue/steer) */}
-        <Box flexDirection="column">
+        {search.active ? (
+          <Box flexDirection="row">
+            <Text color={theme.cyan}>{">  "}</Text>
+            <Text color={theme.text} wrap="truncate-end">
+              {`(reverse-i-search)\`${search.query}': ${search.match || ""}`}
+            </Text>
+          </Box>
+        ) : (
+          <Box flexDirection="column">
           {visLines.map((line, vi) => {
             const absIdx = viewStart + vi
             const lineStart = allStarts[absIdx]!
@@ -600,7 +739,8 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
               </Box>
             )
           })}
-        </Box>
+          </Box>
+        )}
       </Box>
     </Box>
   )

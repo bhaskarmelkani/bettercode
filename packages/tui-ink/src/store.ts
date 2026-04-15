@@ -59,6 +59,12 @@ export type PromptQueueItem = {
   files?: FilePartInput[]
 }
 
+export type ContextUsage = {
+  used: number
+  max: number
+  percent: number
+}
+
 export interface AppState {
   // SDK
   client: OpencodeClient | null
@@ -103,6 +109,8 @@ export interface AppState {
 
   // Per-session scroll position (message offset from bottom)
   scrollPos: Record<string, number>
+  lastSeen: Record<string, number>
+  messageCursor: Record<string, number | null>
 
   // Permissions + questions (keyed by sessionID)
   permissions: Record<string, PermissionRequest[]>
@@ -118,6 +126,7 @@ export interface AppState {
   currentModel: { providerID: string; modelID: string } | undefined
   currentAgent: string | undefined
   recentModels: Array<{ providerID: string; modelID: string }>
+  contextUsage: (sessionID: string) => ContextUsage | undefined
 
   // Display toggles
   showThinking: boolean
@@ -154,6 +163,7 @@ export interface AppState {
 
   // Composer append from server events
   composerAppend: string
+  composerSeed: { text: string; tick: number } | null
 
   // Transient: current number of visible input lines (for dock height)
   composerLines: number
@@ -226,6 +236,10 @@ export interface AppState {
   loadMessages: (sessionID: string) => Promise<void>
   loadMessageDiff: (sessionID: string, messageID: string, parentID?: string) => Promise<void>
   setScrollPos: (sessionID: string, pos: number) => void
+  setLastSeen: (sessionID: string, index: number) => void
+  setMessageCursor: (sessionID: string, index: number | null) => void
+  seedComposer: (text: string) => void
+  clearComposerSeed: () => void
   createSession: () => Promise<Session | null>
   renameSession: (sessionID: string, title: string) => Promise<void>
   deleteSession: (sessionID: string) => Promise<void>
@@ -279,6 +293,36 @@ export function parseCmd(text: string) {
   }
 }
 
+function count(msg: Message) {
+  if (msg.role !== "assistant" || !msg.tokens) return 0
+  if (msg.tokens.total) return msg.tokens.total
+  return (
+    (msg.tokens.input ?? 0) +
+    (msg.tokens.output ?? 0) +
+    (msg.tokens.reasoning ?? 0) +
+    (msg.tokens.cache?.read ?? 0) +
+    (msg.tokens.cache?.write ?? 0)
+  )
+}
+
+export function getContextUsage(
+  state: Pick<AppState, "messages" | "providers">,
+  sessionID: string,
+): ContextUsage | undefined {
+  const msg = state.messages[sessionID] ?? []
+  const last = msg.findLast((item): item is Extract<Message, { role: "assistant" }> => item.role === "assistant" && count(item) > 0)
+  if (!last) return
+  const max = state.providers.find((item) => item.id === last.providerID)?.models[last.modelID]?.limit.context
+  if (!max) return
+  const used = count(last)
+  if (used <= 0) return
+  return {
+    used,
+    max,
+    percent: Math.round((used / max) * 100),
+  }
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   client: null,
   syncStatus: "loading",
@@ -310,6 +354,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   messageDiff: {},
   messageDiffLoaded: {},
   scrollPos: {},
+  lastSeen: {},
+  messageCursor: {},
   permissions: {},
   questions: {},
   composerStatus: "idle",
@@ -326,10 +372,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentThemeName: DEFAULT_THEME,
   toasts: [],
   composerAppend: "",
+  composerSeed: null,
   composerLines: 1,
   currentModel: undefined,
   currentAgent: undefined,
   recentModels: [],
+  contextUsage: (sessionID) => getContextUsage(get(), sessionID),
   promptHistory: [],
   promptStash: null,
   frecency: {},
@@ -358,6 +406,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   removeToast: (id) => set((prev) => ({ toasts: prev.toasts.filter((t) => t.id !== id) })),
   setComposerAppend: (text) => set({ composerAppend: text }),
+  seedComposer: (text) => set({ composerSeed: { text, tick: Date.now() } }),
+  clearComposerSeed: () => set({ composerSeed: null }),
   setComposerLines: (n) => set({ composerLines: n }),
   pushPromptHistory: (text) =>
     set((prev) => {
@@ -678,6 +728,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setScrollPos: (sessionID, pos) => set((prev) => ({ scrollPos: { ...prev.scrollPos, [sessionID]: pos } })),
+  setLastSeen: (sessionID, index) => set((prev) => ({ lastSeen: { ...prev.lastSeen, [sessionID]: index } })),
+  setMessageCursor: (sessionID, index) =>
+    set((prev) => ({ messageCursor: { ...prev.messageCursor, [sessionID]: index } })),
 
   createSession: async () => {
     const { client, directory } = get()

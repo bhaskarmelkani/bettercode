@@ -3,8 +3,8 @@
  * Tests session, message, part, permission, question, dialog, and route state.
  */
 import { describe, test, expect, beforeEach } from "bun:test"
-import { useAppStore } from "../src/store"
-import type { Session, Message, Part, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
+import { getContextUsage, useAppStore } from "../src/store"
+import type { Session, Message, Part, PermissionRequest, Provider, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { registry } from "../src/commands/registry"
 
 function makeSession(id: string, title?: string): Session {
@@ -13,6 +13,63 @@ function makeSession(id: string, title?: string): Session {
 
 function makeMessage(id: string, sessionID: string, role: "user" | "assistant"): Message {
   return { id, sessionID, role } as Message
+}
+
+function makeAssistant(
+  id: string,
+  sessionID: string,
+  tokens: Partial<Extract<Message, { role: "assistant" }>["tokens"]>,
+  total?: number,
+): Message {
+  return {
+    id,
+    sessionID,
+    role: "assistant",
+    providerID: "openai",
+    modelID: "gpt-5.4",
+    mode: "build",
+    agent: "build",
+    path: { cwd: "/tmp", root: "/tmp" },
+    cost: 0,
+    tokens: {
+      input: tokens.input ?? 0,
+      output: tokens.output ?? 0,
+      reasoning: tokens.reasoning ?? 0,
+      cache: {
+        read: tokens.cache?.read ?? 0,
+        write: tokens.cache?.write ?? 0,
+      },
+      ...(total ? { total } : {}),
+    },
+  } as Message
+}
+
+function makeProvider(context: number): Provider {
+  return {
+    id: "openai",
+    name: "OpenAI",
+    source: "api",
+    env: [],
+    options: {},
+    models: {
+      "gpt-5.4": {
+        name: "GPT-5.4",
+        cost: {
+          input: 0,
+          output: 0,
+          cache: { read: 0, write: 0 },
+        },
+        limit: {
+          context,
+          output: 8192,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2026-01-01",
+      },
+    },
+  } as Provider
 }
 
 function makePart(id: string, messageID: string, type: string): Part {
@@ -69,6 +126,8 @@ function resetStore() {
     messageDiff: {},
     messageDiffLoaded: {},
     scrollPos: {},
+    lastSeen: {},
+    messageCursor: {},
     permissions: {},
     questions: {},
     composerStatus: "idle",
@@ -94,6 +153,7 @@ function resetStore() {
     showThinking: false,
     currentThemeName: "catppuccin-mocha",
     composerAppend: "",
+    composerSeed: null,
   })
 }
 
@@ -240,6 +300,48 @@ describe("store — parts", () => {
     expect(useAppStore.getState().collapsedTools["t1"]).toBe(false)
     useAppStore.getState().removePart("m1", "t1")
     expect(useAppStore.getState().collapsedTools["t1"]).toBeUndefined()
+  })
+})
+
+describe("store — context usage", () => {
+  beforeEach(resetStore)
+
+  test("returns undefined without a matching model limit", () => {
+    useAppStore.setState({
+      messages: { s1: [makeAssistant("m1", "s1", { input: 20_000, output: 5_000 })] },
+    })
+    expect(getContextUsage(useAppStore.getState(), "s1")).toBeUndefined()
+  })
+
+  test("uses assistant total tokens when available", () => {
+    useAppStore.setState({
+      providers: [makeProvider(200_000)],
+      messages: { s1: [makeAssistant("m1", "s1", { input: 10_000, output: 2_000 }, 150_000)] },
+    })
+
+    expect(getContextUsage(useAppStore.getState(), "s1")).toEqual({
+      used: 150_000,
+      max: 200_000,
+      percent: 75,
+    })
+  })
+
+  test("falls back to summed tokens when total is missing", () => {
+    useAppStore.setState({
+      providers: [makeProvider(100_000)],
+      messages: {
+        s1: [
+          makeAssistant("m1", "s1", { input: 12_000, output: 3_000 }),
+          makeAssistant("m2", "s1", { input: 40_000, output: 5_000, reasoning: 2_000, cache: { read: 3_000, write: 0 } }),
+        ],
+      },
+    })
+
+    expect(getContextUsage(useAppStore.getState(), "s1")).toEqual({
+      used: 50_000,
+      max: 100_000,
+      percent: 50,
+    })
   })
 })
 
@@ -686,5 +788,26 @@ describe("store — scroll position", () => {
     useAppStore.getState().setScrollPos("s2", 10)
     expect(useAppStore.getState().scrollPos["s1"]).toBe(5)
     expect(useAppStore.getState().scrollPos["s2"]).toBe(10)
+  })
+
+  test("setLastSeen stores a detach marker per session", () => {
+    useAppStore.getState().setLastSeen("s1", 3)
+    useAppStore.getState().setLastSeen("s2", 7)
+    expect(useAppStore.getState().lastSeen["s1"]).toBe(3)
+    expect(useAppStore.getState().lastSeen["s2"]).toBe(7)
+  })
+
+  test("setMessageCursor stores a per-session message pointer", () => {
+    useAppStore.getState().setMessageCursor("s1", 2)
+    useAppStore.getState().setMessageCursor("s2", null)
+    expect(useAppStore.getState().messageCursor["s1"]).toBe(2)
+    expect(useAppStore.getState().messageCursor["s2"]).toBeNull()
+  })
+
+  test("seedComposer primes a replaceable composer draft", () => {
+    useAppStore.getState().seedComposer("retry this prompt")
+    expect(useAppStore.getState().composerSeed?.text).toBe("retry this prompt")
+    useAppStore.getState().clearComposerSeed()
+    expect(useAppStore.getState().composerSeed).toBeNull()
   })
 })

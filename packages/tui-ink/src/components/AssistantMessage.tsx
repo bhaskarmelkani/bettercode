@@ -16,7 +16,7 @@ interface Props {
   parts: Part[]
   showThinking: boolean
   isLast: boolean
-  highlight?: boolean
+  tone?: "search" | "cursor"
   diffs?: SnapshotFileDiff[]
   diffOpen?: boolean
   onToggleDiff?: () => void
@@ -42,7 +42,7 @@ export const AssistantMessage = React.memo(function AssistantMessage({
   parts,
   showThinking,
   isLast,
-  highlight,
+  tone,
   diffs = [],
   diffOpen = false,
   onToggleDiff,
@@ -51,6 +51,10 @@ export const AssistantMessage = React.memo(function AssistantMessage({
   const focusMode = useAppStore((s) => s.focusMode)
   if (message.role !== "assistant") return null
   const msg = message as AssistantMsg
+  const lastText = parts.reduce(
+    (out, part, i) => (part.type === "text" && !part.synthetic && !part.ignored ? i : out),
+    -1,
+  )
 
   const done = msg.finish && !["tool-calls", "unknown"].includes(msg.finish)
   let lead = true
@@ -62,6 +66,7 @@ export const AssistantMessage = React.memo(function AssistantMessage({
     doneAt ? `${tok(msg.tokens.input, msg.tokens.output)} tokens` : "",
     msg.error?.name === "MessageAbortedError" ? "interrupted" : "",
   ].filter((v): v is string => !!v)
+  const border = tone === "cursor" ? theme.cyan : tone === "search" ? theme.yellow : theme.surface2
 
   return (
     <Box
@@ -69,30 +74,25 @@ export const AssistantMessage = React.memo(function AssistantMessage({
       marginTop={1}
       paddingLeft={2}
       borderLeft={true}
-      borderColor={highlight ? theme.yellow : theme.surface2}
+      borderColor={border}
       flexShrink={0}
     >
       {parts.map((part, idx) => {
         if (part.type === "text") {
           if (part.synthetic || part.ignored) return null
-          if (focusMode) {
-            const last = parts.reduce(
-              (out, item, i) => (item.type === "text" && !item.synthetic && !item.ignored ? i : out),
-              -1,
-            )
-            if (idx !== last) return null
-          }
+          if (focusMode && idx !== lastText) return null
           const out = <TextPart key={part.id} part={part} lead={lead ? "◆" : undefined} />
           lead = false
           return out
         }
+        if (focusMode && (part.type === "reasoning" || part.type === "compaction")) return null
         if (part.type === "reasoning") return <ReasoningPart key={part.id} part={part} visible={showThinking} />
         if (part.type === "tool") return <ToolPart key={part.id} part={part} />
         if (part.type === "compaction") return <CompactionPart key={part.id} />
         return null
       })}
 
-      {msg.error && msg.error.name !== "MessageAbortedError" && (
+      {!focusMode && msg.error && msg.error.name !== "MessageAbortedError" && (
         <Box
           marginTop={1}
           paddingLeft={1}
@@ -117,13 +117,13 @@ export const AssistantMessage = React.memo(function AssistantMessage({
         </Box>
       )}
 
-      {(isLast || done || msg.error?.name === "MessageAbortedError") && (
+      {!focusMode && (isLast || done || msg.error?.name === "MessageAbortedError") && (
         <Box paddingLeft={1} marginTop={1}>
           <Text color={theme.overlay}>{footer.join(" · ")}</Text>
         </Box>
       )}
 
-      <MessageDiff diffs={diffs} open={diffOpen} onToggle={onToggleDiff} />
+      {!focusMode && <MessageDiff diffs={diffs} open={diffOpen} onToggle={onToggleDiff} />}
     </Box>
   )
 })

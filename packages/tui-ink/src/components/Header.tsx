@@ -1,7 +1,10 @@
-import React from "react"
+import React, { useEffect, useState } from "react"
 import { Box, Text } from "ink"
+import type { Part, ToolPart as ToolPartType } from "@opencode-ai/sdk/v2"
+import { useShallow } from "zustand/shallow"
 import { Spinner } from "./Spinner"
 import { useTheme } from "../theme-context"
+import { useAppStore } from "../store"
 
 interface HeaderProps {
   projectName: string
@@ -26,12 +29,43 @@ export function Header({ projectName, gitBranch, sessionCount, status, width, hi
   const branch = cut(gitBranch, 24)
   const count = `${sessionCount} session${sessionCount === 1 ? "" : "s"}`
   const spinnerLabel = status === "generating" ? ` ${hint ?? "generating"}` : undefined
-  const right = status === "generating" ? (hint ?? "generating") : status === "error" ? "error" : "ready"
-  const leftLen = project.length + branch.length + count.length + 6
-  const fill = Math.max(0, width - leftLen - right.length - (status === "generating" ? 1 : 0))
+  const live = useAppStore(
+    useShallow((s) => {
+      const sid = s.currentSessionID
+      const msg = sid ? s.messages[sid] ?? [] : []
+      const last = msg.findLast((item) => item.role === "assistant")
+      const parts = last ? s.parts[last.id] ?? [] : []
+      return {
+        sig: stamp(last?.id, parts),
+        thinking: !parts.some(isRunning),
+      }
+    }),
+  )
+  const [pulse, setPulse] = useState<number>()
+  const [since, setSince] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (status !== "generating") {
+      setPulse(undefined)
+      return
+    }
+    setPulse(Date.now())
+  }, [status, live.sig])
+
+  useEffect(() => {
+    if (status !== "generating") {
+      setSince(null)
+      return
+    }
+    if (!live.thinking) {
+      setSince(null)
+      return
+    }
+    setSince((prev) => prev ?? Date.now())
+  }, [status, live.thinking])
 
   return (
-    <Box height={1} flexDirection="row">
+    <Box height={1} width={width} flexDirection="row">
       <Text color={theme.cyan} bold>
         {project}
       </Text>
@@ -39,8 +73,38 @@ export function Header({ projectName, gitBranch, sessionCount, status, width, hi
       <Text color={theme.subtext}>{branch}</Text>
       <Text color={theme.overlay}> ─ </Text>
       <Text color={theme.subtext}>{count}</Text>
-      {fill > 0 ? <Text>{" ".repeat(fill)}</Text> : null}
-      {status === "generating" ? <Spinner label={spinnerLabel} /> : <Text color={statusColor}>{right}</Text>}
+      <Box flexGrow={1} />
+      {status === "generating" ? (
+        <Spinner label={spinnerLabel} pulse={pulse} thinkingSince={since} />
+      ) : (
+        <Text color={statusColor}>{status === "error" ? "error" : "ready"}</Text>
+      )}
     </Box>
   )
+}
+
+function isRunning(part: Part): part is ToolPartType {
+  return part.type === "tool" && part.state.status === "running"
+}
+
+function stamp(id: string | undefined, parts: Part[]) {
+  if (!id) return ""
+  return `${id}:${parts
+    .map((part) => {
+      if (part.type === "text") return `t:${part.text.length}`
+      if (part.type === "reasoning") return `r:${part.text.length}`
+      if (part.type === "tool") return `o:${part.state.status}:${toolTitle(part)}:${toolTime(part)}`
+      return part.type
+    })
+    .join("|")}`
+}
+
+function toolTitle(part: ToolPartType) {
+  return "title" in part.state && part.state.title ? part.state.title : ""
+}
+
+function toolTime(part: ToolPartType) {
+  if (!("time" in part.state) || !part.state.time) return ""
+  const time = part.state.time
+  return `${time.start ?? ""}:${"end" in time ? (time.end ?? "") : ""}`
 }

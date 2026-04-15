@@ -9,6 +9,7 @@ import { SessionScreen } from "./screens/SessionScreen"
 import { PluginScreen } from "./screens/PluginScreen"
 import { DialogOverlay } from "./components/DialogOverlay"
 import { ThemeProvider } from "./theme-context"
+import { handleGlobalCopy } from "./hooks/useTextSelection"
 
 interface AppProps {
   onExit?: () => void
@@ -55,8 +56,12 @@ export function App({ onExit }: AppProps) {
   // Global keys — always active regardless of screen
   useInput((input, key) => {
     if (key.ctrl && input === "c") {
-      onExit?.()
-      process.exit(0)
+      void handleGlobalCopy().then((handled) => {
+        if (handled) return
+        onExit?.()
+        process.exit(0)
+      })
+      return
     }
     // Ctrl+K → command palette
     if (key.ctrl && input === "k") {
