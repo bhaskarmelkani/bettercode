@@ -5,6 +5,7 @@
 import { describe, test, expect, beforeEach } from "bun:test"
 import { useAppStore } from "../src/store"
 import type { Session, Message, Part, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
+import { registry } from "../src/commands/registry"
 
 function makeSession(id: string, title?: string): Session {
   return { id, title: title ?? `Session ${id}` } as Session
@@ -479,6 +480,140 @@ describe("store — model / agent selection", () => {
 
     expect(calls).toHaveLength(1)
     expect(calls[0]?.agent).toBe("review")
+  })
+
+  test("sendPrompt routes matching OpenCode slash commands through session.command", async () => {
+    const prompt: unknown[] = []
+    const cmd: Array<{
+      sessionID: string
+      command: string
+      arguments: string
+      model?: string
+      agent?: string
+      parts?: unknown[]
+    }> = []
+
+    useAppStore.setState({
+      client: {
+        session: {
+          promptAsync: async (input: unknown) => {
+            prompt.push(input)
+          },
+          command: async (input: {
+            sessionID: string
+            command: string
+            arguments: string
+            model?: string
+            agent?: string
+            parts?: unknown[]
+          }) => {
+            cmd.push(input)
+          },
+        },
+      } as never,
+      commands: [{ name: "review", template: "", hints: [] }] as never,
+      mode: "build",
+      currentAgent: "reviewer",
+      currentModel: { providerID: "anthropic", modelID: "claude-3-5" },
+    })
+
+    await useAppStore.getState().sendPrompt("s1", "/review diff head\ninclude tests", [
+      {
+        type: "file",
+        filename: "foo.ts",
+        mime: "text/plain",
+        url: "file:///tmp/foo.ts",
+      },
+    ])
+
+    expect(prompt).toHaveLength(0)
+    expect(cmd).toEqual([
+      {
+        sessionID: "s1",
+        command: "review",
+        arguments: "diff head\ninclude tests",
+        model: "anthropic/claude-3-5",
+        agent: "reviewer",
+        parts: [
+          {
+            type: "file",
+            filename: "foo.ts",
+            mime: "text/plain",
+            url: "file:///tmp/foo.ts",
+          },
+        ],
+      },
+    ])
+  })
+
+  test("sendPrompt routes matching local slash commands through the registry", async () => {
+    let seen = 0
+    const prompt: unknown[] = []
+    const cmd: unknown[] = []
+    const off = registry.register({
+      id: "test.thinking",
+      label: "Toggle Reasoning",
+      category: "Test",
+      slash: "thinking",
+      action: () => {
+        seen += 1
+      },
+    })
+
+    useAppStore.setState({
+      client: {
+        session: {
+          promptAsync: async (input: unknown) => {
+            prompt.push(input)
+          },
+          command: async (input: unknown) => {
+            cmd.push(input)
+          },
+        },
+      } as never,
+    })
+
+    try {
+      await useAppStore.getState().sendPrompt("s1", "/thinking")
+    } finally {
+      off()
+    }
+
+    expect(seen).toBe(1)
+    expect(prompt).toHaveLength(0)
+    expect(cmd).toHaveLength(0)
+    expect(useAppStore.getState().composerStatus).toBe("idle")
+  })
+
+  test("revertSession reverts the latest user message and aborts busy sessions first", async () => {
+    const abort: Array<{ sessionID: string }> = []
+    const revert: Array<{ sessionID: string; messageID: string }> = []
+
+    useAppStore.setState({
+      client: {
+        session: {
+          abort: async (input: { sessionID: string }) => {
+            abort.push(input)
+          },
+          revert: async (input: { sessionID: string; messageID: string }) => {
+            revert.push(input)
+          },
+        },
+      } as never,
+      sessionStatus: { s1: { type: "busy" } as never },
+      messages: {
+        s1: [
+          { id: "m1", sessionID: "s1", role: "user" } as never,
+          { id: "m2", sessionID: "s1", role: "assistant" } as never,
+          { id: "m3", sessionID: "s1", role: "user" } as never,
+        ],
+      },
+    })
+
+    await useAppStore.getState().revertSession("s1")
+
+    expect(abort).toEqual([{ sessionID: "s1" }])
+    expect(revert).toEqual([{ sessionID: "s1", messageID: "m3" }])
   })
 })
 

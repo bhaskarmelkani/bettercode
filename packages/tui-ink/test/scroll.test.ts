@@ -73,17 +73,17 @@ function scrollTopFromOffset(totalHeight: number, viewH: number, rowOffset: numb
 // estimateHeight
 // ---------------------------------------------------------------------------
 describe("estimateHeight", () => {
-  test("user message with no text parts returns 4 (0 lines + 4 padding)", () => {
+  test("user message with no text parts returns a compact minimum height", () => {
     const msg = makeMsg("m1", "user")
     const height = estimateHeight(msg, [], 80)
-    expect(height).toBeGreaterThanOrEqual(4)
+    expect(height).toBe(2)
   })
 
-  test("user message with short text returns 5 (1 line + 4)", () => {
+  test("user message with short text stays compact", () => {
     const msg = makeMsg("m1", "user")
     const part = makeTextPart("p1", "m1", "Hello") // 5 chars << 74 chars per line
     const height = estimateHeight(msg, [part], 80)
-    expect(height).toBeGreaterThanOrEqual(5)
+    expect(height).toBe(3)
   })
 
   test("user message with long text wraps to multiple lines", () => {
@@ -92,35 +92,34 @@ describe("estimateHeight", () => {
     const text = "a".repeat(28) // 2 lines
     const part = makeTextPart("p1", "m1", text)
     const height = estimateHeight(msg, [part], 20)
-    expect(height).toBeGreaterThanOrEqual(6)
+    expect(height).toBe(4)
   })
 
-  test("assistant message with no parts returns minimum 3", () => {
+  test("assistant message with no parts returns a compact minimum height", () => {
     const msg = makeMsg("m1", "assistant")
     const height = estimateHeight(msg, [], 80)
-    expect(height).toBeGreaterThanOrEqual(3)
+    expect(height).toBe(2)
   })
 
-  test("assistant message accumulates text part height", () => {
+  test("assistant message text adds only its rendered rows plus shell chrome", () => {
     const msg = makeMsg("m1", "assistant")
     const part = makeTextPart("p1", "m1", "Short") // 1 line
     const height = estimateHeight(msg, [part], 80)
-    // 3 (base) + (1 line + 2 padding) = 6
-    expect(height).toBeGreaterThanOrEqual(6)
+    expect(height).toBe(3)
   })
 
   test("assistant message skips synthetic text parts", () => {
     const msg = makeMsg("m1", "assistant")
     const part = { ...makeTextPart("p1", "m1", "Synthetic"), synthetic: true } as Part
     const height = estimateHeight(msg, [part], 80)
-    expect(height).toBeGreaterThanOrEqual(3)
+    expect(height).toBe(2)
   })
 
-  test("assistant message with tool part adds 3", () => {
+  test("assistant message with a collapsed tool stays compact", () => {
     const msg = makeMsg("m1", "assistant")
     const part = { id: "p1", messageID: "m1", type: "tool", sessionID: "s1" } as unknown as Part
     const height = estimateHeight(msg, [part], 80)
-    expect(height).toBeGreaterThanOrEqual(6)
+    expect(height).toBe(2)
   })
 
   test("markdown-heavy assistant output keeps enough room for blocks", () => {
@@ -247,7 +246,7 @@ describe("clearHeightCache", () => {
     const msg = makeMsg("m1", "user")
     const part = makeTextPart("p1", "m1", "hello")
     const h = estimateHeight(msg, [part], 80)
-    expect(h).toBeGreaterThanOrEqual(5)
+    expect(h).toBe(3)
   })
 })
 

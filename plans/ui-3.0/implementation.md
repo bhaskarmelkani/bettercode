@@ -1196,6 +1196,222 @@ Milestone notes:
 - [ ] Dedicated diff/log viewer for expanded tool output.
 - [ ] Shared dialog primitives across all picker dialogs.
 
+## Post-plan follow-up — Slash command wiring
+
+Goal: finish the remaining slash-command wiring gaps discovered after the main UI 3.0 pass.
+
+Checklist:
+
+- [x] integration — Route typed slash commands through real TUI or OpenCode handlers
+  - Files:
+    - `packages/tui-ink/src/store.ts`
+    - `packages/tui-ink/src/commands/useHostCommands.ts`
+    - `packages/tui-ink/src/hooks/useSlashCommands.ts`
+  - Fix the current gap where typed slash input is always sent via `session.promptAsync`.
+  - Keep local TUI slash actions local and OpenCode slash commands routed via `session.command`.
+  - Remove slash entries that only exist as pseudo-builtins because they are not properly registered.
+
+- [x] UX change — Make the slash menu a scrollable window over the full command list
+  - Files:
+    - `packages/tui-ink/src/hooks/useSlashCommands.ts`
+    - `packages/tui-ink/src/components/SlashMenu.tsx`
+  - Keep the menu height at 5–6 rows, but allow arrow-key navigation through the complete filtered result set.
+  - Preserve current inline filtering behavior.
+
+- [x] test — Add focused coverage for slash routing and slash-menu windowing
+  - Files:
+    - `packages/tui-ink/test/store.test.ts`
+    - new `packages/tui-ink/test/slash-menu.test.ts`
+  - Cover:
+    - typed local slash command dispatch
+    - typed OpenCode command dispatch
+    - slash filtering returning the full match set
+    - visible menu window tracking the focused row
+
+Milestone notes:
+
+### Implementation notes (2026-04-14)
+
+**Typed slash routing**:
+
+- `store.ts` now exports `parseCmd(text)` and uses it inside `sendPrompt`.
+- Slash submission routing is now:
+  - local TUI slash command in the registry → trigger locally, do not call the model
+  - OpenCode command from `command.list` → call `client.session.command(...)`
+  - anything else → fall back to `client.session.promptAsync(...)`
+- `/clear` is treated as a local no-op at submit time so it no longer gets sent to the model after the composer clears itself.
+
+**Host command registration**:
+
+- Added real registry-backed slash commands for:
+  - `/undo`
+  - `/compact`
+- This lets them work from:
+  - the slash menu
+  - typed `/...` submit flow
+  - the command palette
+- `revertSession(sessionID)` was also fixed to call the real backend contract: abort a busy session if needed, find the last user message in the store, then call `client.session.revert({ sessionID, messageID })`.
+
+**Slash menu windowing**:
+
+- `useSlashCommands.ts` no longer slices the filtered results down to 6 items.
+- New pure helper `filterSlash(all, query)` keeps the full filtered set available to navigation.
+- `SlashMenu.tsx` now uses `slashWin(total, idx, size=6)` to render a 6-row moving window over the full result set, so down-arrow navigation can scroll through every matching command.
+
+**Builtin cleanup**:
+
+- Removed pseudo-builtins that should be real host commands (`undo`, `compact`, `thinking`) from the hook-level builtin list.
+- The hook-level builtin list now only keeps composer-local `/clear`.
+
+**Validation results**:
+
+- `cd packages/tui-ink && bun typecheck`: PASS
+- `cd packages/tui-ink && bun test test/`: 211 pass, 0 fail
+
+## Post-plan follow-up — Question prompt polish
+
+Goal: make question prompts feel like a first-class active surface instead of a cramped fallback list.
+
+Checklist:
+
+- [x] UX change — Remove the dark answer slab and let answers read as part of the prompt surface
+  - Files:
+    - `packages/tui-ink/src/components/QuestionPrompt.tsx`
+    - `packages/tui-ink/src/components/BottomDock.tsx`
+  - Keep the prompt compact, but stop boxing answers into a separate dark panel.
+  - Preserve keyboard navigation and the existing multi-question flow.
+
+- [x] UX change — Remove forced answer truncation and trailing ellipses
+  - Files:
+    - `packages/tui-ink/src/components/QuestionPrompt.tsx`
+  - Let labels and descriptions wrap instead of clipping with `...`.
+  - Keep the visible list readable inside the dock height budget.
+
+- [x] UX change — Reuse Ink UI where it improves the custom-answer flow
+  - Files:
+    - `packages/tui-ink/src/components/QuestionPrompt.tsx`
+  - Check `@inkjs/ui` for a better question/answer primitive.
+  - Prefer adopting a real Ink input component where it improves editing without dropping current behavior.
+
+Milestone notes:
+
+### Implementation notes (2026-04-15)
+
+**Question answer surface**:
+
+- `QuestionPrompt.tsx` no longer renders answer rows on a `theme.mantle` / `theme.surface2` slab. The answers now sit directly in the prompt surface with a selected-state left rail and clearer wrapped descriptions.
+- `BottomDock.tsx` now reserves 11 rows for the question prompt so wrapped descriptions and the custom-answer path fit without clipping.
+- The answers list is now windowed by rendered row height, so the badge/question text stay fixed while arrow-key navigation scrolls the visible answer rows to keep the focused choice on screen.
+- The prompt now keeps a dedicated bottom breathing row above the status lane instead of letting the answer list run right into the bottom chrome.
+
+**Ink UI evaluation**:
+
+- Checked `@inkjs/ui` for a better picker primitive.
+- `TextInput` was adopted for the custom-answer mode so editing uses a real Ink UI control instead of the previous hand-rolled cursor logic.
+- `Select` was evaluated but not adopted because its public option API is label/value only, which would have dropped the current per-answer descriptions.
+
+**Ellipsis cleanup**:
+
+- Removed the manual truncation path from `QuestionPrompt.tsx`, so option labels and descriptions wrap naturally and no longer show the stray right-edge `...`.
+- The in-card footer hint was also removed because the status bar already owns the keyboard help and the extra row made the prompt feel cramped.
+
+**Validation results**:
+
+- `cd packages/tui-ink && bun typecheck`: PASS
+- `cd packages/tui-ink && bun test test/`: 211 pass, 0 fail (was 194; +17 tests including slash routing/windowing plus existing render coverage)
+
+## Post-plan follow-up — Status bar and prompt polish
+
+Goal: tighten the shell chrome so the branch/mode cluster reads more like Claude Code and the prompt marker has clearer breathing room.
+
+Checklist:
+
+- [x] UX change — Add a branch icon and pull the mode shortcut next to the mode label
+  - Files:
+    - `packages/tui-ink/src/components/StatusBar.tsx`
+  - Show the branch with a visual git marker.
+  - Move the `shift+tab` affordance into the mode cluster instead of leaving it in the far-right hint copy.
+
+- [x] UX change — Add clearer spacing after the composer prompt marker
+  - Files:
+    - `packages/tui-ink/src/components/Composer.tsx`
+  - Keep the prompt compact, but give the input text a stable visual gap after `›`.
+  - Preserve the same alignment for wrapped lines and the generating state.
+
+- [x] validation — Refresh package-local render expectations
+  - Files:
+    - `packages/tui-ink/test/__snapshots__/frames/*.txt`
+  - Update the affected frame snapshots after the visual polish lands.
+
+Milestone notes:
+
+### Implementation notes (2026-04-15)
+
+**Status bar cluster**:
+
+- `StatusBar.tsx` now renders the branch as `⎇ branch-name` instead of plain text.
+- The mode cluster now reads `build (shift + tab)` or `plan (shift + tab)`, which keeps the mode-switch shortcut readable and visually attached to the active mode.
+- The idle right-side hint is simplified to `ctrl+k: commands` because mode switching is now expressed inline with the mode label.
+
+**Composer spacing**:
+
+- `Composer.tsx` now reserves a fixed 3-column lead (`›` plus two spaces) before the input content.
+- The same lead width is used for:
+  - the active prompt line
+  - wrapped continuation lines
+  - the generating placeholder row
+- This makes the gap after the prompt marker stable even when the caret is at column 0.
+
+**Validation results**:
+
+- `cd packages/tui-ink && bun typecheck`: PASS
+- `cd packages/tui-ink && bun test test/`: 211 pass, 0 fail
+- `cd packages/tui-ink && UPDATE_SNAPSHOTS=1 bun test test/render.test.tsx`: PASS
+
+## Post-plan follow-up — Transcript scroll robustness
+
+Goal: make the main transcript fill from the top while it fits, then detach into scrolling only once the content genuinely exceeds the viewport.
+
+Checklist:
+
+- [x] UX change — Reduce transcript height inflation so short conversations do not overflow early
+  - Files:
+    - `packages/tui-ink/src/components/MessageList.tsx`
+    - `packages/tui-ink/test/scroll.test.ts`
+  - Replace the previous high-side padding model with a more compact estimate closer to the real rendered rows for user and assistant turns.
+  - Keep the long-transcript cache and windowing behavior intact.
+
+- [x] UX change — Remove extra transcript overflow slack that forced detached scrolling too early
+  - Files:
+    - `packages/tui-ink/src/components/MessageList.tsx`
+  - Stop adding synthetic extra rows to the transcript height.
+  - Keep latest content visible by default when the transcript really does overflow.
+
+- [x] validation — Refresh render expectations after the viewport fit changes
+  - Files:
+    - `packages/tui-ink/test/__snapshots__/frames/*.txt`
+  - Update the session snapshots so they reflect the larger visible transcript area before scrolling kicks in.
+
+Milestone notes:
+
+### Implementation notes (2026-04-15)
+
+**Height model**:
+
+- `MessageList.tsx` now uses a tighter `estimateHeight(...)` model, especially for short user turns and collapsed assistant/tool rows.
+- File chip rows are estimated separately instead of hiding inside a large fixed padding value.
+- The transcript height no longer adds an extra global `+2` safety buffer, which was making half-full screens detach into scrolling too early.
+
+**Viewport behavior**:
+
+- The transcript still defaults to the latest content when it overflows, but it now stays top-aligned while the content fits.
+- This reduces the blank lower-half effect and makes the scroll state much less jumpy because the viewport stops reacting to phantom rows.
+
+**Validation results**:
+
+- `cd packages/tui-ink && bun typecheck`: PASS
+- `cd packages/tui-ink && bun test test/`: 216 pass, 0 fail
+
 ## Final delivery checklist
 
 - [x] `plans/ui-3.0/implementation.md` stays updated during implementation

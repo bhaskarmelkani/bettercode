@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "bun run src/index.tsx",
+    "snapshots": "bun run script/snapshot.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test test/",
     "test:watch": "bun test --watch test/"

@@ -36,6 +36,28 @@ export function useHostCommands() {
         },
       }),
       registry.register({
+        id: "session.undo",
+        label: "Undo Previous Message",
+        description: "Revert the last user turn in the current session",
+        category: "Session",
+        slash: "undo",
+        action: () => {
+          const { currentSessionID, revertSession } = useAppStore.getState()
+          if (currentSessionID) revertSession(currentSessionID)
+        },
+      }),
+      registry.register({
+        id: "session.compact",
+        label: "Compact Session",
+        description: "Summarize the current session",
+        category: "Session",
+        slash: "compact",
+        action: () => {
+          const { currentSessionID, summarizeSession } = useAppStore.getState()
+          if (currentSessionID) summarizeSession(currentSessionID)
+        },
+      }),
+      registry.register({
         id: "model.switch",
         label: "Switch Model",
         description: "Pick a different model for the current session",

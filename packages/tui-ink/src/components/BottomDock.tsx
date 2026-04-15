@@ -18,7 +18,7 @@ const PANELS = new Set(["command-palette", "session-list", "provider", "model-pi
 
 const base = 4
 const perm = 5
-const quest = 7
+const quest = 11
 const paneRows = 15
 
 export function dockHeight(input: {
@@ -91,7 +91,9 @@ export function BottomDock({
   return (
     <Box flexDirection="column" height={height} width={columns}>
       {permissions?.length ? <PermissionPrompt request={permissions[0]!} columns={columns} /> : null}
-      {!permissions?.length && questions?.length ? <QuestionPrompt request={questions[0]!} columns={columns} /> : null}
+      {!permissions?.length && questions?.length ? (
+        <QuestionPrompt request={questions[0]!} columns={columns} rows={Math.max(1, height - base)} />
+      ) : null}
       <Composer onSubmit={onSubmit} onAbort={onAbort} active={active} generating={generating} width={columns} />
     </Box>
   )

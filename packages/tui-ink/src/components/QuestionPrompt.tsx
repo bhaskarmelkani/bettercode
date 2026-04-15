@@ -1,16 +1,45 @@
 import React, { useState } from "react"
 import { Box, Text, useInput } from "ink"
+import { TextInput } from "@inkjs/ui"
 import type { QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useTheme } from "../theme-context"
 import { useAppStore } from "../store"
-import { textDelKey } from "../hooks/useTextInput"
 
 interface Props {
   request: QuestionRequest
   columns: number
+  rows: number
 }
 
-export function QuestionPrompt({ request, columns }: Props) {
+export function wraps(text: string, width: number) {
+  if (width <= 0) return 1
+  return text.split("\n").reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / width)), 0)
+}
+
+export function questionWin(hs: number[], idx: number, rows: number) {
+  if (hs.length === 0 || rows <= 0) return { start: 0, end: 0 }
+  const focus = Math.max(0, Math.min(hs.length - 1, idx))
+  let start = 0
+  let used = 0
+
+  for (let i = 0; i <= focus; i++) {
+    used += hs[i] ?? 0
+    while (used > rows && start < i) {
+      used -= hs[start] ?? 0
+      start += 1
+    }
+  }
+
+  let end = focus + 1
+  while (end < hs.length && used + (hs[end] ?? 0) <= rows) {
+    used += hs[end] ?? 0
+    end += 1
+  }
+
+  return { start, end }
+}
+
+export function QuestionPrompt({ request, columns, rows }: Props) {
   const theme = useTheme()
   const reply = useAppStore((s) => s.replyQuestion)
   // Track current question index and answers collected so far
@@ -18,7 +47,6 @@ export function QuestionPrompt({ request, columns }: Props) {
   const [answers, setAnswers] = useState<string[][]>([])
   const [optIdx, setOptIdx] = useState(0)
   const [custom, setCustom] = useState("")
-  const [cursor, setCursor] = useState(0)
   const [typing, setTyping] = useState(false)
 
   const question = request.questions[qIdx]
@@ -27,51 +55,9 @@ export function QuestionPrompt({ request, columns }: Props) {
     if (!question) return
 
     if (typing) {
-      // Custom text input mode
-      if (key.return) {
-        advance([custom])
-        setCustom("")
-        setCursor(0)
-        setTyping(false)
-        return
-      }
       if (key.escape) {
         setTyping(false)
         setCustom("")
-        setCursor(0)
-        return
-      }
-      if (key.leftArrow) {
-        setCursor((v) => Math.max(0, v - 1))
-        return
-      }
-      if (key.rightArrow) {
-        setCursor((v) => Math.min(custom.length, v + 1))
-        return
-      }
-      if (key.ctrl && input === "a") {
-        setCursor(0)
-        return
-      }
-      if (key.ctrl && input === "e") {
-        setCursor(custom.length)
-        return
-      }
-      if (key.backspace) {
-        if (cursor === 0) return
-        setCustom((v) => v.slice(0, cursor - 1) + v.slice(cursor))
-        setCursor((v) => Math.max(0, v - 1))
-        return
-      }
-      if (key.delete) {
-        const [next, pos] = textDelKey(custom, cursor)
-        setCustom(next)
-        setCursor(pos)
-        return
-      }
-      if (!key.ctrl && !key.meta && input) {
-        setCustom((v) => v.slice(0, cursor) + input + v.slice(cursor))
-        setCursor((v) => v + input.length)
       }
       return
     }
@@ -89,7 +75,6 @@ export function QuestionPrompt({ request, columns }: Props) {
       const isCustomSlot = question.custom !== false && optIdx === opts.length
       if (isCustomSlot) {
         setTyping(true)
-        setCursor(custom.length)
         return
       }
       const selected = opts[optIdx]?.label ?? ""
@@ -115,7 +100,6 @@ export function QuestionPrompt({ request, columns }: Props) {
       setQIdx(nextIdx)
       setOptIdx(0)
       setCustom("")
-      setCursor(0)
       setTyping(false)
     }
   }
@@ -126,30 +110,47 @@ export function QuestionPrompt({ request, columns }: Props) {
   const showCustom = question.custom !== false
   const cmd = "question"
   const head = request.questions.length > 1 ? `${cmd} ${qIdx + 1}/${request.questions.length}` : cmd
-  const cut = (s: string, n: number) => {
-    if (n <= 0) return ""
-    if (s.length <= n) return s
-    if (n <= 3) return s.slice(0, n)
-    return s.slice(0, n - 3) + "..."
-  }
-  const labelWidth = Math.min(24, Math.max(10, ...opts.map((opt) => opt.label.length + 1), showCustom ? 18 : 0))
-  const render = (text: string, pos: number) => {
-    const cut = text.slice(0, pos)
-    const cur = text[pos] ?? " "
-    const tail = text.slice(pos + 1)
-    return (
-      <Text color={theme.text}>
-        {cut}
-        <Text backgroundColor={theme.overlay} color={theme.base}>
-          {cur}
-        </Text>
-        {tail}
-      </Text>
-    )
+  const text = Math.max(1, columns - 4)
+  const label = Math.max(1, columns - 8)
+  const desc = Math.max(1, columns - 10)
+  const items = [
+    ...opts.map((opt) => ({
+      key: opt.label,
+      label: opt.label,
+      description: opt.description,
+      custom: false,
+    })),
+    ...(showCustom
+      ? [
+          {
+            key: "__custom__",
+            label: typing ? "Custom answer" : "Type a custom answer",
+            description: undefined,
+            custom: true,
+          },
+        ]
+      : []),
+  ]
+  const hs = items.map((item) => {
+    const lead = wraps(item.label, label)
+    const tail = item.description ? wraps(item.description, desc) + 1 : 0
+    const input = item.custom && typing ? 1 : 0
+    return lead + tail + input
+  })
+  const top = 1 + 1 + wraps(question.question, text) + 1 + 1
+  const list = Math.max(1, rows - top)
+  const focus = typing && showCustom ? opts.length : optIdx
+  const win = questionWin(hs, focus, list)
+  const pick = (text: string) => {
+    const next = text.trim()
+    if (!next) return
+    advance([next])
+    setCustom("")
+    setTyping(false)
   }
 
   return (
-    <Box flexDirection="column" width={columns} paddingX={2} paddingY={1} flexShrink={0}>
+    <Box flexDirection="column" width={columns} paddingX={2} paddingTop={1} paddingBottom={1} flexShrink={0}>
       <Box marginBottom={1}>
         <Text backgroundColor={theme.cyan} color={theme.base}>
           {` ${head} `}
@@ -161,42 +162,50 @@ export function QuestionPrompt({ request, columns }: Props) {
         {question.question}
       </Text>
 
-      <Box marginTop={1} flexDirection="column">
-        {opts.map((opt, i) => {
-          const sel = i === optIdx
-          const name = cut(opt.label, labelWidth).padEnd(labelWidth, " ")
-          const space = Math.max(0, columns - 4 - labelWidth - 2)
-          const desc = cut(opt.description ?? "", space)
+      <Box marginTop={1} height={list} flexDirection="column">
+        {items.slice(win.start, win.end).map((item, off) => {
+          const i = win.start + off
+          const sel = i === optIdx && !typing
+          const own = item.custom
+          const active = own && (optIdx === opts.length || typing)
           return (
-            <Text
-              key={opt.label}
-              backgroundColor={sel ? theme.surface2 : theme.mantle}
-              color={sel ? theme.text : theme.subtext}
-              wrap="truncate-end"
+            <Box
+              key={item.key}
+              flexDirection="column"
+              borderLeft={sel || active}
+              borderColor={theme.cyan}
+              paddingLeft={sel || active ? 1 : 2}
+              marginBottom={item.description ? 1 : 0}
             >
-              {` ${sel ? "▶" : " "} ${name}  ${desc}`.padEnd(Math.max(0, columns), " ")}
-            </Text>
+              <Box>
+                <Text color={sel || active ? theme.cyan : theme.overlay}>{sel || active ? "▶ " : "  "}</Text>
+                <Text color={sel || active ? theme.text : own ? theme.overlay : theme.subtext} bold={sel || active} wrap="wrap">
+                  {item.label}
+                </Text>
+              </Box>
+              {item.description && (
+                <Box paddingLeft={2}>
+                  <Text color={theme.overlay} wrap="wrap">
+                    {item.description}
+                  </Text>
+                </Box>
+              )}
+              {own && typing ? (
+                <Box paddingLeft={2}>
+                  <TextInput
+                    key={`${request.id}:${qIdx}`}
+                    defaultValue={custom}
+                    placeholder="Type your answer..."
+                    onChange={setCustom}
+                    onSubmit={pick}
+                  />
+                </Box>
+              ) : null}
+            </Box>
           )
         })}
-        {showCustom && (
-          <Text
-            backgroundColor={optIdx === opts.length ? theme.surface2 : theme.mantle}
-            color={typing ? theme.text : optIdx === opts.length ? theme.text : theme.overlay}
-            wrap="truncate-end"
-          >
-            {` ${optIdx === opts.length ? "▶" : " "} `}
-            {typing ? render(custom, cursor) : "Type a custom answer..."}
-          </Text>
-        )}
       </Box>
 
-      <Box marginTop={1}>
-        {typing ? (
-          <Text color={theme.overlay}>←→ move · ctrl+a/e home/end · enter submit · esc cancel</Text>
-        ) : (
-          <Text color={theme.overlay}>↑↓ navigate · enter select · esc reject</Text>
-        )}
-      </Box>
     </Box>
   )
 }

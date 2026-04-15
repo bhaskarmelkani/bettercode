@@ -77,6 +77,16 @@ function lines(input: string, width: number) {
   return Math.max(1, Math.ceil(Math.max(1, input.length) / Math.max(1, width)))
 }
 
+function fileRows(parts: Part[], width: number) {
+  const files = parts.filter((part) => part.type === "file")
+  if (files.length === 0) return 0
+  const badge = files.reduce(
+    (rows, file) => rows + Math.max(8, (file.filename ?? "").length + 8),
+    0,
+  )
+  return 1 + Math.max(1, Math.ceil(badge / Math.max(1, width)))
+}
+
 function measure(items: Token[], width: number): number {
   return items.reduce((sum, tok) => {
     if (tok.type === "space") return sum
@@ -102,23 +112,25 @@ export function estimateHeight(msg: Message, parts: Part[], width: number): numb
   if (msg.role === "user") {
     const t = parts.find((p): p is TextPartType => p.type === "text" && !p.synthetic)
     const body = t ? lex(t.text) : []
-    return measure(body, safeWidth) + 4 // margin + border + padding + safety
+    return Math.max(1, measure(body, safeWidth)) + 1 + fileRows(parts, safeWidth)
   }
-  // assistant: margin + border + parts + footer + safety
-  let h = 4
+  let h = 1
   for (const part of parts) {
     if (part.type === "text") {
       if (part.synthetic || part.ignored) continue
-      h += measure(lex(part.text), safeWidth) + 1
+      h += Math.max(1, measure(lex(part.text), safeWidth))
     } else if (part.type === "tool") {
-      h += 4 // 1 marginTop + title + optional summary + 1 safety
+      h += 1
     } else if (part.type === "compaction") {
       h += 2
     } else if (part.type === "reasoning") {
-      h += 1
+      const text = part.text.replace("[REDACTED]", "").trim()
+      if (text) h += lines(text, safeWidth) + 2
     }
   }
-  return Math.max(3, h)
+  const done = "finish" in msg && msg.finish && !["tool-calls", "unknown"].includes(msg.finish)
+  const foot = done || ("error" in msg && !!msg.error?.name)
+  return Math.max(2, h + (foot ? 2 : 0))
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +209,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
     for (const msg of messages) {
       h.push(h[h.length - 1]! + cachedHeight(msg, parts[msg.id] ?? EMPTY_ARRAY, width, pending))
     }
-    return [h[h.length - 1]! + 2, h] as const
+    return [h[h.length - 1]!, h] as const
   }, [messages, parts, width, pending])
 
   // Max rows we can scroll up before reaching the very top

@@ -23,6 +23,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import { DEFAULT_THEME } from "./theme"
 import * as Frecency from "./frecency"
+import { registry } from "./commands/registry"
 
 export type SyncStatus = "loading" | "partial" | "complete"
 
@@ -219,6 +220,20 @@ function bsearch<T>(arr: T[], id: string, key: (v: T) => string): { found: boole
     else hi = mid - 1
   }
   return { found: false, index: lo }
+}
+
+export function parseCmd(text: string) {
+  if (!text.startsWith("/")) return
+  const idx = text.indexOf("\n")
+  const head = idx === -1 ? text : text.slice(0, idx)
+  const tail = idx === -1 ? "" : text.slice(idx + 1)
+  const [cmd = "", ...rest] = head.split(" ")
+  const name = cmd.slice(1)
+  if (!name) return
+  return {
+    name,
+    args: rest.join(" ") + (tail ? "\n" + tail : ""),
+  }
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -452,14 +467,32 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   sendPrompt: async (sessionID, text, files) => {
-    const { client, currentModel, currentAgent, mode } = get()
+    const { client, currentModel, currentAgent, mode, commands } = get()
     if (!client) return
-    set({ composerStatus: "generating" })
-    const parts = [{ type: "text" as const, text }, ...(files ?? [])]
+    const cmd = parseCmd(text)
+    if (cmd?.name === "clear") return
+    const local = cmd ? registry.all().find((item) => item.slash === cmd.name && item.enabled !== false) : undefined
+    if (local) {
+      local.action()
+      return
+    }
+    const remote = cmd ? commands.find((item) => item.name === cmd.name) : undefined
     try {
+      set({ composerStatus: "generating" })
+      if (remote && cmd) {
+        await client.session.command({
+          sessionID,
+          command: cmd.name,
+          arguments: cmd.args,
+          ...(currentModel ? { model: `${currentModel.providerID}/${currentModel.modelID}` } : {}),
+          agent: currentAgent ?? mode,
+          ...(files?.length ? { parts: files } : {}),
+        })
+        return
+      }
       await client.session.promptAsync({
         sessionID,
-        parts,
+        parts: [{ type: "text", text }, ...(files ?? [])],
         ...(currentModel ? { model: currentModel } : {}),
         agent: currentAgent ?? mode,
       })
@@ -533,9 +566,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   revertSession: async (sessionID) => {
-    const { client } = get()
+    const { client, messages, sessionStatus } = get()
     if (!client) return
-    await client.session.revert({ sessionID }).catch(() => {})
+    if (sessionStatus[sessionID]?.type !== "idle") {
+      await client.session.abort({ sessionID }).catch(() => {})
+    }
+    const msg = [...(messages[sessionID] ?? [])].reverse().find((item) => item.role === "user")
+    if (!msg) return
+    await client.session.revert({ sessionID, messageID: msg.id }).catch(() => {})
   },
 
   abortSession: async (sessionID) => {

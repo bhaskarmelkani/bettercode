@@ -32,6 +32,7 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   const display = cut(model ? model.modelID : "no model", 24)
   const generating = session?.type === "busy" || composerStatus === "generating"
   const tone = agent === "plan" ? theme.yellow : theme.blue
+  const mode = "shift + tab"
   const bg = undefined
 
   const raw = perms
@@ -46,19 +47,21 @@ export function StatusBar({ width, sidebarOpen }: Props) {
         ? "↑↓ scroll · ctrl+c abort"
         : scroll > 0
           ? "ctrl+↓: snap bottom"
-          : "ctrl+k: commands · shift+tab: mode"
+          : "ctrl+k: commands"
 
-  // fixed = " "(2) + branch + " · "(3) + agent + " · "(3) + display + " · "(3)
-  const fixed = 2 + branch.length + 3 + agent.length + 3 + display.length + 3
+  // fixed = " "(2) + git + " · "(3) + agent + " (" + mode + ")" + " · "(3) + display + " · "(3)
+  const fixed = 2 + 2 + branch.length + 3 + agent.length + 2 + mode.length + 1 + 3 + display.length + 3
   const hint = cut(raw, Math.max(0, width - fixed))
   const fill = Math.max(0, width - fixed - hint.length)
 
   return (
     <Box height={1} flexDirection="row">
       <Text color={theme.overlay} backgroundColor={bg}>{" "}</Text>
+      <Text color={theme.overlay} backgroundColor={bg}>{"⎇ "}</Text>
       <Text color={theme.cyan} backgroundColor={bg}>{branch}</Text>
       <Text color={theme.overlay} backgroundColor={bg}>{" · "}</Text>
       <Text color={tone} bold backgroundColor={bg}>{agent}</Text>
+      <Text color={theme.overlay} backgroundColor={bg}>{` (${mode})`}</Text>
       <Text color={theme.overlay} backgroundColor={bg}>{" · "}</Text>
       <Text color={theme.subtext} backgroundColor={bg}>{display}</Text>
       <Text color={theme.overlay} backgroundColor={bg}>{" · "}</Text>

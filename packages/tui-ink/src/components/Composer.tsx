@@ -26,6 +26,7 @@ const MAX_VISIBLE = 15
 //   [13;2u    = CSI-u (Kitty keyboard protocol) — used by kitty, WezTerm with CSI-u enabled
 //   [27;2u    = CSI-u alternate encoding
 const SHIFT_ENTER = new Set(["[27;2;13~", "[13;2u", "[27;2u"])
+const LEAD = 3
 
 interface Props {
   onSubmit: (text: string, files?: FilePartInput[]) => void
@@ -412,7 +413,8 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
         {/* Input area — single or multi-line */}
         {generating ? (
           <Box flexDirection="row">
-            <Text color={theme.overlay}>{"› "}</Text>
+            <Text color={theme.overlay}>{"›"}</Text>
+            <Text>{"  "}</Text>
             <Text color={theme.overlay} dimColor>{"waiting for response..."}</Text>
           </Box>
         ) : (
@@ -425,12 +427,15 @@ export function Composer({ onSubmit, onAbort, active, generating, width }: Props
               const txt = active ? theme.text : theme.subtext
               const glyph = active ? theme.cyan : theme.overlay
               const body = !value ? placeholder : line || " "
-              const fill = Math.max(0, width - 2 - body.length)
+              const fill = Math.max(0, width - LEAD - body.length)
 
               return (
                 <Box key={absIdx} flexDirection="row">
                   <Text color={glyph} backgroundColor={field}>
-                    {vi === 0 && viewStart === 0 ? "› " : "  "}
+                    {vi === 0 && viewStart === 0 ? "›" : " "}
+                  </Text>
+                  <Text backgroundColor={field}>
+                    {"  "}
                   </Text>
                   {onLine ? (
                     <>

@@ -5,11 +5,12 @@ import { registry } from "../commands/registry"
 import type { SlashCommand } from "../components/SlashMenu"
 
 const BUILTIN: SlashCommand[] = [
-  { name: "undo", description: "Revert last message" },
-  { name: "compact", description: "Compact (summarize) session" },
-  { name: "thinking", description: "Toggle reasoning visibility" },
   { name: "clear", description: "Clear composer input" },
 ]
+
+export function filterSlash(all: SlashCommand[], query: string) {
+  return all.filter((cmd) => cmd.name.startsWith(query))
+}
 
 export function useSlashCommands(
   value: string,
@@ -20,8 +21,6 @@ export function useSlashCommands(
   const [idx, setIdx] = useState(0)
 
   const commands = useAppStore((s) => s.commands)
-  const setShowThinking = useAppStore((s) => s.setShowThinking)
-  const showThinking = useAppStore((s) => s.showThinking)
   const regCmds = useCommands()
 
   const isSlash = value.startsWith("/") && !mentionActive
@@ -39,15 +38,10 @@ export function useSlashCommands(
       .map((c) => ({ name: c.name, description: c.description ?? "" })),
   ]
 
-  const options = isSlash ? all.filter((c) => c.name.startsWith(query)).slice(0, 6) : []
+  const options = isSlash ? filterSlash(all, query) : []
   const visible = options.length > 0 && !mentionActive
 
   function select(cmd: SlashCommand) {
-    if (cmd.name === "thinking") {
-      setShowThinking(!showThinking)
-      clear()
-      return
-    }
     if (cmd.name === "clear") {
       clear()
       return
