@@ -42,6 +42,7 @@ export function questionWin(hs: number[], idx: number, rows: number) {
 export function QuestionPrompt({ request, columns, rows }: Props) {
   const theme = useTheme()
   const reply = useAppStore((s) => s.replyQuestion)
+  const reject = useAppStore((s) => s.rejectQuestion)
   // Track current question index and answers collected so far
   const [qIdx, setQIdx] = useState(0)
   const [answers, setAnswers] = useState<string[][]>([])
@@ -82,11 +83,7 @@ export function QuestionPrompt({ request, columns, rows }: Props) {
       return
     }
     if (key.escape) {
-      // Reject the question
-      useAppStore
-        .getState()
-        .client?.question.reject({ requestID: request.id })
-        .catch(() => {})
+      reject(request.id)
     }
   })
 

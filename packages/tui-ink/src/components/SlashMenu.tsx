@@ -7,6 +7,8 @@ const LIMIT = 6
 export interface SlashCommand {
   name: string
   description: string
+  source?: "local" | "command" | "mcp" | "skill"
+  hints?: string[]
 }
 
 interface Props {
@@ -34,27 +36,38 @@ export function SlashMenu({ width, options, focused }: Props) {
     if (n <= 3) return s.slice(0, n)
     return s.slice(0, n - 3) + "..."
   }
-  const cmdWidth = Math.min(14, Math.max(8, ...visible.map((cmd) => cmd.name.length + 1)))
+  const cmdWidth = Math.min(16, Math.max(8, ...visible.map((cmd) => cmd.name.length + 1)))
+  const tag = (cmd: SlashCommand) =>
+    cmd.source === "mcp" ? "MCP" : cmd.source === "skill" ? "SKILL" : cmd.source === "command" ? "CMD" : "LOCAL"
+  const tagColor = (cmd: SlashCommand) =>
+    cmd.source === "mcp" ? theme.green : cmd.source === "skill" ? theme.mauve : cmd.source === "command" ? theme.blue : theme.overlay
 
   return (
     <Box position="absolute" width={width} marginTop={-visible.length} flexDirection="column">
       {visible.map((cmd, i) => {
         const real = start + i
         const sel = real === focused
-        const prefix = `${sel ? "▶" : " "}`
+        const prefix = sel ? "▶" : " "
         const name = `/${cmd.name}`.padEnd(cmdWidth, " ")
-        const space = Math.max(0, width - 5 - cmdWidth)
+        const kind = `[${tag(cmd)}]`
+        const hints = cmd.hints?.join(" ") ?? ""
+        const meta = `${kind}${hints ? ` ${hints}` : ""}`
+        const left = ` ${prefix} ${name}  `
+        const space = Math.max(0, width - left.length - meta.length - 2)
         const desc = cut(cmd.description, space)
-        const body = ` ${prefix} ${name}  ${desc}`.padEnd(width)
+        const fill = Math.max(0, width - left.length - desc.length - meta.length)
         return (
-          <Text
-            key={cmd.name}
-            backgroundColor={sel ? theme.surface1 : theme.surface0}
-            color={sel ? theme.text : theme.subtext}
-            wrap="truncate-end"
-          >
-            {body}
-          </Text>
+          <Box key={cmd.name} flexDirection="row">
+            <Text color={sel ? theme.cyan : theme.overlay}>{` ${prefix} `}</Text>
+            <Text color={sel ? theme.text : theme.subtext} bold={sel}>
+              {name}
+            </Text>
+            <Text color={sel ? theme.text : theme.subtext}>{"  "}</Text>
+            <Text color={sel ? theme.text : theme.subtext}>{desc}</Text>
+            {fill > 0 ? <Text>{" ".repeat(fill)}</Text> : null}
+            <Text color={tagColor(cmd)}>{kind}</Text>
+            {hints ? <Text color={theme.overlay}>{` ${hints}`}</Text> : null}
+          </Box>
         )
       })}
     </Box>

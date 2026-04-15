@@ -1418,3 +1418,38 @@ Milestone notes:
 - [x] Milestone notes are kept current
 - [x] Every milestone ends with typecheck, tests, and manual regression checks
 - [x] No milestone moves forward with unresolved regressions in core transcript/composer behavior
+
+### Post-plan parity pass notes (2026-04-15)
+
+Scope: BetterCode TUI GA-readiness follow-up focused on workflow parity with backend capabilities rather than plugin-authored TUI surfaces.
+
+Completed in this pass:
+
+- Added a read-only backend capability surface for BetterCode-facing runtime metadata:
+  - skills
+  - plugin/runtime summaries
+  - hook/runtime grouping
+- Regenerated the JS SDK and hydrated the TUI store with explicit `skills`, `plugins`, and `hooks` slices.
+- Improved slash-command discoverability and parity:
+  - shared backend/local command labeling
+  - source badges for command/MCP/skill/local
+  - backend hint/usage text in slash surfaces
+  - clearer unknown-command and failed-command feedback
+- Added per-turn file edit summaries in the transcript using `session.diff(sessionID, messageID)`:
+  - summary-first rows per changed file
+  - status marker plus add/delete counts
+  - collapsed by default with explicit expansion
+- Improved permission/question handling feedback in the store and prompt surfaces.
+- Reworked the sidebar capability view to summarize MCP, skills, plugins, and hooks.
+- Wired the live header into home/session screens so the shell chrome matches the current runtime state.
+
+Follow-ups intentionally deferred from this pass:
+
+- manual regression sweep for streaming, resize, detached scroll, and live permission/question flows
+- richer per-message diff interaction than the current latest-diff keyboard toggle
+- any plugin-authored TUI routes, slots, or custom plugin UI chrome
+
+Validation results:
+
+- `cd packages/tui-ink && bun typecheck`: PASS
+- `cd packages/tui-ink && bun test test/`: 218 pass, 0 fail

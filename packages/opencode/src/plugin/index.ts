@@ -16,15 +16,27 @@ import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { errorMessage } from "@/util/error"
+import z from "zod"
 import { PluginLoader } from "./loader"
-import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
+import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId, type PluginSource } from "./shared"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
   type State = {
     hooks: Hooks[]
+    summary: Summary[]
   }
+
+  export const Summary = z.object({
+    id: z.string(),
+    source: z.enum(["internal", "file", "npm"]),
+    spec: z.string(),
+    target: z.string().optional(),
+    active: z.boolean(),
+    hooks: z.array(z.string()),
+  })
+  export type Summary = z.infer<typeof Summary>
 
   // Hook names that follow the (input, output) => Promise<void> trigger pattern
   type TriggerName = {
@@ -42,6 +54,7 @@ export namespace Plugin {
       output: Output,
     ) => Effect.Effect<Output>
     readonly list: () => Effect.Effect<Hooks[]>
+    readonly summary: () => Effect.Effect<Summary[]>
     readonly init: () => Effect.Effect<void>
   }
 
@@ -91,16 +104,47 @@ export namespace Plugin {
     )
   }
 
-  async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
+  function names(hook: Hooks) {
+    return Object.keys(hook).sort()
+  }
+
+  function addSummary(
+    list: Summary[],
+    input: {
+      id: string
+      source: "internal" | PluginSource
+      spec: string
+      target?: string
+      hook: Hooks
+    },
+  ) {
+    list.push({
+      id: input.id,
+      source: input.source,
+      spec: input.spec,
+      target: input.target,
+      active: true,
+      hooks: names(input.hook),
+    })
+  }
+
+  async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[], summary: Summary[]) {
     const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
     if (plugin) {
-      await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
-      hooks.push(await (plugin as PluginModule).server(input, load.options))
+      const id = await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
+      const hook = await (plugin as PluginModule).server(input, load.options)
+      hooks.push(hook)
+      addSummary(summary, { id, source: load.source, spec: load.spec, target: load.target, hook })
       return
     }
 
-    for (const server of getLegacyPlugins(load.mod)) {
-      hooks.push(await server(input, load.options))
+    const legacy = getLegacyPlugins(load.mod)
+    for (const [idx, server] of legacy.entries()) {
+      const hook = await server(input, load.options)
+      const id =
+        legacy.length === 1 ? `${parsePluginSpecifier(load.spec).pkg || load.spec}` : `${load.spec}#${idx + 1}`
+      hooks.push(hook)
+      addSummary(summary, { id, source: load.source, spec: load.spec, target: load.target, hook })
     }
   }
 
@@ -113,6 +157,7 @@ export namespace Plugin {
       const state = yield* InstanceState.make<State>(
         Effect.fn("Plugin.state")(function* (ctx) {
           const hooks: Hooks[] = []
+          const summary: Summary[] = []
 
           const { Server } = yield* Effect.promise(() => import("../server/server"))
 
@@ -147,7 +192,10 @@ export namespace Plugin {
                 log.error("failed to load internal plugin", { name: plugin.name, error: err })
               },
             }).pipe(Effect.option)
-            if (init._tag === "Some") hooks.push(init.value)
+            if (init._tag === "Some") {
+              hooks.push(init.value)
+              addSummary(summary, { id: plugin.name, source: "internal", spec: plugin.name, hook: init.value })
+            }
           }
 
           const plugins = Flag.OPENCODE_PURE ? [] : (cfg.plugin_origins ?? [])
@@ -203,7 +251,7 @@ export namespace Plugin {
             // Keep plugin execution sequential so hook registration and execution
             // order remains deterministic across plugin runs.
             yield* Effect.tryPromise({
-              try: () => applyPlugin(load, input, hooks),
+              try: () => applyPlugin(load, input, hooks, summary),
               catch: (err) => {
                 const message = errorMessage(err)
                 log.error("failed to load plugin", { path: load.spec, error: message })
@@ -242,7 +290,7 @@ export namespace Plugin {
             Effect.forkScoped,
           )
 
-          return { hooks }
+          return { hooks, summary }
         }),
       )
 
@@ -266,11 +314,16 @@ export namespace Plugin {
         return s.hooks
       })
 
+      const summary = Effect.fn("Plugin.summary")(function* () {
+        const s = yield* InstanceState.get(state)
+        return s.summary
+      })
+
       const init = Effect.fn("Plugin.init")(function* () {
         yield* InstanceState.get(state)
       })
 
-      return Service.of({ trigger, list, init })
+      return Service.of({ trigger, list, summary, init })
     }),
   )
 
@@ -287,6 +340,10 @@ export namespace Plugin {
 
   export async function list(): Promise<Hooks[]> {
     return runPromise((svc) => svc.list())
+  }
+
+  export async function summary(): Promise<Summary[]> {
+    return runPromise((svc) => svc.summary())
   }
 
   export async function init() {

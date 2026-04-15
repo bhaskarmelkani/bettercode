@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from "react"
 import { Box, Text, useInput } from "ink"
-import type { Message, Part, TextPart as TextPartType } from "@opencode-ai/sdk/v2"
+import type { Message, Part, SnapshotFileDiff, TextPart as TextPartType } from "@opencode-ai/sdk/v2"
 import { UserMessage } from "./UserMessage"
 import { AssistantMessage } from "./AssistantMessage"
 import { useAppStore } from "../store"
@@ -11,6 +11,7 @@ import type { Token } from "./markdown/types"
 const EMPTY_MESSAGES: Message[] = []
 const EMPTY_PARTS: Record<string, Part[]> = {}
 const EMPTY_ARRAY: Part[] = []
+const EMPTY_DIFF: SnapshotFileDiff[] = []
 
 // ---------------------------------------------------------------------------
 // Height cache — module-scoped so it survives React re-renders.
@@ -27,9 +28,10 @@ let cacheWidth = -1
  * version = (parts.length * 1_000_000) + length of the last text part's text.
  * Cheap to compute and changes whenever streaming appends characters.
  */
-export function cacheVersion(parts: Part[]): number {
+export function cacheVersion(parts: Part[], diffs: SnapshotFileDiff[] = [], open = false): number {
   const last = [...parts].reverse().find((p): p is TextPartType => p.type === "text")
-  return parts.length * 1_000_000 + (last?.text.length ?? 0)
+  const patch = diffs.reduce((sum, item) => sum + item.patch.length, 0)
+  return parts.length * 1_000_000 + (last?.text.length ?? 0) + diffs.length * 10_000 + patch + (open ? 1 : 0)
 }
 
 /** Clear the height cache (used in tests and on width change). */
@@ -38,13 +40,20 @@ export function clearHeightCache(): void {
   cacheWidth = -1
 }
 
-function cachedHeight(msg: Message, parts: Part[], width: number, pending: string | undefined): number {
+function cachedHeight(
+  msg: Message,
+  parts: Part[],
+  diffs: SnapshotFileDiff[],
+  open: boolean,
+  width: number,
+  pending: string | undefined,
+) {
   // Always recompute for the actively streaming message.
-  if (msg.id === pending) return estimateHeight(msg, parts, width)
-  const v = cacheVersion(parts)
+  if (msg.id === pending) return estimateHeight(msg, parts, width, diffs, open)
+  const v = cacheVersion(parts, diffs, open)
   const entry = heightCache.get(msg.id)
   if (entry && entry.version === v) return entry.height
-  const h = estimateHeight(msg, parts, width)
+  const h = estimateHeight(msg, parts, width, diffs, open)
   heightCache.set(msg.id, { height: h, version: v })
   return h
 }
@@ -107,7 +116,7 @@ function measure(items: Token[], width: number): number {
   }, 0)
 }
 
-export function estimateHeight(msg: Message, parts: Part[], width: number): number {
+export function estimateHeight(msg: Message, parts: Part[], width: number, diffs: SnapshotFileDiff[] = [], open = false): number {
   const safeWidth = Math.max(1, width - 6)
   if (msg.role === "user") {
     const t = parts.find((p): p is TextPartType => p.type === "text" && !p.synthetic)
@@ -130,6 +139,12 @@ export function estimateHeight(msg: Message, parts: Part[], width: number): numb
   }
   const done = "finish" in msg && msg.finish && !["tool-calls", "unknown"].includes(msg.finish)
   const foot = done || ("error" in msg && !!msg.error?.name)
+  if (diffs.length > 0) {
+    h += 1 + diffs.length
+    if (open) {
+      h += diffs.reduce((sum, item) => sum + Math.min(13, item.patch.split(/\r?\n/).length + 1), 0)
+    }
+  }
   return Math.max(2, h + (foot ? 2 : 0))
 }
 
@@ -183,12 +198,23 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const showThinking = useAppStore((s) => s.showThinking)
   const savedPos = useAppStore((s) => s.scrollPos[sessionID] ?? 0)
   const setScrollPos = useAppStore((s) => s.setScrollPos)
+  const loadMessageDiff = useAppStore((s) => s.loadMessageDiff)
+  const messageDiff = useAppStore((s) => s.messageDiff)
+  const collapsedDiffs = useAppStore((s) => s.collapsedDiffs)
   const collapsedTools = useAppStore((s) => s.collapsedTools)
   const expandAllTools = useAppStore((s) => s.expandAllTools)
   const collapseAllTools = useAppStore((s) => s.collapseAllTools)
   const activeRef = useRef(active)
 
   const pending = useMemo(() => messages.findLast((m) => m.role === "assistant" && !m.time.completed)?.id, [messages])
+
+  useEffect(() => {
+    for (const msg of messages) {
+      if (msg.role !== "assistant" || !msg.parentID) continue
+      if (!msg.time.completed && !msg.error) continue
+      loadMessageDiff(sessionID, msg.id, msg.parentID)
+    }
+  }, [loadMessageDiff, messages, sessionID])
 
   // rowOffset: how many rows from the absolute bottom of all content to scroll up.
   // 0 = stick to bottom (latest), positive = scrolled up.
@@ -207,10 +233,12 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
     }
     const h: number[] = [0]
     for (const msg of messages) {
-      h.push(h[h.length - 1]! + cachedHeight(msg, parts[msg.id] ?? EMPTY_ARRAY, width, pending))
+      const diffs = messageDiff[msg.id] ?? EMPTY_DIFF
+      const open = !(collapsedDiffs[msg.id] ?? true)
+      h.push(h[h.length - 1]! + cachedHeight(msg, parts[msg.id] ?? EMPTY_ARRAY, diffs, open, width, pending))
     }
     return [h[h.length - 1]!, h] as const
-  }, [messages, parts, width, pending])
+  }, [collapsedDiffs, messageDiff, messages, parts, width, pending])
 
   // Max rows we can scroll up before reaching the very top
   const maxRowOffset = Math.max(0, totalHeight - height)
@@ -357,6 +385,8 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
               parts={msgParts}
               showThinking={showThinking}
               isLast={msg.id === last?.id}
+              diffs={messageDiff[msg.id] ?? EMPTY_DIFF}
+              diffOpen={!(collapsedDiffs[msg.id] ?? true)}
             />
           )
         })}

@@ -24,6 +24,7 @@ import type {
 import { DEFAULT_THEME } from "./theme"
 import * as Frecency from "./frecency"
 import { registry } from "./commands/registry"
+import type { CapabilityHook, CapabilityPlugin, CapabilitySkill } from "./types"
 
 export type SyncStatus = "loading" | "partial" | "complete"
 
@@ -72,6 +73,9 @@ export interface AppState {
   providerAuth: Record<string, ProviderAuthMethod[]>
   agents: Agent[]
   commands: Command[]
+  skills: CapabilitySkill[]
+  plugins: CapabilityPlugin[]
+  hooks: CapabilityHook[]
   config: Config
   lsp: LspStatus[]
   mcp: Record<string, McpStatus>
@@ -86,7 +90,10 @@ export interface AppState {
   messages: Record<string, Message[]>
   parts: Record<string, Part[]>
   collapsedTools: Record<string, boolean>
+  collapsedDiffs: Record<string, boolean>
   messagesLoaded: Record<string, boolean>
+  messageDiff: Record<string, SnapshotFileDiff[]>
+  messageDiffLoaded: Record<string, boolean>
 
   // Per-session scroll position (message offset from bottom)
   scrollPos: Record<string, number>
@@ -169,6 +176,7 @@ export interface AppState {
   toggleToolCollapse: (partID: string) => void
   expandAllTools: (sessionID: string) => void
   collapseAllTools: (sessionID: string) => void
+  toggleDiffCollapse: (messageID: string) => void
 
   upsertPermission: (req: PermissionRequest) => void
   removePermission: (sessionID: string, requestID: string) => void
@@ -179,9 +187,11 @@ export interface AppState {
   abortSession: (sessionID: string) => Promise<void>
   replyPermission: (requestID: string, reply: "once" | "always" | "reject") => Promise<void>
   replyQuestion: (requestID: string, answers: string[][]) => Promise<void>
+  rejectQuestion: (requestID: string) => Promise<void>
 
   // Session management
   loadMessages: (sessionID: string) => Promise<void>
+  loadMessageDiff: (sessionID: string, messageID: string, parentID?: string) => Promise<void>
   setScrollPos: (sessionID: string, pos: number) => void
   createSession: () => Promise<Session | null>
   renameSession: (sessionID: string, title: string) => Promise<void>
@@ -249,6 +259,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   providerAuth: {},
   agents: [],
   commands: [],
+  skills: [],
+  plugins: [],
+  hooks: [],
   config: {},
   lsp: [],
   mcp: {},
@@ -259,7 +272,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   messages: {},
   parts: {},
   collapsedTools: {},
+  collapsedDiffs: {},
   messagesLoaded: {},
+  messageDiff: {},
+  messageDiffLoaded: {},
   scrollPos: {},
   permissions: {},
   questions: {},
@@ -352,15 +368,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       const { found, index } = bsearch(arr, messageID, (x) => x.id)
       const nextParts = { ...prev.parts }
       const nextCollapsed = { ...prev.collapsedTools }
+      const nextDiff = { ...prev.messageDiff }
+      const nextDiffLoaded = { ...prev.messageDiffLoaded }
+      const nextCollapsedDiffs = { ...prev.collapsedDiffs }
       if (found) arr.splice(index, 1)
       for (const part of nextParts[messageID] ?? []) {
         if (part.type === "tool") delete nextCollapsed[part.id]
       }
       delete nextParts[messageID]
+      delete nextDiff[messageID]
+      delete nextDiffLoaded[messageID]
+      delete nextCollapsedDiffs[messageID]
       return {
         messages: { ...prev.messages, [sessionID]: arr },
         parts: nextParts,
         collapsedTools: nextCollapsed,
+        messageDiff: nextDiff,
+        messageDiffLoaded: nextDiffLoaded,
+        collapsedDiffs: nextCollapsedDiffs,
       }
     }),
 
@@ -432,6 +457,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { collapsedTools: next }
     }),
 
+  toggleDiffCollapse: (messageID) =>
+    set((prev) => {
+      const open = prev.collapsedDiffs[messageID] ?? true
+      return { collapsedDiffs: { ...prev.collapsedDiffs, [messageID]: !open } }
+    }),
+
   upsertPermission: (req) =>
     set((prev) => {
       const arr = [...(prev.permissions[req.sessionID] ?? [])]
@@ -477,6 +508,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       return
     }
     const remote = cmd ? commands.find((item) => item.name === cmd.name) : undefined
+    if (cmd && !remote) {
+      get().addToast({
+        title: "Unknown command",
+        message: `/${cmd.name} is not available in this session.`,
+        variant: "warning",
+        duration: 3000,
+      })
+      return
+    }
     try {
       set({ composerStatus: "generating" })
       if (remote && cmd) {
@@ -498,6 +538,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       })
     } catch {
       set({ composerStatus: "error" })
+      get().addToast({
+        title: cmd ? "Command failed" : "Prompt failed",
+        message: cmd ? `/${cmd.name} could not be executed.` : "The prompt could not be sent.",
+        variant: "error",
+        duration: 4000,
+      })
     }
   },
 
@@ -520,6 +566,28 @@ export const useAppStore = create<AppState>((set, get) => ({
         const next = { ...prev.messagesLoaded }
         delete next[sessionID]
         return { messagesLoaded: next }
+      })
+    }
+  },
+
+  loadMessageDiff: async (sessionID, messageID, parentID) => {
+    const { client, messageDiffLoaded } = get()
+    if (!client) return
+    if (messageDiffLoaded[messageID]) return
+    set((prev) => ({ messageDiffLoaded: { ...prev.messageDiffLoaded, [messageID]: true } }))
+    try {
+      const res = await client.session.diff({
+        sessionID,
+        ...(parentID ? { messageID: parentID } : {}),
+      })
+      set((prev) => ({
+        messageDiff: { ...prev.messageDiff, [messageID]: res.data ?? [] },
+      }))
+    } catch {
+      set((prev) => {
+        const next = { ...prev.messageDiffLoaded }
+        delete next[messageID]
+        return { messageDiffLoaded: next }
       })
     }
   },
@@ -586,12 +654,36 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { client } = get()
     if (!client) return
     await client.permission.reply({ requestID, reply }).catch(() => {})
+    get().addToast({
+      title: "Permission replied",
+      message: reply === "always" ? "Always allow saved." : reply === "once" ? "Allowed once." : "Request rejected.",
+      variant: reply === "reject" ? "warning" : "success",
+      duration: 2500,
+    })
   },
 
   replyQuestion: async (requestID, answers) => {
     const { client } = get()
     if (!client) return
     await client.question.reply({ requestID, answers }).catch(() => {})
+    get().addToast({
+      title: "Question answered",
+      message: "Answer sent to the session.",
+      variant: "success",
+      duration: 2500,
+    })
+  },
+
+  rejectQuestion: async (requestID) => {
+    const { client } = get()
+    if (!client) return
+    await client.question.reject({ requestID }).catch(() => {})
+    get().addToast({
+      title: "Question rejected",
+      message: "The session was told that the question was rejected.",
+      variant: "warning",
+      duration: 2500,
+    })
   },
 
   setProviderApiKey: async (providerID, key, metadata) => {

@@ -1,3 +1,4 @@
+bettercode ─ feat/ui-snapshots ─ 2 sessions                                                                        ready
 
  • Can we make the TUI snapshot-friendly so agents can inspect spacing, hierarchy, and prompts?
 
@@ -19,12 +20,11 @@
 
    build · gpt-5.4 · 1.4s · 2.5k tokens
 
+     ▸ edits 2 files +3 -2
 
+     ~ packages/tui-ink/src/screens/SessionScreen.tsx +2 -1
 
-
-
-
-
+     ~ packages/tui-ink/src/components/StatusBar.tsx +1 -1
 
 
 
@@ -37,4 +37,4 @@
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
    Type a message... (/ for commands, @ for files)
- ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · ctrl+k: commands
+ ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · ctrl+g: toggle edits · ctrl+b: capabilities

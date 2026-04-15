@@ -165,10 +165,12 @@ async function bootstrap(client: ReturnType<typeof createOpencodeClient>, direct
   const q = directory ? { directory } : {}
 
   // Parallel non-blocking fetch of all bootstrap data
-  const [providerList, agents, commands, config, sessions, lsp, mcp, vcs, providerAuth] = await Promise.all([
+  const [providerList, agents, commands, capabilities, config, sessions, lsp, mcp, vcs, providerAuth] =
+    await Promise.all([
     client.provider.list(q).then((r) => r.data ?? { all: [], default: {}, connected: [] }),
     client.app.agents(q).then((r) => r.data ?? []),
     client.command.list(q).then((r) => r.data ?? []),
+    client.app.capabilities(q).then((r) => r.data ?? { skills: [], plugins: [], hooks: [] }),
     client.config.get(q).then((r) => r.data ?? {}),
     client.session
       .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000 })
@@ -186,6 +188,9 @@ async function bootstrap(client: ReturnType<typeof createOpencodeClient>, direct
     providerAuth,
     agents,
     commands,
+    skills: capabilities.skills,
+    plugins: capabilities.plugins,
+    hooks: capabilities.hooks,
     config,
     sessions,
     lsp,

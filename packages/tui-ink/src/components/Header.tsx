@@ -24,35 +24,34 @@ export function Header({ projectName, gitBranch, sessionCount, status, width }: 
   const project = cut(projectName, 24)
   const branch = cut(gitBranch, 24)
   const count = `${sessionCount} session${sessionCount === 1 ? "" : "s"}`
-  const bg = theme.mantle
   const right = status === "generating" ? "generating" : status === "error" ? "error" : "ready"
   const leftLen = project.length + branch.length + count.length + 6
   const fill = Math.max(0, width - leftLen - right.length - (status === "generating" ? 1 : 0))
 
   return (
     <Box height={1} flexDirection="row">
-      <Text color={theme.cyan} bold backgroundColor={bg}>
+      <Text color={theme.cyan} bold>
         {project}
       </Text>
-      <Text color={theme.overlay} backgroundColor={bg}>
+      <Text color={theme.overlay}>
         {" "}
         ─{" "}
       </Text>
-      <Text color={theme.subtext} backgroundColor={bg}>
+      <Text color={theme.subtext}>
         {branch}
       </Text>
-      <Text color={theme.overlay} backgroundColor={bg}>
+      <Text color={theme.overlay}>
         {" "}
         ─{" "}
       </Text>
-      <Text color={theme.subtext} backgroundColor={bg}>
+      <Text color={theme.subtext}>
         {count}
       </Text>
-      {fill > 0 ? <Text backgroundColor={bg}>{" ".repeat(fill)}</Text> : null}
+      {fill > 0 ? <Text>{" ".repeat(fill)}</Text> : null}
       {status === "generating" ? (
-        <Spinner label=" generating" backgroundColor={bg} />
+        <Spinner label=" generating" />
       ) : (
-        <Text color={statusColor} backgroundColor={bg}>
+        <Text color={statusColor}>
           {right}
         </Text>
       )}

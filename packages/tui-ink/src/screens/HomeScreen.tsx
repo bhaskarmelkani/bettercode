@@ -1,6 +1,7 @@
 import React from "react"
 import { Box, Text } from "ink"
 import { useAppStore } from "../store"
+import { Header } from "../components/Header"
 import { Spinner } from "../components/Spinner"
 import { StatusBar } from "../components/StatusBar"
 import { useTheme } from "../theme-context"
@@ -28,7 +29,7 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
   const project = dir?.split("/").pop() ?? "bettercode"
   const branch = vcs?.branch ?? "—"
   const dockRows = dockHeight({ rows, dialog, inputLines: composerLines })
-  const mainRows = Math.max(1, rows - 1 - dockRows)
+  const mainRows = Math.max(1, rows - 2 - dockRows)
 
   const handleSubmit = async (text: string) => {
     const client = useAppStore.getState().client
@@ -48,6 +49,8 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
 
   return (
     <Box height={rows} width={columns} flexDirection="column">
+      <Header projectName={project} gitBranch={branch} sessionCount={sessions.length} status="idle" width={columns} />
+
       <Box height={mainRows} flexDirection="column" justifyContent="center" alignItems="center">
         {isLoading && <Spinner label=" connecting to server..." />}
 
@@ -63,11 +66,9 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
             <Text color={theme.text} bold>
               bettercode
             </Text>
-            <Box marginTop={1} flexDirection="row">
-              <Text color={theme.overlay}>⎇ </Text>
-              <Text color={theme.cyan}>{branch}</Text>
-              <Text color={theme.overlay}>{`  ·  ${providers.length} provider${providers.length !== 1 ? "s" : ""}  ·  ${project}`}</Text>
-            </Box>
+            <Text color={theme.overlay} wrap="wrap">
+              {providers.length} provider{providers.length !== 1 ? "s" : ""} connected to {project}
+            </Text>
 
             {recent.length > 0 && (
               <Box marginTop={2} flexDirection="column">

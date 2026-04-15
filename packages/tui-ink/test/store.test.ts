@@ -64,7 +64,10 @@ function resetStore() {
     messages: {},
     parts: {},
     collapsedTools: {},
+    collapsedDiffs: {},
     messagesLoaded: {},
+    messageDiff: {},
+    messageDiffLoaded: {},
     scrollPos: {},
     permissions: {},
     questions: {},
@@ -78,6 +81,9 @@ function resetStore() {
     providers: [],
     agents: [],
     commands: [],
+    skills: [],
+    plugins: [],
+    hooks: [],
     config: {},
     lsp: [],
     mcp: {},
@@ -583,6 +589,51 @@ describe("store — model / agent selection", () => {
     expect(prompt).toHaveLength(0)
     expect(cmd).toHaveLength(0)
     expect(useAppStore.getState().composerStatus).toBe("idle")
+  })
+
+  test("sendPrompt shows a warning toast for unknown slash commands", async () => {
+    const prompt: unknown[] = []
+
+    useAppStore.setState({
+      client: {
+        session: {
+          promptAsync: async (input: unknown) => {
+            prompt.push(input)
+          },
+        },
+      } as never,
+      commands: [],
+    })
+
+    await useAppStore.getState().sendPrompt("s1", "/missing")
+
+    expect(prompt).toHaveLength(0)
+    expect(useAppStore.getState().toasts.at(-1)?.title).toBe("Unknown command")
+  })
+
+  test("loadMessageDiff stores scoped diffs per assistant message", async () => {
+    useAppStore.setState({
+      client: {
+        session: {
+          diff: async () => ({
+            data: [
+              {
+                file: "src/app.ts",
+                patch: "@@ -1 +1 @@\n-old\n+new",
+                additions: 1,
+                deletions: 1,
+                status: "modified",
+              },
+            ],
+          }),
+        },
+      } as never,
+    })
+
+    await useAppStore.getState().loadMessageDiff("s1", "m-assistant", "m-user")
+
+    expect(useAppStore.getState().messageDiff["m-assistant"]?.[0]?.file).toBe("src/app.ts")
+    expect(useAppStore.getState().messageDiffLoaded["m-assistant"]).toBe(true)
   })
 
   test("revertSession reverts the latest user message and aborts busy sessions first", async () => {

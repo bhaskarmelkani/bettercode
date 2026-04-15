@@ -1,4 +1,4 @@
-
+bettercode ─ feat/ui-snapshots ─ 1 session                                 ready
  • Which snapshot should we inspect first?
 
      ◆ Choose the surface that best reflects the current UI risk.

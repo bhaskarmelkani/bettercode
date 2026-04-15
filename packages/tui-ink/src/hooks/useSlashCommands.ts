@@ -5,7 +5,7 @@ import { registry } from "../commands/registry"
 import type { SlashCommand } from "../components/SlashMenu"
 
 const BUILTIN: SlashCommand[] = [
-  { name: "clear", description: "Clear composer input" },
+  { name: "clear", description: "Clear composer input", source: "local" },
 ]
 
 export function filterSlash(all: SlashCommand[], query: string) {
@@ -28,14 +28,14 @@ export function useSlashCommands(
 
   const reg: SlashCommand[] = regCmds
     .filter((c) => c.slash && c.enabled !== false && !BUILTIN.find((b) => b.name === c.slash))
-    .map((c) => ({ name: c.slash!, description: c.description ?? c.label }))
+    .map((c) => ({ name: c.slash!, description: c.description ?? c.label, source: "local" }))
 
   const all: SlashCommand[] = [
     ...BUILTIN,
     ...reg,
     ...commands
       .filter((c) => c.name && !BUILTIN.find((b) => b.name === c.name) && !reg.find((r) => r.name === c.name))
-      .map((c) => ({ name: c.name, description: c.description ?? "" })),
+      .map((c) => ({ name: c.name, description: c.description ?? "", source: c.source ?? "command", hints: c.hints })),
   ]
 
   const options = isSlash ? filterSlash(all, query) : []

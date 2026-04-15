@@ -59,7 +59,7 @@ export function CommandPalette({ rows, columns }: Props) {
   // Build flat display list: registry entries then server entries
   type Entry =
     | { kind: "registry"; id: string; label: string; description?: string; category: string; keybind?: string }
-    | { kind: "server"; name: string; description?: string }
+    | { kind: "server"; name: string; description?: string; source?: "command" | "mcp" | "skill"; hints?: string[] }
 
   const entries: Entry[] = [
     ...filtered.map((c) => ({
@@ -74,6 +74,8 @@ export function CommandPalette({ rows, columns }: Props) {
       kind: "server" as const,
       name: c.name,
       description: c.description,
+      source: c.source,
+      hints: c.hints,
     })),
   ]
 
@@ -164,7 +166,7 @@ export function CommandPalette({ rows, columns }: Props) {
               )}
             </Box>
           )
-        }
+      }
         return (
           <Box key={entry.name} flexDirection="column">
             <Box>
@@ -172,11 +174,14 @@ export function CommandPalette({ rows, columns }: Props) {
               <Text color={selected ? theme.text : theme.subtext} bold={selected}>
                 {"/" + entry.name}
               </Text>
-              <Text color={theme.overlay}>{`  [Command]`}</Text>
+              <Text color={theme.overlay}>{`  [${entry.source === "mcp" ? "MCP" : entry.source === "skill" ? "Skill" : "Command"}]`}</Text>
             </Box>
-            {selected && entry.description && (
+            {selected && (entry.description || entry.hints?.length) && (
               <Box paddingLeft={4}>
-                <Text color={theme.subtext}>{entry.description}</Text>
+                <Text color={theme.subtext}>
+                  {entry.description ?? ""}
+                  {entry.hints?.length ? ` ${entry.hints.join(" ")}` : ""}
+                </Text>
               </Box>
             )}
           </Box>

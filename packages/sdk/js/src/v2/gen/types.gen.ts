@@ -5215,6 +5215,46 @@ export type AppSkillsResponses = {
 
 export type AppSkillsResponse = AppSkillsResponses[keyof AppSkillsResponses]
 
+export type AppCapabilitiesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/capabilities"
+}
+
+export type AppCapabilitiesResponses = {
+  /**
+   * Capability summary
+   */
+  200: {
+    skills: Array<{
+      name: string
+      description: string
+      location: string
+      content: string
+    }>
+    plugins: Array<{
+      id: string
+      source: "internal" | "file" | "npm"
+      spec: string
+      target?: string
+      active: boolean
+      hooks: Array<string>
+      requested?: string
+      version?: string
+    }>
+    hooks: Array<{
+      name: string
+      plugins: Array<string>
+    }>
+  }
+}
+
+export type AppCapabilitiesResponse = AppCapabilitiesResponses[keyof AppCapabilitiesResponses]
+
 export type LspStatusData = {
   body?: never
   path?: never

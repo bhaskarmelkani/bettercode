@@ -6,8 +6,12 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
+  SnapshotFileDiff,
 } from "@opencode-ai/sdk/v2"
 import { ThemeProvider } from "../theme-context"
+import { ModelPickerDialog } from "../components/ModelPickerDialog"
+import { SlashMenu } from "../components/SlashMenu"
+import { Box, Text } from "ink"
 import { HomeScreen } from "../screens/HomeScreen"
 import { SessionScreen } from "../screens/SessionScreen"
 import { useAppStore } from "../store"
@@ -35,6 +39,9 @@ function reset() {
     providerAuth: {},
     agents: [],
     commands: [],
+    skills: [],
+    plugins: [],
+    hooks: [],
     config: {},
     lsp: [],
     mcp: {},
@@ -45,7 +52,10 @@ function reset() {
     messages: {},
     parts: {},
     collapsedTools: {},
+    collapsedDiffs: {},
     messagesLoaded: {},
+    messageDiff: {},
+    messageDiffLoaded: {},
     scrollPos: {},
     permissions: {},
     questions: {},
@@ -82,17 +92,28 @@ function user(id: string, sid = SID): Message {
   } as unknown as Message
 }
 
-function assistant(id: string, sid = SID, done = true): Message {
+function assistant(id: string, sid = SID, done = true, parentID?: string): Message {
   return {
     id,
     role: "assistant",
     sessionID: sid,
+    ...(parentID ? { parentID } : {}),
     mode: "build",
     modelID: "gpt-5.4",
     finish: done ? "stop" : "tool-calls",
     time: done ? { created: 1_000, completed: 2_450 } : { created: 3_000 },
     tokens: { input: 1820, output: 640 },
   } as unknown as Message
+}
+
+function diff(file: string, status: "added" | "deleted" | "modified", patch: string): SnapshotFileDiff {
+  return {
+    file,
+    patch,
+    additions: patch.split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).length,
+    deletions: patch.split("\n").filter((line) => line.startsWith("-") && !line.startsWith("---")).length,
+    status,
+  }
 }
 
 function text(id: string, msg: string, body: string, sid = SID): Part {
@@ -185,9 +206,9 @@ function session(columns: number, rows: number): Scenario {
     render() {
       reset()
       const u1 = user("m-001")
-      const a1 = assistant("m-002")
+      const a1 = assistant("m-002", SID, true, "m-001")
       const u2 = user("m-003")
-      const a2 = assistant("m-004")
+      const a2 = assistant("m-004", SID, true, "m-003")
       useAppStore.setState({
         route: { type: "session", sessionID: SID },
         currentSessionID: SID,
@@ -222,6 +243,20 @@ function session(columns: number, rows: number): Scenario {
               "p-004",
               "m-004",
               "This first pass focuses on static frames that expose the main visual structure: header, transcript, dock, prompts, and status lane.",
+            ),
+          ],
+        },
+        messageDiff: {
+          "m-004": [
+            diff(
+              "packages/tui-ink/src/screens/SessionScreen.tsx",
+              "modified",
+              "@@ -1,2 +1,3 @@\n-const listHeight = rows - 1 - dockRows\n+const listHeight = rows - 2 - dockRows\n+<Header ... />",
+            ),
+            diff(
+              "packages/tui-ink/src/components/StatusBar.tsx",
+              "modified",
+              "@@ -1 +1 @@\n-ctrl+k: commands\n+ctrl+k: commands · /: slash",
             ),
           ],
         },
@@ -300,6 +335,72 @@ function prompt(columns: number, rows: number): Scenario {
   }
 }
 
+function slash(columns: number, rows: number): Scenario {
+  return {
+    name: `slash-menu-${columns}x${rows}`,
+    columns,
+    rows,
+    render() {
+      reset()
+
+      return (
+        <ThemeProvider>
+          <Box position="relative" flexDirection="column">
+            <Text>{" "}</Text>
+            <Text>{" "}</Text>
+            <Text>{" "}</Text>
+            <Text>{" "}</Text>
+            <SlashMenu
+              width={columns}
+              focused={1}
+              options={[
+                { name: "clear", description: "Clear composer input", source: "local" },
+                { name: "compact", description: "Summarize the current session", source: "command" },
+                { name: "mcp", description: "Open MCP connections and auth status", source: "mcp", hints: ["status"] },
+                { name: "skill", description: "Run a reusable skill with optional arguments", source: "skill", hints: ["<name>"] },
+              ]}
+            />
+          </Box>
+        </ThemeProvider>
+      )
+    },
+  }
+}
+
+function model(columns: number, rows: number): Scenario {
+  return {
+    name: `model-picker-${columns}x${rows}`,
+    columns,
+    rows,
+    render() {
+      reset()
+      useAppStore.setState({
+        providers: [
+          {
+            id: "github-copilot",
+            name: "GitHub Copilot",
+            models: {
+              "gpt-5-mini": { name: "GPT-5 mini (0x)" },
+              "claude-haiku-4.5": { name: "Claude Haiku 4.5 (0.33x)" },
+              "claude-sonnet-4.6": { name: "Claude Sonnet 4.6 (1x)" },
+              "gemini-3-flash-preview": { name: "Gemini 3 Flash Preview (0.33x)" },
+            },
+          },
+        ] as unknown as ReturnType<typeof useAppStore.getState>["providers"],
+        providerConnected: ["github-copilot"],
+        currentModel: { providerID: "github-copilot", modelID: "gpt-5-mini" },
+        recentModels: [{ providerID: "github-copilot", modelID: "gpt-5-mini" }],
+      })
+
+      return (
+        <ThemeProvider>
+          <ModelPickerDialog rows={rows} columns={columns} />
+        </ThemeProvider>
+      )
+    },
+  }
+}
+
 export const scenarios: Scenario[] = [
   home(80, 24),
   home(120, 40),
@@ -307,4 +408,6 @@ export const scenarios: Scenario[] = [
   session(120, 40),
   permission(80, 24),
   prompt(80, 24),
+  slash(80, 8),
+  model(120, 15),
 ]

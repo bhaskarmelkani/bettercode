@@ -16,6 +16,8 @@ import { Global } from "../global"
 import { LSP } from "../lsp"
 import { Command } from "../command"
 import { Flag } from "../flag/flag"
+import { Plugin } from "../plugin"
+import { PluginMeta } from "../plugin/meta"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { Snapshot } from "@/snapshot"
@@ -44,6 +46,28 @@ const DEFAULT_CSP =
 
 const csp = (hash = "") =>
   `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
+
+const AppCapabilities = z.object({
+  skills: Skill.Info.array(),
+  plugins: z.array(
+    z.object({
+      id: z.string(),
+      source: z.enum(["internal", "file", "npm"]),
+      spec: z.string(),
+      target: z.string().optional(),
+      active: z.boolean(),
+      hooks: z.array(z.string()),
+      requested: z.string().optional(),
+      version: z.string().optional(),
+    }),
+  ),
+  hooks: z.array(
+    z.object({
+      name: z.string(),
+      plugins: z.array(z.string()),
+    }),
+  ),
+})
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()) =>
   app
@@ -237,6 +261,53 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()
       async (c) => {
         const skills = await Skill.all()
         return c.json(skills)
+      },
+    )
+    .get(
+      "/capabilities",
+      describeRoute({
+        summary: "Get BetterCode capabilities",
+        description: "Get BetterCode-facing runtime capability data for skills, server plugins, and active hooks.",
+        operationId: "app.capabilities",
+        responses: {
+          200: {
+            description: "Capability summary",
+            content: {
+              "application/json": {
+                schema: resolver(AppCapabilities),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const [skills, active, meta] = await Promise.all([
+          Skill.all(),
+          AppRuntime.runPromise(Plugin.Service.use((svc) => svc.summary())),
+          PluginMeta.list(),
+        ])
+        const plugins = active
+          .map((item) => {
+            const hit = meta[item.id]
+            return {
+              ...item,
+              requested: hit?.requested,
+              version: hit?.version,
+            }
+          })
+          .sort((a, b) => a.id.localeCompare(b.id))
+        const hooks = Object.entries(
+          plugins.reduce<Record<string, string[]>>((out, item) => {
+            for (const hook of item.hooks) {
+              out[hook] = [...(out[hook] ?? []), item.id].sort()
+            }
+            return out
+          }, {}),
+        )
+          .map(([name, plugins]) => ({ name, plugins }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+
+        return c.json({ skills, plugins, hooks })
       },
     )
     .get(

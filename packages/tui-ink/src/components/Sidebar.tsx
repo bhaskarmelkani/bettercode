@@ -10,8 +10,8 @@ interface Props {
   active: boolean
 }
 
-type Tab = "diff" | "todos" | "lsp" | "mcp" | "workspace"
-const TABS: Tab[] = ["diff", "todos", "lsp", "mcp", "workspace"]
+type Tab = "diff" | "todos" | "lsp" | "mcp" | "caps"
+const TABS: Tab[] = ["diff", "todos", "lsp", "mcp", "caps"]
 
 type TodoItem = { id: string; content: string; status: string; priority?: string }
 
@@ -23,7 +23,9 @@ export function Sidebar({ sessionID, width, height, active }: Props) {
   const sessionDiff = useAppStore((s) => s.sessionDiff[sessionID] ?? [])
   const lsp = useAppStore((s) => s.lsp)
   const mcp = useAppStore((s) => s.mcp)
-  const vcs = useAppStore((s) => s.vcs)
+  const skills = useAppStore((s) => s.skills)
+  const plugins = useAppStore((s) => s.plugins)
+  const hooks = useAppStore((s) => s.hooks)
 
   // Fetch todos when on todos tab
   useEffect(() => {
@@ -161,11 +163,67 @@ export function Sidebar({ sessionID, width, height, active }: Props) {
           </>
         )}
 
-        {tab === "workspace" && (
+        {tab === "caps" && (
           <>
             <Text color={theme.subtext}>
-              Branch: <Text color={theme.cyan}>{vcs?.branch ?? "—"}</Text>
+              Skills: <Text color={theme.cyan}>{String(skills.length)}</Text>
             </Text>
+            <Text color={theme.subtext}>
+              Plugins: <Text color={theme.cyan}>{String(plugins.length)}</Text>
+            </Text>
+            <Text color={theme.subtext}>
+              Hooks: <Text color={theme.cyan}>{String(hooks.length)}</Text>
+            </Text>
+
+            <Box marginTop={1} flexDirection="column">
+              <Text color={theme.overlay}>plugins</Text>
+              {plugins.length === 0 ? (
+                <Text color={theme.overlay} dimColor>
+                  No active server plugins
+                </Text>
+              ) : (
+                plugins.slice(0, 4).map((item) => (
+                  <Box key={item.id} flexDirection="row" gap={1}>
+                    <Text color={item.source === "npm" ? theme.green : item.source === "file" ? theme.yellow : theme.overlay}>
+                      {item.source === "npm" ? "◉" : item.source === "file" ? "◎" : "○"}
+                    </Text>
+                    <Text color={theme.subtext} wrap="truncate-end">
+                      {item.id}
+                    </Text>
+                  </Box>
+                ))
+              )}
+            </Box>
+
+            <Box marginTop={1} flexDirection="column">
+              <Text color={theme.overlay}>skills</Text>
+              {skills.length === 0 ? (
+                <Text color={theme.overlay} dimColor>
+                  No skills loaded
+                </Text>
+              ) : (
+                skills.slice(0, 4).map((item) => (
+                  <Text key={item.name} color={theme.subtext} wrap="truncate-end">
+                    {item.name}
+                  </Text>
+                ))
+              )}
+            </Box>
+
+            <Box marginTop={1} flexDirection="column">
+              <Text color={theme.overlay}>hooks</Text>
+              {hooks.length === 0 ? (
+                <Text color={theme.overlay} dimColor>
+                  No hook summary
+                </Text>
+              ) : (
+                hooks.slice(0, 4).map((item) => (
+                  <Text key={item.name} color={theme.subtext} wrap="truncate-end">
+                    {item.name}
+                  </Text>
+                ))
+              )}
+            </Box>
           </>
         )}
       </Box>

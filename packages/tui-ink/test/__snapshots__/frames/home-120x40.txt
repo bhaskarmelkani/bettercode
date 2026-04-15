@@ -1,3 +1,4 @@
+bettercode ─ feat/ui-snapshots ─ 3 sessions                                                                        ready
 
 
 
@@ -10,18 +11,17 @@
 
 
 
-                                   bettercode
-
-                                   ⎇ feat/ui-snapshots  ·  2 providers  ·  bettercode
-
-
-                                   recent sessions
-                                     · Build snapshot harness
-                                     · Tighten transcript hierarchy
-                                     · Refine dock prompts
+                                     bettercode
+                                     2 providers connected to bettercode
 
 
-                                   start with a prompt or resume a recent session
+                                     recent sessions
+                                       · Build snapshot harness
+                                       · Tighten transcript hierarchy
+                                       · Refine dock prompts
+
+
+                                     start with a prompt or resume a recent session
 
 
 
@@ -37,4 +37,4 @@
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
    Type a message... (/ for commands, @ for files)
- ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · ctrl+k: commands
+ ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · ctrl+k: commands · /: slash · ctrl+b: capabilities

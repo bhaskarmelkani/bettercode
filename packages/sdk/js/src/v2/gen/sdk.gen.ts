@@ -5,6 +5,7 @@ import { buildClientParams, type Client, type Options as Options2, type TDataSha
 import type {
   AgentPartInput,
   AppAgentsResponses,
+  AppCapabilitiesResponses,
   AppLogErrors,
   AppLogResponses,
   AppSkillsResponses,
@@ -517,6 +518,36 @@ export class App extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<AppSkillsResponses, unknown, ThrowOnError>({
       url: "/skill",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get BetterCode capabilities
+   *
+   * Get BetterCode-facing runtime capability data for skills, server plugins, and active hooks.
+   */
+  public capabilities<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AppCapabilitiesResponses, unknown, ThrowOnError>({
+      url: "/capabilities",
       ...options,
       ...params,
     })

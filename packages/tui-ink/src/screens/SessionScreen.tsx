@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react"
 import { Box, Text, useInput } from "ink"
 import { useShallow } from "zustand/shallow"
 import { useAppStore } from "../store"
+import { Header } from "../components/Header"
 import { MessageList } from "../components/MessageList"
 import { StatusBar } from "../components/StatusBar"
 import { Sidebar } from "../components/Sidebar"
@@ -30,6 +31,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const status = useAppStore((s) => s.sessionStatus[sessionID])
   const composerStatus = useAppStore((s) => s.composerStatus)
   const loadMessages = useAppStore((s) => s.loadMessages)
+  const toggleDiffCollapse = useAppStore((s) => s.toggleDiffCollapse)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Lazy-load messages when this session becomes active
@@ -72,7 +74,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const SIDEBAR_MIN = 120
 
   const dockRows = dockHeight({ rows, dialog, permissions, questions, inputLines: composerLines })
-  const listHeight = Math.max(1, rows - 1 - dockRows)
+  const listHeight = Math.max(1, rows - 2 - dockRows)
   const mainWidth = Math.max(1, sidebarOpen ? columns - SIDEBAR_WIDTH : columns)
 
   const project = dir?.split("/").pop() ?? "bettercode"
@@ -87,6 +89,13 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
     (_input, key) => {
       if (key.ctrl && _input === "b") {
         if (columns >= SIDEBAR_MIN) setSidebarOpen((v) => !v)
+      }
+      if (key.ctrl && _input === "g") {
+        const state = useAppStore.getState()
+        const hit = [...(state.messages[sessionID] ?? [])]
+          .reverse()
+          .find((msg) => msg.role === "assistant" && (state.messageDiff[msg.id]?.length ?? 0) > 0)
+        if (hit) toggleDiffCollapse(hit.id)
       }
     },
     { isActive: active },
@@ -119,6 +128,13 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
 
   return (
     <Box flexDirection="column" height={rows} width={columns}>
+      <Header
+        projectName={project}
+        gitBranch={branch}
+        sessionCount={sessions.length}
+        status={isError ? "error" : generating ? "generating" : "idle"}
+        width={columns}
+      />
       <Box flexDirection="row" flexGrow={1}>
         <Box flexDirection="column" width={mainWidth}>
           <ErrorBoundary label="transcript">
@@ -149,7 +165,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
         </Box>
 
         {sidebarOpen && (
-          <Sidebar sessionID={sessionID} width={SIDEBAR_WIDTH} height={rows - 2} active={active && sidebarOpen} />
+          <Sidebar sessionID={sessionID} width={SIDEBAR_WIDTH} height={rows - 3} active={active && sidebarOpen} />
         )}
       </Box>
 

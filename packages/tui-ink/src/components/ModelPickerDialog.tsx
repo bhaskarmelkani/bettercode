@@ -114,8 +114,7 @@ export function ModelPickerDialog({ rows, columns }: Props) {
         <Text color={theme.mauve} bold>
           Model
         </Text>
-        {currentModel && <Text color={theme.blue}> · current</Text>}
-        {currentModel && <Text color={theme.overlay}>{` ${currentModel.modelID}`}</Text>}
+        {currentModel && <Text color={theme.overlay}>{` current: ${currentModel.modelID}`}</Text>}
       </Box>
 
       <Box marginBottom={1} flexDirection="row">
@@ -140,11 +139,11 @@ export function ModelPickerDialog({ rows, columns }: Props) {
           <Box key={`${e.providerID}/${e.modelID}`} flexDirection="column">
             <Box>
               <Text color={selected ? theme.cyan : theme.overlay}>{selected ? "▶ " : "  "}</Text>
-              <Text color={current ? theme.blue : selected ? theme.text : theme.subtext} bold={selected}>
+              <Text color={current ? theme.green : selected ? theme.text : theme.subtext} bold={selected}>
                 {e.name}
               </Text>
               <Text color={theme.overlay}>{`  ${e.providerID}`}</Text>
-              {current && <Text color={theme.blue}> ✓</Text>}
+              {current && <Text color={theme.green}> ✓</Text>}
               {e.isRecent && !current && <Text color={theme.surface2}>{" ★"}</Text>}
             </Box>
             {selected && (

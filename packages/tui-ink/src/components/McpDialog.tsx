@@ -56,6 +56,8 @@ export function McpDialog({ rows, columns }: Props) {
 
   const entries = Object.entries(mcp)
   const total = entries.length
+  const connected = entries.filter(([, item]) => item.status === "connected").length
+  const auth = entries.filter(([, item]) => item.status === "needs_auth").length
   const maxVisible = Math.max(1, rows - 8)
   const safeIdx = Math.min(idx, Math.max(0, total - 1))
   const start = Math.max(0, safeIdx - Math.floor(maxVisible / 2))
@@ -109,7 +111,8 @@ export function McpDialog({ rows, columns }: Props) {
         <Text color={theme.mauve} bold>
           MCP Servers
         </Text>
-        <Text color={theme.overlay}> {total} servers</Text>
+        <Text color={theme.overlay}>{` ${connected}/${total} connected`}</Text>
+        {auth > 0 ? <Text color={theme.yellow}>{` · ${auth} need auth`}</Text> : null}
       </Box>
 
       {total === 0 && <Text color={theme.overlay}>No MCP servers configured.</Text>}
@@ -135,6 +138,11 @@ export function McpDialog({ rows, columns }: Props) {
             {selected && status.status === "needs_client_registration" && (
               <Box paddingLeft={4}>
                 <Text color={theme.yellow}>{status.error}</Text>
+              </Box>
+            )}
+            {selected && status.status === "needs_auth" && (
+              <Box paddingLeft={4}>
+                <Text color={theme.overlay}>enter to start auth/connect flow</Text>
               </Box>
             )}
             {selected &&

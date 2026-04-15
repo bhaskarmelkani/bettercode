@@ -7,12 +7,16 @@ import { TextPart } from "./parts/TextPart"
 import { ReasoningPart } from "./parts/ReasoningPart"
 import { ToolPart } from "./parts/ToolPart"
 import { CompactionPart } from "./parts/CompactionPart"
+import { MessageDiff } from "./MessageDiff"
+import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
 
 interface Props {
   message: Message
   parts: Part[]
   showThinking: boolean
   isLast: boolean
+  diffs?: SnapshotFileDiff[]
+  diffOpen?: boolean
 }
 
 function dur(start?: number, end?: number) {
@@ -30,7 +34,14 @@ function tok(input: number, output: number) {
   return `${out}k`
 }
 
-export const AssistantMessage = React.memo(function AssistantMessage({ message, parts, showThinking, isLast }: Props) {
+export const AssistantMessage = React.memo(function AssistantMessage({
+  message,
+  parts,
+  showThinking,
+  isLast,
+  diffs = [],
+  diffOpen = false,
+}: Props) {
   const theme = useTheme()
   if (message.role !== "assistant") return null
   const msg = message as AssistantMsg
@@ -98,6 +109,8 @@ export const AssistantMessage = React.memo(function AssistantMessage({ message, 
           <Text color={theme.overlay}>{footer.join(" · ")}</Text>
         </Box>
       )}
+
+      <MessageDiff diffs={diffs} open={diffOpen} />
     </Box>
   )
 })

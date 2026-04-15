@@ -133,6 +133,16 @@ export namespace SessionSummary {
       })
 
       const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
+        if (input.messageID) {
+          const all = yield* sessions.messages({ sessionID: input.sessionID })
+          if (!all.length) return []
+          const messages = all.filter(
+            (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+          )
+          const diffs = yield* computeDiff({ messages })
+          return diffs.map((item) => ({ ...item, file: unquoteGitPath(item.file) }))
+        }
+
         const diffs = yield* storage
           .read<Snapshot.FileDiff[]>(["session_diff", input.sessionID])
           .pipe(Effect.catch(() => Effect.succeed([] as Snapshot.FileDiff[])))

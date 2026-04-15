@@ -1,0 +1,12 @@
+
+  Model current: gpt-5-mini
+
+  › search models...│
+
+  ▶  GPT-5 mini (0x)  github-copilot ✓
+      model: gpt-5-mini
+    Claude Haiku 4.5 (0.33x)  github-copilot
+    Claude Sonnet 4.6 (1x)  github-copilot
+    Gemini 3 Flash Preview (0.33x)  github-copilot
+
+  ↑↓ navigate · enter select · type filter · esc close
