@@ -189,11 +189,9 @@ export function useTextSelection(input: Input) {
 
         if (!drag.current && !inside) continue
 
+        // pos marks the exclusive-end of the selection (includes char under cursor on release)
         const pos = point(
-          {
-            x: item.up ? raw.x + 1 : raw.x + 1,
-            y: raw.y,
-          },
+          { x: raw.x + 1, y: raw.y },
           linesRef.current,
           frameRef.current.width,
           frameRef.current.height,
@@ -213,7 +211,12 @@ export function useTextSelection(input: Input) {
 
         if (item.up && drag.current) {
           drag.current = false
-          setRange((prev) => (prev ? { start: prev.start, end: pos } : prev))
+          // Bare click (no drag motion): raw position matches start → clear selection
+          setRange((prev) => {
+            if (!prev) return prev
+            if (raw.x === prev.start.x && raw.y === prev.start.y) return undefined
+            return { start: prev.start, end: pos }
+          })
           queueMicrotask(() => {
             void copySelection()
           })

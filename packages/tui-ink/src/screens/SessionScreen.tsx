@@ -109,7 +109,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const composerLines = useAppStore((s) => s.composerLines)
 
   const SIDEBAR_WIDTH = 32
-  const SIDEBAR_MIN = 120
+  const SIDEBAR_MIN = 80
 
   const dockRows = dockHeight({
     rows,
@@ -126,7 +126,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const project = dir?.split("/").pop() ?? "bettercode"
   const branch = vcs?.branch ?? "—"
   const inputActive =
-    active && !dialog && !sidebarOpen && !searchMode && permissions.length === 0 && questions.length === 0
+    active && !dialog && !sidebarOpen && !searchMode && permissions.length === 0
 
   useEffect(() => {
     if (sidebarOpen && columns < SIDEBAR_MIN) setSidebarOpen(false)

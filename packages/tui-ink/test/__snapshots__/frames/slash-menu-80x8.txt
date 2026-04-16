@@ -1,1 +1,4 @@
-   /skill    Run a reusable skill with optional arguments         [SKILL] <name>
+   /clear    Clear composer input                                       [LOCAL]
+ ▶  /compact  Summarize the current session                                [CMD]
+   /mcp      Open MCP connections and auth status                  [MCP] status
+   /skill    Run a reusable skill with optional arguments        [SKILL] <name>

@@ -6,7 +6,6 @@ import type { Toast } from "../store"
 
 function ToastItem({ toast }: { toast: Toast }) {
   const theme = useTheme()
-  const removeToast = useAppStore((s) => s.removeToast)
 
   const color = {
     info: theme.blue,
@@ -23,16 +22,11 @@ function ToastItem({ toast }: { toast: Toast }) {
   }[toast.variant]
 
   return (
-    <Box borderStyle="single" borderColor={color} paddingX={1} marginBottom={0} flexDirection="row" gap={1}>
-      <Text color={color}>{icon}</Text>
-      <Box flexDirection="column">
-        {toast.title && (
-          <Text color={color} bold>
-            {toast.title}
-          </Text>
-        )}
-        <Text color={theme.text}>{toast.message}</Text>
-      </Box>
+    <Box flexDirection="row" gap={1} paddingLeft={1}>
+      <Text color={color} bold>{icon}</Text>
+      {toast.title && <Text color={color} bold>{toast.title}</Text>}
+      {toast.title && toast.message && <Text color={theme.overlay}>·</Text>}
+      {toast.message && <Text color={theme.subtext}>{toast.message}</Text>}
     </Box>
   )
 }

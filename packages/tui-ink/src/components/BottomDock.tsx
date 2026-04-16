@@ -15,14 +15,12 @@ import { McpDialog } from "./McpDialog"
 import { ThemePickerDialog } from "./ThemePickerDialog"
 import { HelpDialog } from "./HelpDialog"
 import { PermissionPrompt } from "./PermissionPrompt"
-import { QuestionPrompt } from "./QuestionPrompt"
 import { Dialog as ShellDialog } from "./design-system"
 
 const PANELS = new Set(["command-palette", "session-list", "provider", "model-picker", "agent-picker", "mcp", "theme", "help", "alert"])
 
 const base = 4
 const perm = 5
-const quest = 11
 const paneRows = 15
 
 export function dockHeight(input: {
@@ -37,7 +35,12 @@ export function dockHeight(input: {
     return Math.max(1, Math.min(input.rows - 3, paneRows))
   }
   if (input.permissions?.length) return Math.max(1, Math.min(input.rows - 3, base + perm))
-  if (input.questions?.length) return Math.max(1, Math.min(input.rows - 3, base + quest))
+  if (input.questions?.length) {
+    const q = input.questions[0]?.questions[0]
+    // 1 header row + option rows (named + optional custom) — base covers separator + hint
+    const opts = (q?.options?.length ?? 0) + (q?.custom !== false ? 1 : 0)
+    return Math.max(1, Math.min(input.rows - 3, base + 1 + opts))
+  }
   // base + extra rows for each additional input line (capped at 14 extra = 15 visible lines)
   const extra = Math.max(0, Math.min(14, (input.inputLines ?? 1) - 1))
   const queue = queueRows(input.queueLength ?? 0)
@@ -123,9 +126,6 @@ export function BottomDock({
   return (
     <Box flexDirection="column" height={height} width={columns}>
       {permissions?.length ? <PermissionPrompt request={permissions[0]!} columns={columns} /> : null}
-      {!permissions?.length && questions?.length ? (
-        <QuestionPrompt request={questions[0]!} columns={columns} rows={Math.max(1, height - base)} />
-      ) : null}
       {showQueue && (
         <PromptQueue
           items={queue!}
@@ -139,6 +139,7 @@ export function BottomDock({
         active={active}
         generating={generating}
         width={columns}
+        question={questions?.[0]}
       />
     </Box>
   )

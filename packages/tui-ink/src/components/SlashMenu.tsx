@@ -30,12 +30,6 @@ export function SlashMenu({ width, options, focused }: Props) {
   if (options.length === 0) return null
   const { start, end } = slashWin(options.length, focused)
   const visible = options.slice(start, end)
-  const cut = (s: string, n: number) => {
-    if (n <= 0) return ""
-    if (s.length <= n) return s
-    if (n <= 3) return s.slice(0, n)
-    return s.slice(0, n - 3) + "..."
-  }
   const cmdWidth = Math.min(16, Math.max(8, ...visible.map((cmd) => cmd.name.length + 1)))
   const tag = (cmd: SlashCommand) =>
     cmd.source === "mcp" ? "MCP" : cmd.source === "skill" ? "SKILL" : cmd.source === "command" ? "CMD" : "LOCAL"
@@ -43,7 +37,7 @@ export function SlashMenu({ width, options, focused }: Props) {
     cmd.source === "mcp" ? theme.green : cmd.source === "skill" ? theme.mauve : cmd.source === "command" ? theme.blue : theme.overlay
 
   return (
-    <Box position="absolute" width={width} marginTop={-visible.length} flexDirection="column">
+    <Box width={width} marginTop={-visible.length} flexDirection="column">
       {visible.map((cmd, i) => {
         const real = start + i
         const sel = real === focused
@@ -53,9 +47,11 @@ export function SlashMenu({ width, options, focused }: Props) {
         const hints = cmd.hints?.join(" ") ?? ""
         const meta = `${kind}${hints ? ` ${hints}` : ""}`
         const left = ` ${prefix} ${name}  `
-        const space = Math.max(0, width - left.length - meta.length - 2)
+        // Reserve 3 extra chars when computing desc space (instead of 2) to ensure
+        // the row total stays at width-1, preventing Ink from wrapping bold rows.
+        const space = Math.max(0, width - left.length - meta.length - 3)
         const desc = cut(cmd.description, space)
-        const fill = Math.max(0, width - left.length - desc.length - meta.length)
+        const fill = Math.max(0, width - left.length - desc.length - meta.length - 1)
         return (
           <Box key={cmd.name} flexDirection="row">
             <Text color={sel ? theme.cyan : theme.overlay}>{` ${prefix} `}</Text>
@@ -72,4 +68,11 @@ export function SlashMenu({ width, options, focused }: Props) {
       })}
     </Box>
   )
+}
+
+function cut(s: string, n: number) {
+  if (n <= 0) return ""
+  if (s.length <= n) return s
+  if (n <= 3) return s.slice(0, n)
+  return s.slice(0, n - 3) + "..."
 }

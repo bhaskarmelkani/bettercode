@@ -20,7 +20,7 @@ import { useSlashCommands } from "../hooks/useSlashCommands"
 import { editPrompt } from "../utils/promptEditor"
 import { readClipboardImage, type ClipboardImage } from "../utils/imagePaste"
 import { computeHighlights, type Highlight } from "../hooks/useHighlights"
-import type { FilePartInput } from "@opencode-ai/sdk/v2"
+import type { FilePartInput, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { primaryKey, resolveAction } from "../keybindings"
 import { useVimMode } from "../hooks/useVimMode"
 
@@ -36,6 +36,7 @@ interface Props {
   active: boolean
   generating: boolean
   width: number
+  question?: QuestionRequest | null
 }
 
 type Key = {
@@ -53,7 +54,7 @@ type Key = {
   rightArrow?: boolean
 }
 
-export function Composer({ onSubmit, onAbort, onSteer, active, generating, width }: Props) {
+export function Composer({ onSubmit, onAbort, onSteer, active, generating, width, question: questionProp }: Props) {
   const theme = useTheme()
   const {
     value,
@@ -99,6 +100,43 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
   const vimEnabled = useAppStore((s) => s.vimEnabled)
 
   const vim = useVimMode(vimEnabled)
+
+  // Question is passed from SessionScreen → BottomDock → Composer so it always uses
+  // the correct session's questions without depending on s.currentSessionID.
+  const question = questionProp ?? null
+  const replyQuestion = useAppStore((s) => s.replyQuestion)
+  const rejectQuestion = useAppStore((s) => s.rejectQuestion)
+
+  const [qIdx, setQIdx] = useState(0)
+  const [qAnswers, setQAnswers] = useState<string[][]>([])
+  const [qOptIdx, setQOptIdx] = useState(0)
+  const currentQ = question ? (question.questions[qIdx] ?? null) : null
+  const qOpts = currentQ?.options ?? []
+  const qShowCustom = currentQ?.custom !== false
+  const qTotal = qOpts.length + (qShowCustom ? 1 : 0)
+  const qInCustom = qShowCustom && qOptIdx === qOpts.length
+
+  useEffect(() => {
+    if (!question) return
+    setQIdx(0)
+    setQAnswers([])
+    setQOptIdx(0)
+    clear()
+  }, [question?.id])
+
+  function advanceQ(ans: string[]) {
+    if (!question) return
+    const next = [...qAnswers, ans]
+    const nextIdx = qIdx + 1
+    if (nextIdx >= question.questions.length) {
+      void replyQuestion(question.id, next)
+    } else {
+      setQAnswers(next)
+      setQIdx(nextIdx)
+      setQOptIdx(0)
+      clear()
+    }
+  }
 
   const mentions = useMentions(value, cursor, setValue)
   const slash = useSlashCommands(value, mentions.active, clear, setValue)
@@ -244,6 +282,29 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
   // Arrow keys are intentionally NOT consumed so they flow to MessageList for scrolling.
   useInput(
     (input, key) => {
+      // Questions appear while the model is generating (tool pause) — handle them here too.
+      if (question && currentQ) {
+        if (!qInCustom) {
+          if (key.upArrow) { setQOptIdx((i) => Math.max(0, i - 1)); return }
+          if (key.downArrow) { setQOptIdx((i) => Math.min(qTotal - 1, i + 1)); return }
+          if (key.escape) { void rejectQuestion(question.id); return }
+          if (key.return) { advanceQ([qOpts[qOptIdx]?.label ?? ""]); return }
+          return
+        } else {
+          if (key.return) {
+            const text = value.trim()
+            if (text) { advanceQ([text]); clear() }
+            return
+          }
+          if (key.escape || key.upArrow) {
+            setQOptIdx(Math.max(0, qOpts.length - 1))
+            clear()
+            return
+          }
+          // fall through to text editing for custom answer
+        }
+      }
+
       const action = resolveAction(bindings, input, key, ["stream"])
 
       if (action === "exit") {
@@ -383,6 +444,31 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
   // Full editing input — inactive while generating so arrow keys go to MessageList.
   useInput(
     (input, key) => {
+      // Question mode: intercept keys for option navigation and custom answer input.
+      if (question && currentQ) {
+        if (!qInCustom) {
+          // Option selection — only allow navigation, confirm, reject
+          if (key.upArrow) { setQOptIdx((i) => Math.max(0, i - 1)); return }
+          if (key.downArrow) { setQOptIdx((i) => Math.min(qTotal - 1, i + 1)); return }
+          if (key.escape) { void rejectQuestion(question.id); return }
+          if (key.return) { advanceQ([qOpts[qOptIdx]?.label ?? ""]); return }
+          return // consume all other keys
+        } else {
+          // Custom answer — intercept submit and cancel; let normal text editing through
+          if (key.return) {
+            const text = value.trim()
+            if (text) { advanceQ([text]); clear() }
+            return
+          }
+          if (key.escape || key.upArrow) {
+            setQOptIdx(Math.max(0, qOpts.length - 1))
+            clear()
+            return
+          }
+          // fall through to normal text editing for all other keys
+        }
+      }
+
       // Vim mode: let the state machine handle keys in normal/visual/operator-pending mode.
       // Returns true → key consumed; false → fall through to insert-mode logic below.
       if (vim.vimEnabled && vim.vimMode !== "insert") {
@@ -732,8 +818,36 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         {/* Slash menu — absolute overlay above the input */}
         {!search.active && slash.visible && <SlashMenu width={width} options={slash.options} focused={slash.idx} />}
 
-        {/* Context line — generating status or empty; collapsed to height=0 when slash/mention overlay is open */}
-        <Box height={!search.active && !slash.visible && !mentions.visible ? 1 : 0}>
+        {/* Question UI — replaces context line when a question is active */}
+        {question && currentQ && (
+          <Box flexDirection="column" paddingX={1}>
+            <Box>
+              <Text backgroundColor={theme.cyan} color={theme.base}>{" ? "}</Text>
+              <Text color={theme.text}>{" "}</Text>
+              <Text color={theme.text} wrap="truncate-end">{currentQ.question}</Text>
+            </Box>
+            {qOpts.map((opt, i) => {
+              const sel = i === qOptIdx && !qInCustom
+              return (
+                <Box key={i}>
+                  <Text color={sel ? theme.cyan : theme.overlay}>{sel ? " ▶ " : "   "}</Text>
+                  <Text color={sel ? theme.text : theme.subtext} bold={sel}>{opt.label}</Text>
+                </Box>
+              )
+            })}
+            {qShowCustom && (
+              <Box>
+                <Text color={qInCustom ? theme.cyan : theme.overlay}>{qInCustom ? " ▶ " : "   "}</Text>
+                <Text color={qInCustom ? theme.text : theme.overlay}>
+                  {qInCustom ? "custom:" : "type a custom answer"}
+                </Text>
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {/* Context line — generating status or empty; hidden when question/slash/mention overlay is active */}
+        <Box height={!question && !search.active && !slash.visible && !mentions.visible ? 1 : 0}>
           {!search.active && !slash.visible && !mentions.visible && (
             generating ? (
               <Spinner
@@ -770,6 +884,10 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
             <Text color={theme.text} wrap="truncate-end">
               {`(reverse-i-search)\`${search.query}': ${search.match || ""}`}
             </Text>
+          </Box>
+        ) : question && !qInCustom ? (
+          <Box paddingLeft={2}>
+            <Text color={theme.overlay}>↑↓ select · enter confirm · esc reject</Text>
           </Box>
         ) : (
           <Box flexDirection="column">
