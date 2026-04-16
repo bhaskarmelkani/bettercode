@@ -135,6 +135,12 @@ export function useTextInput(initial = "") {
     })
   )
 
+  // Set both value and cursor position explicitly (used by vim mode).
+  const setAt = (v: string, c: number) => (
+    stop(),
+    setState({ value: v, cursor: Math.max(0, Math.min(c, v.length)) })
+  )
+
   const insert = (input: string) => (
     stop(),
     setState((s) => {
@@ -247,6 +253,7 @@ export function useTextInput(initial = "") {
     value: state.value,
     cursor: state.cursor,
     setValue,
+    setAt,
     insert,
     del,
     deleteForward,

@@ -54,6 +54,7 @@ export async function startTuiInk(opts: TuiInkOptions): Promise<void> {
     ...(currentModel ? { currentModel } : {}),
     ...(recentModels.length > 0 ? { recentModels } : {}),
     keybindings,
+    vimEnabled: prefs.vim === true || process.env.OPENCODE_VIM === "1",
     ...(prefs.frecency && typeof prefs.frecency === "object"
       ? { frecency: prefs.frecency as Record<string, { score: number; last: number }> }
       : {}),

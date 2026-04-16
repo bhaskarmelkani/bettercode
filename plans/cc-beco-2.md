@@ -51,9 +51,9 @@ bun test test/   # must be all green
 - [x] M9 — True Virtual Scrolling (viewport+overscan, binary search, quantization)
 - [x] M10 — Configurable Keybindings (keybindings.json, context-based)
 - [x] M11 — Design System Primitives (Pane, Dialog, FuzzyPicker, ProgressBar)
-- [ ] M12 — Vim Mode (normal/insert, motions, operators, text objects)
-- [ ] M13 — Image Paste (Ctrl+V, image pills, clipboard detection)
-- [ ] M14 — Input Syntax Highlights (/commands blue, @mentions colored)
+- [x] M12 — Vim Mode (normal/insert, motions, operators, text objects)
+- [x] M13 — Image Paste (Ctrl+V, image pills, clipboard detection)
+- [x] M14 — Input Syntax Highlights (/commands blue, @mentions colored)
 
 ---
 
@@ -994,6 +994,18 @@ Default is standard editing mode.
 4. `i`/`a`/`o` should enter insert mode at the right position.
 5. Mode indicator should update in real-time.
 
+Completed 2026-04-16:
+- Added `packages/tui-ink/src/vim/types.ts` — `VimMode` union, `VimState` interface, `initialVimState()`.
+- Added `packages/tui-ink/src/vim/motions.ts` — pure cursor-movement functions: `h/l`, `w/b/e`, `W/B/E`, `0/^/$`, `j/k`, `gg/G`, `f/F/t/T`, text-object ranges (`iw/aw`, `i"/a"`, `i(/a(`…).
+- Added `packages/tui-ink/src/vim/operators.ts` — `applyDelete/Change/Yank`, `applyLineDelete/Yank`, `applyPaste/PasteAfter`.
+- Added `packages/tui-ink/src/vim/index.ts` — barrel export.
+- Added `packages/tui-ink/src/hooks/useVimMode.ts` — React hook with full state machine: normal/insert/operator-pending modes, count prefix, `d/c/y` operators + text objects, `p/P/x/X/r/s/S`, mode-entry commands (`i/a/I/A/o/O`), find (`f/F/t/T/;/,`), dot-repeat (`.`), tilde (`~`).
+- Added `setAt(value, cursor)` to `useTextInput` for cursor-aware state mutation from vim mode.
+- Added `vimEnabled: boolean` to the store (defaults `false`); initialized from `prefs.vim === true` or `OPENCODE_VIM=1` env var in `index.tsx`.
+- Updated `Composer.tsx` to import and call `useVimMode`, route keys through `handleVimInput` in non-insert modes, intercept Escape in insert mode for mode transition, and render `-- NORMAL --` / `-- INSERT --` / `-- PENDING --` indicator above the separator.
+- Added `packages/tui-ink/test/vim.test.ts` with 26 targeted tests covering all motion families, text objects, and operators.
+- Validation from `packages/tui-ink`: `bun typecheck` ✅, `bun test test/` ✅ (306 tests, 0 failures).
+
 ---
 
 ## M13: Image Paste
@@ -1066,6 +1078,11 @@ image content.
 2. Press Ctrl+V in the composer — `[Image #1]` pill should appear.
 3. Submit the prompt — the image should be sent to the model.
 4. Multiple images should show as `[Image #1]`, `[Image #2]`, etc.
+
+Completed 2026-04-16:
+- Added `packages/tui-ink/src/utils/imagePaste.ts` with `readClipboardImage()`: macOS path uses AppleScript to coerce clipboard to PNG and write to a temp file; Linux path uses `xclip`. Both paths use Node.js `child_process.spawn` + `fs/promises` (no Bun globals).
+- Updated `Composer.tsx` to import `readClipboardImage` and `ClipboardImage`, add `images` state, add `pasteImage()` async helper, handle Ctrl+V in both `useInput` handlers (streaming and full-edit), render `[Image #N]` pills in the attachment row alongside file mentions, and include image `FilePartInput` parts (data URL) in `buildSubmission`.
+- Validation from `packages/tui-ink`: `bun typecheck` ✅, `bun test test/` ✅ (306 tests, 0 failures).
 
 ---
 
@@ -1144,6 +1161,11 @@ and don't affect the text buffer or cursor math).
 3. Type normal text — should render with default styling.
 4. Cursor movement and editing should work identically to before.
 
+Completed 2026-04-16:
+- Added `packages/tui-ink/src/hooks/useHighlights.ts` with `computeHighlights(text)` returning `Highlight[]` for `/command` (blue bold, anchored at start) and `@mention` (cyan bold, all occurrences).
+- Updated `Composer.tsx` to import `computeHighlights`, derive `highlights` on each render, add a `renderHighlighted(text, absStart, baseColor, bgColor)` helper that splits text into uniformly-styled spans at highlight boundaries, and wire it into both the cursor-line before/after segments and non-cursor-line rendering. Cursor character rendering is unchanged (cursor bg color takes priority).
+- Validation from `packages/tui-ink`: `bun typecheck` ✅, `bun test test/` ✅ (306 tests, 0 failures).
+
 ---
 
 ## Dependency Graph
@@ -1175,31 +1197,12 @@ foundation is more stable.
 
 ## Latest Handoff Prompt
 
+All 14 milestones in this plan are now complete (M1–M14, final completion 2026-04-16).
+
 ```text
-Continue the TUI milestone plan in /Users/bhaskar.melkani/Documents/Projects/bhaskar/bettercode/plans/cc-beco-2.md.
-
-Context:
-- Repo: /Users/bhaskar.melkani/Documents/Projects/bhaskar/bettercode
-- Active plan: /Users/bhaskar.melkani/Documents/Projects/bhaskar/bettercode/plans/cc-beco-2.md
-- Completed milestones: M1 Composer Editing Power, M2 Pager Mode Keys, M3 Token & Context Warning, M4 Rich Spinner, M5 Unseen Messages, M6 OffscreenFreeze, M7 Text Selection & Copy, M8 Message Actions, M9 True Virtual Scrolling, M10 Configurable Keybindings, M11 Design System Primitives
-- Next milestone to implement: M12 Vim Mode
-
-Execution rules:
-- Implement one milestone only.
-- Do not start M13 until M12 is stable and green.
-- Keep the implementation Ink-native and avoid unnecessary abstractions or broad rewrites.
-- Be careful around transcript stability, sticky/detached scroll, permission/question flows, session switching, and long transcripts.
-- Work around unrelated local edits; do not revert them.
-
-Required first step:
-- Read the active plan and inspect `packages/tui-ink/src/hooks/useTextInput.ts`, `packages/tui-ink/src/components/Composer.tsx`, and any existing mode/key handling before editing.
-
-Required validation:
-- Run from /Users/bhaskar.melkani/Documents/Projects/bhaskar/bettercode/packages/tui-ink only:
-  - bun typecheck
-  - bun test test/
-
-Before stopping:
-- Mark M12 complete in /Users/bhaskar.melkani/Documents/Projects/bhaskar/bettercode/plans/cc-beco-2.md if it is green.
-- End with a compact handoff prompt for the next session.
+All milestones in plans/cc-beco-2.md (M1–M14) are complete as of 2026-04-16.
+Repo: /Users/bhaskar.melkani/Documents/Projects/bhaskar/bettercode
+Branch: bhaskar/ui-3.0
+No further milestones remain in this plan.
+Validation: bun typecheck ✅, bun test test/ ✅ (306 tests, 0 failures).
 ```

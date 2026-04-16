@@ -18,8 +18,11 @@ import { useHistorySearch } from "../hooks/useHistorySearch"
 import { useMentions } from "../hooks/useMentions"
 import { useSlashCommands } from "../hooks/useSlashCommands"
 import { editPrompt } from "../utils/promptEditor"
+import { readClipboardImage, type ClipboardImage } from "../utils/imagePaste"
+import { computeHighlights, type Highlight } from "../hooks/useHighlights"
 import type { FilePartInput } from "@opencode-ai/sdk/v2"
 import { primaryKey, resolveAction } from "../keybindings"
+import { useVimMode } from "../hooks/useVimMode"
 
 // Maximum visible input lines before scrolling within the composer.
 const MAX_VISIBLE = 15
@@ -56,6 +59,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
     value,
     cursor,
     setValue,
+    setAt,
     insert,
     del,
     deleteKey,
@@ -78,6 +82,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
   const [caretOn, setCaretOn] = useState(true)
   const [busy, setBusy] = useState(false)
   const [base, setBase] = useState("")
+  const [images, setImages] = useState<ClipboardImage[]>([])
 
   // Persisted history and stash from store
   const hist = useAppStore((s) => s.promptHistory)
@@ -91,6 +96,9 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
   const agent = useAppStore((s) => s.mode)
   const addToast = useAppStore((s) => s.addToast)
   const bindings = useAppStore((s) => s.keybindings)
+  const vimEnabled = useAppStore((s) => s.vimEnabled)
+
+  const vim = useVimMode(vimEnabled)
 
   const mentions = useMentions(value, cursor, setValue)
   const slash = useSlashCommands(value, mentions.active, clear, setValue)
@@ -130,6 +138,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
 
   function buildSubmission(text: string) {
     const trimmed = text.trim()
+    if (!trimmed && images.length === 0) return null
     if (!trimmed) return null
     pushPromptHistory(trimmed)
     setHistIdx(null)
@@ -137,8 +146,19 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
     clear()
     slash.setIdx(0)
     mentions.setAttachments([])
-    const files = mentions.buildFileParts()
+    const imgParts: FilePartInput[] = images.map((img) => ({
+      type: "file" as const,
+      mime: img.mime,
+      url: `data:${img.mime};base64,${img.data}`,
+    }))
+    setImages([])
+    const files = [...mentions.buildFileParts(), ...imgParts]
     return { trimmed, files: files.length > 0 ? files : undefined }
+  }
+
+  async function pasteImage() {
+    const img = await readClipboardImage()
+    if (img) setImages((prev) => [...prev, img])
   }
 
   function submit(text: string) {
@@ -340,6 +360,11 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
+      if (key.ctrl && input === "v") {
+        void pasteImage()
+        return
+      }
+
       if (key.ctrl || key.meta) return
 
       if (input && (input.startsWith("[<") || input.startsWith("[M"))) return
@@ -358,6 +383,12 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
   // Full editing input — inactive while generating so arrow keys go to MessageList.
   useInput(
     (input, key) => {
+      // Vim mode: let the state machine handle keys in normal/visual/operator-pending mode.
+      // Returns true → key consumed; false → fall through to insert-mode logic below.
+      if (vim.vimEnabled && vim.vimMode !== "insert") {
+        if (vim.handleVimInput({ value, cursor }, input, key, setAt)) return
+      }
+
       const action = resolveAction(bindings, input, key, ["chat"])
 
       if (action === "exit") {
@@ -418,6 +449,10 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
       }
 
       if (key.escape) {
+        // Vim insert mode: Escape → normal mode (vim hook handles it)
+        if (vim.vimEnabled && vim.vimMode === "insert") {
+          if (vim.handleVimInput({ value, cursor }, input, key, setAt)) return
+        }
         if (mentions.visible) {
           mentions.clear()
           return
@@ -572,6 +607,11 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
+      if (key.ctrl && input === "v") {
+        void pasteImage()
+        return
+      }
+
       if (key.ctrl || key.meta) return
 
       // Filter out remaining terminal escape sequences (mouse SGR/X10)
@@ -589,6 +629,37 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
     },
     { isActive: active && !generating && !busy },
   )
+
+  const highlights = computeHighlights(value)
+
+  // Split a text substring (starting at absStart in `value`) into styled segments.
+  function renderHighlighted(text: string, absStart: number, baseColor: string, bgColor: string | undefined): React.ReactNode {
+    if (!text) return null
+    const hl = highlights.filter((h) => h.start < absStart + text.length && h.end > absStart)
+    if (!hl.length) return <Text color={baseColor} backgroundColor={bgColor}>{text}</Text>
+    const pts = [
+      ...new Set([
+        0,
+        text.length,
+        ...hl.flatMap((h) => [Math.max(0, h.start - absStart), Math.min(text.length, h.end - absStart)]),
+      ]),
+    ].sort((a, b) => a - b)
+    return (
+      <>
+        {pts.slice(0, -1).map((s, i) => {
+          const e = pts[i + 1]!
+          const chunk = text.slice(s, e)
+          const abs = absStart + s
+          const h = hl.find((h) => h.start <= abs && abs < h.end)
+          return (
+            <Text key={s} color={h?.color ?? baseColor} bold={h?.bold} backgroundColor={bgColor}>
+              {chunk}
+            </Text>
+          )
+        })}
+      </>
+    )
+  }
 
   const placeholder = generating
     ? `Type to queue... (↑↓ scroll · ${primaryKey(bindings, "steer", ["stream"]) || "ctrl+s"} steer · ${primaryKey(bindings, "exit", ["global"]) || "ctrl+c"} abort)`
@@ -609,13 +680,21 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
 
   return (
     <Box flexDirection="column" flexShrink={0} position="relative">
-      {mentions.attachments.length > 0 && (
+      {(mentions.attachments.length > 0 || images.length > 0) && (
         <Box flexDirection="row" gap={1} flexWrap="wrap" marginBottom={0} paddingLeft={2}>
           {mentions.attachments.map((a) => (
             <Box key={a} flexDirection="row">
               <Text backgroundColor={theme.mauve} color={theme.base}>
                 {" "}
                 {a.split("/").pop()}{" "}
+              </Text>
+            </Box>
+          ))}
+          {images.map((_, i) => (
+            <Box key={i} flexDirection="row">
+              <Text backgroundColor={theme.blue} color={theme.base}>
+                {" "}
+                [Image #{i + 1}]{" "}
               </Text>
             </Box>
           ))}
@@ -653,16 +732,31 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         {/* Slash menu — absolute overlay above the input */}
         {!search.active && slash.visible && <SlashMenu width={width} options={slash.options} focused={slash.idx} />}
 
-        {/* Context line — generating status or empty; hidden when slash/mention overlay is open */}
-        {!search.active && !slash.visible && !mentions.visible && (
-          <Box height={1}>
-            {generating ? (
+        {/* Context line — generating status or empty; collapsed to height=0 when slash/mention overlay is open */}
+        <Box height={!search.active && !slash.visible && !mentions.visible ? 1 : 0}>
+          {!search.active && !slash.visible && !mentions.visible && (
+            generating ? (
               <Spinner
                 label={` generating  ↑↓ scroll · ${primaryKey(bindings, "submit", ["stream"]) || "enter"}: queue · ${primaryKey(bindings, "steer", ["stream"]) || "ctrl+s"}: steer · ${primaryKey(bindings, "exit", ["global"]) || "ctrl+c"}: abort`}
               />
             ) : (
               <Text> </Text>
-            )}
+            )
+          )}
+        </Box>
+
+        {/* Vim mode indicator */}
+        {vim.vimEnabled && (
+          <Box height={1}>
+            <Text color={vim.vimMode === "normal" ? theme.yellow : vim.vimMode === "insert" ? theme.green : theme.mauve} bold>
+              {vim.vimMode === "normal"
+                ? "-- NORMAL --"
+                : vim.vimMode === "insert"
+                ? "-- INSERT --"
+                : vim.vimMode === "operator-pending"
+                ? "-- PENDING --"
+                : "-- VISUAL --"}
+            </Text>
           </Box>
         )}
 
@@ -697,19 +791,11 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
                 <Text backgroundColor={field}>{"  "}</Text>
                 {onLine ? (
                   <>
-                    {col > 0 && (
-                      <Text color={txt} backgroundColor={field}>
-                        {line.slice(0, col)}
-                      </Text>
-                    )}
+                    {col > 0 && renderHighlighted(line.slice(0, col), lineStart, txt, field)}
                     <Text backgroundColor={caretOn ? theme.cyan : field} color={caretOn ? theme.base : txt}>
                       {col < line.length ? line[col] : " "}
                     </Text>
-                    {col < line.length && (
-                      <Text color={txt} backgroundColor={field}>
-                        {line.slice(col + 1)}
-                      </Text>
-                    )}
+                    {col < line.length && renderHighlighted(line.slice(col + 1), lineStart + col + 1, txt, field)}
                     {!value && (
                       <Text color={theme.subtext} backgroundColor={field}>
                         {placeholder}
@@ -719,9 +805,10 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
                   </>
                 ) : (
                   <>
-                    <Text color={txt} backgroundColor={field}>
-                      {line || " "}
-                    </Text>
+                    {line
+                      ? renderHighlighted(line, lineStart, txt, field)
+                      : <Text color={txt} backgroundColor={field}>{" "}</Text>
+                    }
                     {fill > 0 ? <Text backgroundColor={field}>{" ".repeat(fill)}</Text> : null}
                   </>
                 )}

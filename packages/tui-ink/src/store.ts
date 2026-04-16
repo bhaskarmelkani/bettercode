@@ -130,6 +130,7 @@ export interface AppState {
   recentModels: Array<{ providerID: string; modelID: string }>
   contextUsage: (sessionID: string) => ContextUsage | undefined
   keybindings: Keymap
+  vimEnabled: boolean
 
   // Display toggles
   showThinking: boolean
@@ -382,6 +383,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   recentModels: [],
   contextUsage: (sessionID) => getContextUsage(get(), sessionID),
   keybindings: defaults,
+  vimEnabled: false,
   promptHistory: [],
   promptStash: null,
   frecency: {},
