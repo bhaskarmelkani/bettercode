@@ -10,6 +10,7 @@ import { PluginScreen } from "./screens/PluginScreen"
 import { DialogOverlay } from "./components/DialogOverlay"
 import { ThemeProvider } from "./theme-context"
 import { handleGlobalCopy } from "./hooks/useTextSelection"
+import { resolveAction } from "./keybindings"
 
 interface AppProps {
   onExit?: () => void
@@ -40,6 +41,7 @@ export function App({ onExit }: AppProps) {
   const navigate = useAppStore((s) => s.navigate)
   const pushDialog = useAppStore((s) => s.pushDialog)
   const popDialog = useAppStore((s) => s.popDialog)
+  const bindings = useAppStore((s) => s.keybindings)
 
   useSDK({ url: serverUrl, directory, headers: serverHeaders })
   useMouse()
@@ -55,7 +57,9 @@ export function App({ onExit }: AppProps) {
 
   // Global keys — always active regardless of screen
   useInput((input, key) => {
-    if (key.ctrl && input === "c") {
+    const action = resolveAction(bindings, input, key, hasDialog ? ["dialog", "global"] : ["global"])
+
+    if (action === "exit") {
       void handleGlobalCopy().then((handled) => {
         if (handled) return
         onExit?.()
@@ -63,27 +67,23 @@ export function App({ onExit }: AppProps) {
       })
       return
     }
-    // Ctrl+K → command palette
-    if (key.ctrl && input === "k") {
+    if (action === "commandPalette") {
       if (!hasDialog) {
         pushDialog({ type: "command-palette" })
       }
       return
     }
-    // Ctrl+N → go home (start fresh session)
-    if (key.ctrl && input === "n") {
+    if (action === "newSession") {
       navigate({ type: "home" })
       return
     }
-    // Ctrl+S → session list dialog
-    if (key.ctrl && input === "s") {
+    if (action === "sessionList") {
       if (!hasDialog) {
         pushDialog({ type: "session-list" })
       }
       return
     }
-    // Escape → close top dialog
-    if (key.escape && overlay) {
+    if (action === "close" && overlay) {
       popDialog()
     }
   })

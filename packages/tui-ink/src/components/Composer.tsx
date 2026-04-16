@@ -19,16 +19,11 @@ import { useMentions } from "../hooks/useMentions"
 import { useSlashCommands } from "../hooks/useSlashCommands"
 import { editPrompt } from "../utils/promptEditor"
 import type { FilePartInput } from "@opencode-ai/sdk/v2"
+import { primaryKey, resolveAction } from "../keybindings"
 
 // Maximum visible input lines before scrolling within the composer.
 const MAX_VISIBLE = 15
 
-// Known terminal encodings for Shift+Enter.
-// Terminals cannot send key.shift+key.return via normal TTY — they use escape sequences instead.
-//   [27;2;13~ = XTerm modifyOtherKeys (format 1) — used by iTerm2, Terminal.app, etc.
-//   [13;2u    = CSI-u (Kitty keyboard protocol) — used by kitty, WezTerm with CSI-u enabled
-//   [27;2u    = CSI-u alternate encoding
-const SHIFT_ENTER = new Set(["[27;2;13~", "[13;2u", "[27;2u"])
 const LEAD = 3
 
 interface Props {
@@ -95,6 +90,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
   const setMode = useAppStore((s) => s.setMode)
   const agent = useAppStore((s) => s.mode)
   const addToast = useAppStore((s) => s.addToast)
+  const bindings = useAppStore((s) => s.keybindings)
 
   const mentions = useMentions(value, cursor, setValue)
   const slash = useSlashCommands(value, mentions.active, clear, setValue)
@@ -228,27 +224,28 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
   // Arrow keys are intentionally NOT consumed so they flow to MessageList for scrolling.
   useInput(
     (input, key) => {
-      if (key.ctrl && input === "c") {
+      const action = resolveAction(bindings, input, key, ["stream"])
+
+      if (action === "exit") {
         onAbort()
         return
       }
 
       if (handleSearch(input, key)) return
 
-      // Ctrl+S → steer (send immediately, bypassing queue)
-      if (key.ctrl && input === "s") {
+      if (action === "steer") {
         steer(value)
         return
       }
 
-      if (key.ctrl && input === "u") {
+      if (action === "clearInput") {
         clear()
         reset()
         mentions.clear()
         return
       }
 
-      if (key.ctrl && input === "x") {
+      if (action === "stashInput") {
         if (value) {
           setPromptStash(value)
           clear()
@@ -257,7 +254,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
-      if (key.ctrl && input === "y") {
+      if (action === "unstashInput") {
         if (yank()) return
         if (stash) {
           setValue((v) => v + stash)
@@ -266,57 +263,57 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
-      if (key.meta && input === "y") {
+      if (action === "yankCycle") {
         yankPop()
         return
       }
 
-      if (key.ctrl && (input === "z" || input === "_")) {
+      if (action === "undoInput") {
         undo()
         reset()
         return
       }
 
-      if (key.ctrl && input === "r") {
+      if (action === "historySearch") {
         startSearch()
         return
       }
 
-      if (key.ctrl && input === "g" && value) {
+      if (action === "externalEditor" && value) {
         void openEditor()
         return
       }
 
-      if (key.ctrl && input === "a") {
+      if (action === "home") {
         home()
         return
       }
 
-      if (key.ctrl && input === "e") {
+      if (action === "end") {
         end()
         return
       }
 
-      if (key.ctrl && input === "w") {
+      if (action === "deleteWord") {
         const next = textDelWord(value, cursor)[0]
         deleteWord()
         mentions.update(next)
         return
       }
 
-      if (key.ctrl && input === "k") {
+      if (action === "killLine") {
         const next = textKillLine(value, cursor)[0]
         killLine()
         mentions.update(next)
         return
       }
 
-      if (key.return) {
+      if (action === "submit") {
         submit(value)
         return
       }
 
-      if (key.backspace) {
+      if (action === "backspace") {
         const next = textDelAt(value, cursor)[0]
         del()
         slash.setIdx(0)
@@ -324,7 +321,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
-      if (key.delete) {
+      if (action === "delete") {
         const next = textDelKey(value, cursor)[0]
         deleteKey()
         slash.setIdx(0)
@@ -332,16 +329,14 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
-      if (key.leftArrow || key.rightArrow) {
-        // Allow left/right within composer while generating
-        if (key.leftArrow) moveLeft()
+      if (action === "moveLeft" || action === "moveRight") {
+        if (action === "moveLeft") moveLeft()
         else moveRight()
         return
       }
 
-      // Terminal escape sequences (Shift+Enter → newline)
-      if (input && /^\[[\d;]+[A-Za-z~]$/.test(input)) {
-        if (SHIFT_ENTER.has(input)) newline()
+      if (action === "newline") {
+        newline()
         return
       }
 
@@ -363,22 +358,23 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
   // Full editing input — inactive while generating so arrow keys go to MessageList.
   useInput(
     (input, key) => {
-      if (key.ctrl && input === "c") {
+      const action = resolveAction(bindings, input, key, ["chat"])
+
+      if (action === "exit") {
         onAbort()
         return
       }
 
       if (handleSearch(input, key)) return
 
-      if (key.ctrl && input === "u") {
+      if (action === "clearInput") {
         clear()
         reset()
         mentions.clear()
         return
       }
 
-      // Ctrl+X → stash current input; Ctrl+Y → pop stash
-      if (key.ctrl && input === "x") {
+      if (action === "stashInput") {
         if (value) {
           setPromptStash(value)
           clear()
@@ -386,7 +382,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         }
         return
       }
-      if (key.ctrl && input === "y") {
+      if (action === "unstashInput") {
         if (yank()) return
         if (stash) {
           setValue((v) => v + stash)
@@ -395,29 +391,28 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
-      if (key.meta && input === "y") {
+      if (action === "yankCycle") {
         yankPop()
         return
       }
 
-      if (key.ctrl && (input === "z" || input === "_")) {
+      if (action === "undoInput") {
         undo()
         reset()
         return
       }
 
-      if (key.ctrl && input === "r") {
+      if (action === "historySearch") {
         startSearch()
         return
       }
 
-      if (key.ctrl && input === "g" && value) {
+      if (action === "externalEditor" && value) {
         void openEditor()
         return
       }
 
-      // Shift+Tab → cycle the active primary agent
-      if (key.shift && key.tab) {
+      if (action === "toggleMode") {
         setMode(agent === "plan" ? "build" : "plan")
         return
       }
@@ -437,8 +432,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
-      // Alt+Enter or Shift+Enter → insert newline (multi-line input)
-      if ((key.meta && key.return) || (key.shift && key.return)) {
+      if (action === "newline") {
         newline()
         return
       }
@@ -466,7 +460,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
-      if (key.upArrow && !key.shift) {
+      if (action === "historyPrev") {
         if (slash.visible) {
           slash.setIdx((i) => Math.max(0, i - 1))
           return
@@ -491,7 +485,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
-      if (key.downArrow && !key.shift) {
+      if (action === "historyNext") {
         if (slash.visible) {
           slash.setIdx((i) => Math.min(slash.options.length - 1, i + 1))
           return
@@ -517,7 +511,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
-      if (key.return) {
+      if (action === "submit") {
         if (slash.visible) {
           const cmd = slash.options[slash.idx]
           if (cmd) slash.select(cmd)
@@ -527,7 +521,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
-      if (key.backspace) {
+      if (action === "backspace") {
         // Compute cursor-aware next value for mention tracking before mutating state
         const next = textDelAt(value, cursor)[0]
         del()
@@ -536,7 +530,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
-      if (key.delete) {
+      if (action === "delete") {
         const next = textDelKey(value, cursor)[0]
         deleteKey()
         slash.setIdx(0)
@@ -544,44 +538,37 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
-      if (key.leftArrow) {
+      if (action === "moveLeft") {
         moveLeft()
         return
       }
 
-      if (key.rightArrow) {
+      if (action === "moveRight") {
         moveRight()
         return
       }
 
-      if (key.ctrl && input === "a") {
+      if (action === "home") {
         home()
         return
       }
 
-      if (key.ctrl && input === "e") {
+      if (action === "end") {
         end()
         return
       }
 
-      if (key.ctrl && input === "w") {
+      if (action === "deleteWord") {
         const next = textDelWord(value, cursor)[0]
         deleteWord()
         mentions.update(next)
         return
       }
 
-      if (key.ctrl && input === "k") {
+      if (action === "killLine") {
         const next = textKillLine(value, cursor)[0]
         killLine()
         mentions.update(next)
-        return
-      }
-
-      // Terminal escape sequences — must be checked before the ctrl/meta guard because
-      // some terminals set key.meta=true for ESC-prefixed CSI sequences.
-      if (input && /^\[[\d;]+[A-Za-z~]$/.test(input)) {
-        if (SHIFT_ENTER.has(input)) newline()
         return
       }
 
@@ -604,7 +591,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
   )
 
   const placeholder = generating
-    ? "Type to queue... (↑↓ scroll · ctrl+s steer · ctrl+c abort)"
+    ? `Type to queue... (↑↓ scroll · ${primaryKey(bindings, "steer", ["stream"]) || "ctrl+s"} steer · ${primaryKey(bindings, "exit", ["global"]) || "ctrl+c"} abort)`
     : "Type a message... (/ for commands, @ for files)"
 
   // Compute visible window for multi-line input.
@@ -670,7 +657,9 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         {!search.active && !slash.visible && !mentions.visible && (
           <Box height={1}>
             {generating ? (
-              <Spinner label=" generating  ↑↓ scroll · enter: queue · ctrl+s: steer · ctrl+c: abort" />
+              <Spinner
+                label={` generating  ↑↓ scroll · ${primaryKey(bindings, "submit", ["stream"]) || "enter"}: queue · ${primaryKey(bindings, "steer", ["stream"]) || "ctrl+s"}: steer · ${primaryKey(bindings, "exit", ["global"]) || "ctrl+c"}: abort`}
+              />
             ) : (
               <Text> </Text>
             )}

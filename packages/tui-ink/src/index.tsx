@@ -5,6 +5,7 @@ import { dirname, join } from "path"
 import { App } from "./app"
 import { useAppStore } from "./store"
 import { read as readModel } from "./model"
+import { readKeybindings } from "./keybindings"
 
 export interface TuiInkOptions {
   url: string
@@ -35,6 +36,7 @@ async function writePrefs(prefs: Record<string, unknown>): Promise<void> {
 
 export async function startTuiInk(opts: TuiInkOptions): Promise<void> {
   const prefs = await readPrefs()
+  const keybindings = await readKeybindings()
   const currentModel = readModel(prefs.currentModel)
   const recentModels = Array.isArray(prefs.recentModels)
     ? prefs.recentModels.map(readModel).filter((v): v is { providerID: string; modelID: string } => !!v)
@@ -51,6 +53,7 @@ export async function startTuiInk(opts: TuiInkOptions): Promise<void> {
     ...(typeof prefs.promptStash === "string" ? { promptStash: prefs.promptStash } : {}),
     ...(currentModel ? { currentModel } : {}),
     ...(recentModels.length > 0 ? { recentModels } : {}),
+    keybindings,
     ...(prefs.frecency && typeof prefs.frecency === "object"
       ? { frecency: prefs.frecency as Record<string, { score: number; last: number }> }
       : {}),

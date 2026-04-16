@@ -25,6 +25,8 @@ import { DEFAULT_THEME } from "./theme"
 import * as Frecency from "./frecency"
 import { registry } from "./commands/registry"
 import type { CapabilityHook, CapabilityPlugin, CapabilitySkill } from "./types"
+import { defaults } from "./keybindings"
+import type { Keymap } from "./keybindings"
 
 export type SyncStatus = "loading" | "partial" | "complete"
 
@@ -127,6 +129,7 @@ export interface AppState {
   currentAgent: string | undefined
   recentModels: Array<{ providerID: string; modelID: string }>
   contextUsage: (sessionID: string) => ContextUsage | undefined
+  keybindings: Keymap
 
   // Display toggles
   showThinking: boolean
@@ -378,6 +381,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentAgent: undefined,
   recentModels: [],
   contextUsage: (sessionID) => getContextUsage(get(), sessionID),
+  keybindings: defaults,
   promptHistory: [],
   promptStash: null,
   frecency: {},

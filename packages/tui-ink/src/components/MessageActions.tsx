@@ -40,7 +40,14 @@ export function cursorDown(total: number, idx: number | null) {
   return clamp(idx + 1, 0, total - 1)
 }
 
-export function cursorOffset(idx: number, top: number[], bot: number[], total: number, height: number, offset: number) {
+export function cursorOffset(
+  idx: number,
+  top: ArrayLike<number>,
+  bot: ArrayLike<number>,
+  total: number,
+  height: number,
+  offset: number,
+) {
   const max = Math.max(0, total - height)
   const view = clamp(total - height - offset, 0, max)
   const start = top[idx] ?? 0

@@ -7,6 +7,7 @@ import { StatusBar } from "../components/StatusBar"
 import { useTheme } from "../theme-context"
 import { BottomDock, dockHeight } from "../components/BottomDock"
 import type { Dialog } from "../store"
+import { primaryKey, resolveAction } from "../keybindings"
 
 interface Props {
   rows: number
@@ -24,6 +25,7 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
   const navigate = useAppStore((s) => s.navigate)
   const sendPrompt = useAppStore((s) => s.sendPrompt)
   const retryBootstrap = useAppStore((s) => s.retryBootstrap)
+  const bindings = useAppStore((s) => s.keybindings)
 
   const dir = useAppStore((s) => s.directory)
   const composerLines = useAppStore((s) => s.composerLines)
@@ -59,11 +61,15 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
   const recent = sessions.slice(-4).reverse()
 
   useInput(
-    (input) => {
-      if (isPartial && input === "r") retryBootstrap()
+    (input, key) => {
+      const action = resolveAction(bindings, input, key, ["session"])
+      if (isPartial && action === "retry") retryBootstrap()
     },
     { isActive: active },
   )
+
+  const palette = primaryKey(bindings, "commandPalette", ["global"]) || "ctrl+k"
+  const retry = primaryKey(bindings, "retry", ["session"]) || "r"
 
   return (
     <Box height={rows} width={columns} flexDirection="column">
@@ -76,7 +82,7 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
           <>
             <Text color={theme.red}>connection failed</Text>
             <Text color={theme.subtext}>Check that the server is running and restart bettercode.</Text>
-            <Text color={theme.overlay}>r: retry</Text>
+            <Text color={theme.overlay}>{`${retry}: retry`}</Text>
           </>
         )}
 
@@ -110,7 +116,7 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
 
             <Box marginTop={2}>
               <Text color={theme.overlay}>
-                {providers.length === 0 ? "ctrl+k: commands · /provider: add a provider" : "start with a prompt or resume a recent session"}
+                {providers.length === 0 ? `${palette}: commands · /provider: add a provider` : "start with a prompt or resume a recent session"}
               </Text>
             </Box>
           </Box>

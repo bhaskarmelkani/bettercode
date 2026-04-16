@@ -3,6 +3,8 @@ import { Box, Text } from "ink"
 import { useTheme } from "../theme-context"
 import { useAppStore } from "../store"
 import { TokenWarning } from "./TokenWarning"
+import { primaryKey } from "../keybindings"
+import { KeyboardShortcutHint, hintText } from "./design-system"
 
 interface Props {
   width: number
@@ -31,6 +33,7 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   const autoAccept = useAppStore((s) => s.autoAcceptPermissions)
   const focusMode = useAppStore((s) => s.focusMode)
   const searchMode = useAppStore((s) => s.searchMode)
+  const bindings = useAppStore((s) => s.keybindings)
   const used = useAppStore((s) => s.contextUsage(s.currentSessionID)?.used)
   const max = useAppStore((s) => s.contextUsage(s.currentSessionID)?.max)
   const percent = useAppStore((s) => s.contextUsage(s.currentSessionID)?.percent)
@@ -46,26 +49,64 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   const display = cut(model ? model.modelID : "no model", 24)
   const generating = session?.type === "busy" || composerStatus === "generating"
   const tone = agent === "plan" ? theme.yellow : theme.blue
-  const mode = "shift + tab"
-  const raw = focusMode
-    ? "ctrl+o: exit focus"
+  const mode = primaryKey(bindings, "toggleMode", ["chat"]) || "shift+tab"
+  const focus = primaryKey(bindings, "toggleFocus", ["session"]) || "ctrl+o"
+  const next = primaryKey(bindings, "searchNext", ["search"]) || "enter"
+  const prev = primaryKey(bindings, "searchPrev", ["search"]) || "ctrl+p"
+  const close = primaryKey(bindings, "searchClose", ["search"]) || "esc"
+  const sidebar = primaryKey(bindings, "toggleSidebar", ["session"]) || "ctrl+b"
+  const abort = primaryKey(bindings, "exit", ["global"]) || "ctrl+c"
+  const diffs = primaryKey(bindings, "toggleDiffs", ["session"]) || "ctrl+g"
+  const snap = primaryKey(bindings, "snapBottom", ["scroll"]) || "ctrl+down"
+  const palette = primaryKey(bindings, "commandPalette", ["global"]) || "ctrl+k"
+  const items = focusMode
+    ? [{ keys: focus, label: "exit focus" }]
     : searchMode
-      ? "enter/ctrl+n: next · ctrl+p: prev · esc: close"
+      ? [
+          { keys: next, label: "next" },
+          { keys: prev, label: "prev" },
+          { keys: close, label: "close" },
+        ]
       : perms
-        ? "y: allow · a: allow all · n: deny"
+        ? [
+            { keys: "y", label: "allow" },
+            { keys: "a", label: "allow all" },
+            { keys: "n", label: "deny" },
+          ]
         : qs
-          ? "↑↓: navigate · enter: select · esc: reject"
+          ? [
+              { keys: "↑↓", label: "navigate" },
+              { keys: "enter", label: "select" },
+              { keys: "esc", label: "reject" },
+            ]
           : dlg
-            ? "esc: close · tab: navigate"
+            ? [
+                { keys: "esc", label: "close" },
+                { keys: "tab", label: "navigate" },
+              ]
             : sidebarOpen
-              ? "tab/←→: sidebar · ctrl+b: close"
+              ? [
+                  { keys: "tab/←→", label: "sidebar" },
+                  { keys: sidebar, label: "close" },
+                ]
               : generating
-                ? "↑↓ scroll · ctrl+c abort"
+                ? [
+                    { keys: "↑↓ scroll" },
+                    { keys: abort, label: "abort" },
+                  ]
                 : edits
-                  ? "ctrl+g: expand/collapse edits · ctrl+b: capabilities"
+                  ? [
+                      { keys: diffs, label: "expand/collapse edits" },
+                      { keys: sidebar, label: "capabilities" },
+                    ]
                   : scroll > 0
-                    ? "ctrl+↓: snap bottom"
-                    : "ctrl+k: commands · /: slash · ctrl+b: capabilities"
+                    ? [{ keys: snap, label: "snap bottom" }]
+                    : [
+                        { keys: palette, label: "commands" },
+                        { keys: "/", label: "slash" },
+                        { keys: sidebar, label: "capabilities" },
+                      ]
+  const raw = items.map((item) => hintText(item.keys, item.label)).join(" · ")
 
   // fixed = " "(2) + git + " · "(3) + agent + " (" + mode + ")" + " · "(3) + display + " · "(3)
   const fixed = 2 + 2 + branch.length + 3 + agent.length + 2 + mode.length + 1 + 3 + display.length + 3
@@ -87,7 +128,16 @@ export function StatusBar({ width, sidebarOpen }: Props) {
         <Text color={theme.overlay}>{" · "}</Text>
         <Text color={theme.subtext}>{display}</Text>
         <Text color={theme.overlay}>{" · "}</Text>
-        <Text color={theme.overlay}>{hint}</Text>
+        {hint === raw ? (
+          items.map((item, i) => (
+            <React.Fragment key={`${item.keys}-${item.label ?? i}`}>
+              {i > 0 ? <Text color={theme.overlay}>{" · "}</Text> : null}
+              <KeyboardShortcutHint keys={item.keys} label={item.label} />
+            </React.Fragment>
+          ))
+        ) : (
+          <Text color={theme.overlay}>{hint}</Text>
+        )}
         {fill > 0 ? <Text>{" ".repeat(fill)}</Text> : null}
         {autoAccept && <Text color={theme.yellow}>{" auto-accept "}</Text>}
       </Box>

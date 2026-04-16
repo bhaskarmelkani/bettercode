@@ -13,6 +13,10 @@ import { OffscreenFreeze } from "./OffscreenFreeze"
 import { useTextSelection } from "../hooks/useTextSelection"
 import { copy } from "../utils/clipboard"
 import { cursorDown, cursorOffset, cursorUp, editText, messageText } from "./MessageActions"
+import { useVirtualScroll } from "../hooks/useVirtualScroll"
+import { primaryKey, resolveAction } from "../keybindings"
+import type { Keymap } from "../keybindings"
+import { Divider } from "./design-system"
 
 const EMPTY_MESSAGES: Message[] = []
 const EMPTY_PARTS: Record<string, Part[]> = {}
@@ -162,35 +166,41 @@ export function unseen(total: number, seen: number | undefined, offset: number) 
   return { count: Math.max(0, total - split), split }
 }
 
-export function pagerOffset(input: string, key: Key, pos: number, max: number, rows: number, generating: boolean) {
+export function pagerOffset(
+  input: string,
+  key: Key,
+  pos: number,
+  max: number,
+  rows: number,
+  generating: boolean,
+  bindings: Keymap,
+) {
   const half = Math.max(1, Math.floor(rows / 2))
   const full = Math.max(1, rows - 2)
   const free = pos > 0
-  const plain = !key.ctrl && !key.meta
 
-  if (key.pageUp || (key.upArrow && key.shift) || (key.upArrow && generating)) {
+  const stream = generating ? resolveAction(bindings, input, key, ["stream"]) : undefined
+  const scroll = free ? resolveAction(bindings, input, key, ["scroll"]) : undefined
+
+  if (scroll === "scrollUp" || stream === "scrollUp") {
     return clamp(pos + SCROLL_STEP, 0, max)
   }
 
-  if (key.pageDown || (key.downArrow && key.shift) || (key.downArrow && generating)) {
+  if (scroll === "scrollDown" || stream === "scrollDown") {
     return clamp(pos - SCROLL_STEP, 0, max)
   }
 
-  if (key.ctrl && key.upArrow) return max
-  if (key.ctrl && key.downArrow) return 0
   if (!free) return
 
-  if (plain && input === "g" && !key.shift) return max
-  if (plain && key.shift && input.toLowerCase() === "g") return 0
-  if (plain && input === "j") return clamp(pos - 1, 0, max)
-  if (plain && input === "k") return clamp(pos + 1, 0, max)
-  if (key.ctrl && input === "d") return clamp(pos - half, 0, max)
-  if (key.ctrl && input === "u") return clamp(pos + half, 0, max)
-  if (key.ctrl && input === "f") return clamp(pos - full, 0, max)
-  if (key.ctrl && input === "b") return clamp(pos + full, 0, max)
-  if (plain && input === " ") return clamp(pos - full, 0, max)
-  if (plain && input === "b") return clamp(pos + full, 0, max)
-  if (plain && input === "q") return 0
+  if (scroll === "scrollTop") return max
+  if (scroll === "scrollBottom" || scroll === "snapBottom") return 0
+  if (scroll === "scrollLineDown") return clamp(pos - 1, 0, max)
+  if (scroll === "scrollLineUp") return clamp(pos + 1, 0, max)
+  if (scroll === "scrollHalfDown") return clamp(pos - half, 0, max)
+  if (scroll === "scrollHalfUp") return clamp(pos + half, 0, max)
+  if (scroll === "scrollPageDown") return clamp(pos - full, 0, max)
+  if (scroll === "scrollPageUp") return clamp(pos + full, 0, max)
+  if (scroll === "pagerBack") return 0
 }
 
 // ---------------------------------------------------------------------------
@@ -488,8 +498,8 @@ function projectAssistant(
 export function projectViewport(args: {
   messages: Message[]
   parts: Record<string, Part[]>
-  topH: number[]
-  botH: number[]
+  topH: ArrayLike<number>
+  botH: ArrayLike<number>
   winStart: number
   winEnd: number
   scrollTop: number
@@ -587,54 +597,6 @@ function useSessionParts(sessionID: string): Record<string, Part[]> {
 // Scroll step in rows
 // ---------------------------------------------------------------------------
 const SCROLL_STEP = 5
-// Extra messages to render above/below the visible viewport
-const WIN_BUFFER = 2
-
-export function findWindow(
-  top: number[],
-  bot: number[],
-  total: number,
-  scrollTop: number,
-  viewH: number,
-  buffer = WIN_BUFFER,
-) {
-  const viewEnd = scrollTop + viewH
-  let first = top.length
-  let last = -1
-
-  for (let i = 0; i < top.length; i++) {
-    if (bot[i]! <= scrollTop || top[i]! >= viewEnd) continue
-    if (i < first) first = i
-    last = i
-  }
-
-  if (last === -1) {
-    return {
-      visStart: 0,
-      visEnd: 0,
-      winStart: 0,
-      winEnd: 0,
-      topSpacer: 0,
-      bottomSpacer: total,
-    }
-  }
-
-  const visStart = first
-  const visEnd = last + 1
-  const winStart = Math.max(0, visStart - buffer)
-  const winEnd = Math.min(top.length, visEnd + buffer)
-  const topSpacer = top[winStart] ?? total
-  const bottomSpacer = winEnd > 0 ? total - (bot[winEnd - 1] ?? 0) : total
-
-  return {
-    visStart,
-    visEnd,
-    winStart,
-    winEnd,
-    topSpacer,
-    bottomSpacer,
-  }
-}
 
 export const MessageList = React.memo(function MessageList({ sessionID, height, width, active, generating }: Props) {
   const theme = useTheme()
@@ -661,6 +623,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const expandAllTools = useAppStore((s) => s.expandAllTools)
   const collapseAllTools = useAppStore((s) => s.collapseAllTools)
   const addToast = useAppStore((s) => s.addToast)
+  const bindings = useAppStore((s) => s.keybindings)
   const activeRef = useRef(active)
 
   const pending = useMemo(() => messages.findLast((m) => m.role === "assistant" && !m.time.completed)?.id, [messages])
@@ -684,39 +647,32 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const prevOffset = useRef(savedPos)
   const searchState = useRef({ open: false, pos: savedPos })
 
-  // Compute totalHeight and per-message cumulative heights in one pass.
-  // cumH[i] = sum of heights of messages 0..i-1; cumH[messages.length] = total base.
-  // Completed messages are served from heightCache (O(1)); only the pending message
-  // is recomputed on every delta.
-  const [totalHeight, topH, botH] = useMemo(() => {
+  const heights = useMemo(() => {
     if (cacheWidth !== width) {
       heightCache.clear()
       cacheWidth = width
     }
-    const top: number[] = []
-    const bot: number[] = []
-    let sum = 0
-    for (const [i, msg] of messages.entries()) {
-      if (mark.count > 0 && i === mark.split) sum += 1
-      top.push(sum)
+    return messages.map((msg, i) => {
       const diffs = messageDiff[msg.id] ?? EMPTY_DIFF
       const diffOpen = !(collapsedDiffs[msg.id] ?? true)
-      sum += cachedHeight(
-        msg,
-        parts[msg.id] ?? EMPTY_ARRAY,
-        diffs,
-        diffOpen,
-        width,
-        pending,
-        collapsedTools,
-        focusMode,
-        showThinking,
-        msg.id === messages[messages.length - 1]?.id,
+      return (
+        (mark.count > 0 && i === mark.split ? 1 : 0) +
+        cachedHeight(
+          msg,
+          parts[msg.id] ?? EMPTY_ARRAY,
+          diffs,
+          diffOpen,
+          width,
+          pending,
+          collapsedTools,
+          focusMode,
+          showThinking,
+          msg.id === messages[messages.length - 1]?.id,
+        )
       )
-      bot.push(sum)
-    }
-    return [sum, top, bot] as const
+    })
   }, [collapsedDiffs, collapsedTools, focusMode, mark.count, mark.split, messageDiff, messages, parts, showThinking, width, pending])
+  const totalHeight = useMemo(() => heights.reduce((sum, n) => sum + n, 0), [heights])
 
   const matches = useMemo(() => {
     if (!searchMode || !searchQuery.trim()) return []
@@ -736,6 +692,14 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   // Max rows we can scroll up before reaching the very top
   const maxRowOffset = Math.max(0, totalHeight - height)
   const clampedOffset = Math.min(rowOffset, maxRowOffset)
+  // Absolute top position of the content box inside the clipping container.
+  const absoluteTop = totalHeight > height ? -(totalHeight - height - clampedOffset) : 0
+  // Virtualized rendering uses binary search over typed-array offsets and
+  // mounts only the viewport plus row-based overscan.
+  const scrollTop = absoluteTop < 0 ? -absoluteTop : 0
+  const view = useVirtualScroll({ list: heights, top: scrollTop, height })
+  const topH = view.offsets.subarray(0, messages.length)
+  const botH = view.offsets.subarray(1)
 
   useEffect(() => {
     setSearchMatchCount(matches.length)
@@ -798,24 +762,6 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const maxRowOffsetRef = useRef(maxRowOffset)
   maxRowOffsetRef.current = maxRowOffset
 
-  // Absolute top position of the content box inside the clipping container.
-  // Short content (fits in viewport): start at top (blank space falls naturally below last message).
-  // Long content: negative margin scrolls content up; rowOffset=0 shows bottom, max shows top.
-  const absoluteTop = totalHeight > height ? -(totalHeight - height - clampedOffset) : 0
-
-  // ---------------------------------------------------------------------------
-  // Windowed rendering — find the visible message range.
-  // scrollTop: how many rows of content are above the viewport top edge.
-  // We render WIN_BUFFER extra messages before and after the visible range.
-  // Top + bottom spacers preserve the total inner-box height so scroll math
-  // stays identical to full-list rendering.
-  // ---------------------------------------------------------------------------
-  const scrollTop = absoluteTop < 0 ? -absoluteTop : 0
-  const view = useMemo(
-    () => findWindow(topH, botH, totalHeight, scrollTop, height),
-    [botH, height, scrollTop, topH, totalHeight],
-  )
-
   // Restore scroll position when switching sessions
   useEffect(() => {
     prevTotal.current = totalHeight
@@ -849,12 +795,14 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
 
   useInput(
     (_input, key) => {
-      if (key.escape && cursorIdx !== null) {
+      const action = resolveAction(bindings, _input, key, cursorIdx !== null ? ["message", "scroll"] : ["scroll", "stream"])
+
+      if (action === "cursorClear" && cursorIdx !== null) {
         setMessageCursor(sessionID, null)
         return
       }
 
-      if (key.shift && key.upArrow) {
+      if (action === "cursorPrev") {
         const next = cursorUp(messages.length, cursorIdx)
         if (next === null) return
         setMessageCursor(sessionID, next)
@@ -862,7 +810,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
         return
       }
 
-      if (key.shift && key.downArrow) {
+      if (action === "cursorNext") {
         const next = cursorDown(messages.length, cursorIdx)
         if (next === null) return
         setMessageCursor(sessionID, next)
@@ -870,9 +818,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
         return
       }
 
-      const plainCopy = cursorIdx !== null && !key.ctrl && !key.meta && !key.shift && _input === "c"
-      const chordCopy = cursorIdx !== null && key.ctrl && key.shift && _input.toLowerCase() === "c"
-      if (plainCopy || chordCopy) {
+      if (action === "messageCopy" && cursorIdx !== null) {
         const msg = messages[cursorIdx]
         if (!msg) return
         const text = messageText(msg, parts[msg.id] ?? EMPTY_ARRAY, showThinking)
@@ -887,7 +833,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
         return
       }
 
-      if (cursorIdx !== null && !key.ctrl && !key.meta && !key.shift && _input === "e") {
+      if (action === "messageEdit" && cursorIdx !== null) {
         const msg = messages[cursorIdx]
         if (!msg || msg.role !== "user") return
         const text = editText(msg, parts[msg.id] ?? EMPTY_ARRAY)
@@ -898,7 +844,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
         return
       }
 
-      if (_input === "e" && !key.ctrl && !key.meta && !key.shift && generating) {
+      if (action === "messageEdit" && generating) {
         const msg = [...messages].reverse().find((m) => m.role === "assistant")
         if (!msg) return
         const tools = (parts[msg.id] ?? EMPTY_ARRAY).filter((p) => p.type === "tool")
@@ -911,7 +857,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
         else collapseAllTools(sessionID)
         return
       }
-      setRowOffset((o) => pagerOffset(_input, key, o, maxRowOffset, height, generating) ?? o)
+      setRowOffset((o) => pagerOffset(_input, key, o, maxRowOffset, height, generating, bindings) ?? o)
     },
     { isActive: active },
   )
@@ -960,6 +906,8 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
     selection.clear()
   }, [sessionID, clampedOffset, searchMode, cursorIdx])
 
+  const snap = primaryKey(bindings, "snapBottom", ["scroll"]) || "ctrl+down"
+
   return (
     <Box height={height} overflowY="hidden" flexDirection="column">
       {stickyPrompt && (
@@ -975,7 +923,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
       {/* Scroll indicator — overlaid at the top-right when scrolled up */}
       {clampedOffset > 0 && (
         <Box position="absolute" width={width} flexDirection="row" justifyContent="flex-end">
-          <Text dimColor>{`↑ scrolled · ctrl+↓ snap bottom `}</Text>
+          <Text dimColor>{`↑ scrolled · ${snap} snap bottom `}</Text>
         </Box>
       )}
       {clampedOffset > 0 && mark.count > 0 && (
@@ -1010,7 +958,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
                 <React.Fragment>
                   {showMark && (
                     <Box justifyContent="center">
-                      <Text color={theme.cyan} bold>{` ── ${mark.count} new message${mark.count > 1 ? "s" : ""} ── `}</Text>
+                      <Divider label={`${mark.count} new message${mark.count > 1 ? "s" : ""}`} tone="cyan" bold />
                     </Box>
                   )}
                   <UserMessage parts={msgParts} isQueued={isQueued} tone={tone} />
@@ -1023,7 +971,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
               <React.Fragment>
                 {showMark && (
                   <Box justifyContent="center">
-                    <Text color={theme.cyan} bold>{` ── ${mark.count} new message${mark.count > 1 ? "s" : ""} ── `}</Text>
+                    <Divider label={`${mark.count} new message${mark.count > 1 ? "s" : ""}`} tone="cyan" bold />
                   </Box>
                 )}
                 <AssistantMessage

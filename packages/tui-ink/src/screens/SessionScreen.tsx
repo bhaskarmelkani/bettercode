@@ -13,6 +13,7 @@ import { BottomDock, dockHeight } from "../components/BottomDock"
 import { useTheme } from "../theme-context"
 import { ErrorBoundary } from "../components/ErrorBoundary"
 import type { Dialog } from "../store"
+import { resolveAction } from "../keybindings"
 
 interface Props {
   sessionID: string
@@ -45,6 +46,7 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   const searchMode = useAppStore((s) => s.searchMode)
   const searchMatchCount = useAppStore((s) => s.searchMatchCount)
   const scrolled = useAppStore((s) => (s.scrollPos[sessionID] ?? 0) > 0)
+  const bindings = useAppStore((s) => s.keybindings)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Lazy-load messages when this session becomes active
@@ -132,24 +134,28 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
 
   useInput(
     (_input, key) => {
-      if (key.ctrl && _input === "b") {
+      const action = resolveAction(bindings, _input, key, ["session"])
+
+      if (action === "toggleSidebar") {
         if (scrolled) return
         if (columns >= SIDEBAR_MIN) setSidebarOpen((v) => !v)
+        return
       }
-      if (key.ctrl && _input === "o") {
+      if (action === "toggleFocus") {
         useAppStore.getState().toggleFocusMode()
         return
       }
-      if (key.ctrl && _input === "f") {
+      if (action === "openSearch") {
         if (scrolled) return
         openSearch()
         return
       }
-      if (syncStatus === "partial" && _input === "r") {
+      if (action === "retry") {
+        if (syncStatus !== "partial") return
         retryBootstrap()
         return
       }
-      if (key.ctrl && _input === "g") {
+      if (action === "toggleDiffs") {
         // Cycle through all assistant messages that have diffs, toggling one at a time.
         // If all are collapsed, expand the most recent; otherwise collapse all.
         const state = useAppStore.getState()

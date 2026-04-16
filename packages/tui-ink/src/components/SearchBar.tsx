@@ -3,6 +3,7 @@ import { Box, Text, useInput } from "ink"
 import { useTheme } from "../theme-context"
 import { useAppStore } from "../store"
 import { useTextInput } from "../hooks/useTextInput"
+import { primaryKey, resolveAction } from "../keybindings"
 
 interface Props {
   matchCount: number
@@ -17,6 +18,7 @@ export function SearchBar({ matchCount, active }: Props) {
   const closeSearch = useAppStore((s) => s.closeSearch)
   const nextMatch = useAppStore((s) => s.nextSearchMatch)
   const prevMatch = useAppStore((s) => s.prevSearchMatch)
+  const bindings = useAppStore((s) => s.keybindings)
 
   useEffect(() => {
     setSearchQuery(value)
@@ -24,44 +26,42 @@ export function SearchBar({ matchCount, active }: Props) {
 
   useInput(
     (input, key) => {
-      if (key.escape) {
+      const action = resolveAction(bindings, input, key, ["search"])
+
+      if (action === "searchClose") {
         closeSearch()
         clear()
         return
       }
-      if (key.return) {
+      if (action === "searchNext") {
         nextMatch()
         return
       }
-      if (key.ctrl && input === "n") {
-        nextMatch()
-        return
-      }
-      if (key.ctrl && input === "p") {
+      if (action === "searchPrev") {
         prevMatch()
         return
       }
-      if (key.ctrl && input === "a") {
+      if (action === "home") {
         home()
         return
       }
-      if (key.ctrl && input === "e") {
+      if (action === "end") {
         end()
         return
       }
-      if (key.leftArrow) {
+      if (action === "moveLeft") {
         moveLeft()
         return
       }
-      if (key.rightArrow) {
+      if (action === "moveRight") {
         moveRight()
         return
       }
-      if (key.backspace) {
+      if (action === "backspace") {
         del()
         return
       }
-      if (key.delete) {
+      if (action === "delete") {
         deleteKey()
         return
       }
@@ -75,6 +75,9 @@ export function SearchBar({ matchCount, active }: Props) {
   const before = value.slice(0, cursor)
   const at = value[cursor] ?? " "
   const after = value.slice(cursor + 1)
+  const next = primaryKey(bindings, "searchNext", ["search"])
+  const prev = primaryKey(bindings, "searchPrev", ["search"])
+  const close = primaryKey(bindings, "searchClose", ["search"])
 
   return (
     <Box height={1} flexDirection="row" paddingLeft={1}>
@@ -85,7 +88,7 @@ export function SearchBar({ matchCount, active }: Props) {
       </Text>
       <Text color={theme.text}>{after}</Text>
       <Text color={matchCount === 0 ? theme.red : theme.overlay}>{label}</Text>
-      <Text color={theme.overlay}>{" · enter/ctrl+n: next · ctrl+p: prev · esc: close"}</Text>
+      <Text color={theme.overlay}>{` · ${next}: next · ${prev}: prev · ${close}: close`}</Text>
     </Box>
   )
 }

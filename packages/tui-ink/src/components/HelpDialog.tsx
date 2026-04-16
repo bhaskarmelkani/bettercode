@@ -3,6 +3,8 @@ import { Box, Text, useInput } from "ink"
 import { useAppStore } from "../store"
 import { useTheme } from "../theme-context"
 import { useCommands } from "../commands/useCommands"
+import { primaryKey, resolveAction } from "../keybindings"
+import { Dialog } from "./design-system"
 
 interface Props {
   rows: number
@@ -12,6 +14,7 @@ interface Props {
 export function HelpDialog({ rows, columns }: Props) {
   const theme = useTheme()
   const popDialog = useAppStore((s) => s.popDialog)
+  const bindings = useAppStore((s) => s.keybindings)
   const cmds = useCommands()
 
   // Group by category
@@ -23,7 +26,8 @@ export function HelpDialog({ rows, columns }: Props) {
   }
 
   useInput((input, key) => {
-    if (key.escape || (key.ctrl && input === "k") || input === "q" || input === "?") {
+    const action = resolveAction(bindings, input, key, ["dialog", "global"])
+    if (action === "close" || action === "commandPalette" || input === "q" || input === "?") {
       popDialog()
     }
   })
@@ -32,14 +36,11 @@ export function HelpDialog({ rows, columns }: Props) {
   const maxVisible = Math.max(1, rows - 6)
   let count = 0
 
-  return (
-    <Box height={rows} width={columns} flexDirection="column" paddingX={2} paddingY={1}>
-      <Box marginBottom={1}>
-        <Text color={theme.mauve} bold>
-          Keyboard Shortcuts
-        </Text>
-      </Box>
+  const close = primaryKey(bindings, "close", ["dialog"]) || "esc"
+  const palette = primaryKey(bindings, "commandPalette", ["global"]) || "ctrl+k"
 
+  return (
+    <Dialog title="Keyboard Shortcuts" rows={rows} columns={columns} footer={`q / ${close} / ? / ${palette} to close`}>
       <Box flexDirection="column" height={maxVisible} overflow="hidden">
         {categories.flatMap((cat) => {
           const catCmds = byCategory[cat] ?? []
@@ -78,10 +79,6 @@ export function HelpDialog({ rows, columns }: Props) {
           return items
         })}
       </Box>
-
-      <Box marginTop={1}>
-        <Text color={theme.overlay}>q / esc / ? to close</Text>
-      </Box>
-    </Box>
+    </Dialog>
   )
 }

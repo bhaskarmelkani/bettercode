@@ -2,8 +2,7 @@ import React from "react"
 import { Box, Text } from "ink"
 import type { ContextUsage } from "../store"
 import { useTheme } from "../theme-context"
-
-const BLOCKS = [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
+import { progressBar as fill } from "./design-system"
 
 function cut(text: string, max: number) {
   if (max <= 0) return ""
@@ -12,15 +11,7 @@ function cut(text: string, max: number) {
   return `${text.slice(0, max - 1)}…`
 }
 
-export function progressBar(ratio: number, width: number) {
-  if (width <= 0) return ""
-  const fill = Math.max(0, Math.min(1, ratio)) * width
-  const full = Math.floor(fill)
-  const part = Math.round((fill - full) * 8)
-  const head = "█".repeat(full)
-  const tail = part > 0 && full < width ? (BLOCKS[part] ?? "") : ""
-  return `${head}${tail}${" ".repeat(Math.max(0, width - head.length - tail.length))}`
-}
+export const progressBar = fill
 
 function line(width: number, text: string) {
   const body = cut(text, width)

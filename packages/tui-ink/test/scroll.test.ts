@@ -8,10 +8,11 @@ import {
   estimateHeight,
   cacheVersion,
   clearHeightCache,
-  findWindow,
   pagerOffset,
   unseen,
 } from "../src/components/MessageList"
+import { buildOffsets, capRange, overscan, quantize, spacers, visible } from "../src/hooks/useVirtualScroll"
+import { defaults } from "../src/keybindings"
 import { makeMsg, makeTextPart, makeToolPart, makeTranscript } from "./fixtures"
 
 function visibleSlice(
@@ -33,28 +34,34 @@ function visibleSlice(
   return msgs.slice(start, end)
 }
 
-// ---------------------------------------------------------------------------
-// Windowed rendering helpers — mirrors MessageList windowing logic.
-// ---------------------------------------------------------------------------
-function buildCumH(msgs: Message[], parts: Record<string, Part[]>, width: number): number[] {
-  const h: number[] = [0]
-  for (const msg of msgs) {
-    h.push(h[h.length - 1]! + estimateHeight(msg, parts[msg.id] ?? [], width))
-  }
-  return h
-}
-
-function span(cumH: number[]) {
-  return {
-    top: cumH.slice(0, -1),
-    bot: cumH.slice(1),
-  }
+function heights(msgs: Message[], parts: Record<string, Part[]>, width: number) {
+  return msgs.map((msg) => estimateHeight(msg, parts[msg.id] ?? [], width))
 }
 
 function scrollTopFromOffset(totalHeight: number, viewH: number, rowOffset: number): number {
   const clampedOffset = Math.min(rowOffset, Math.max(0, totalHeight - viewH))
   const absoluteTop = totalHeight > viewH ? -(totalHeight - viewH - clampedOffset) : 0
   return absoluteTop < 0 ? -absoluteTop : 0
+}
+
+function window(msgs: Message[], parts: Record<string, Part[]>, width: number, viewH: number, rowOffset: number) {
+  const list = heights(msgs, parts, width)
+  const offsets = buildOffsets(list)
+  const total = offsets[offsets.length - 1] ?? 0
+  const scrollTop = scrollTopFromOffset(total, viewH, rowOffset)
+  const vis = visible(offsets, scrollTop, viewH)
+  const win = overscan(list, vis)
+  const gap = spacers(offsets, total, win)
+  return {
+    offsets,
+    total,
+    visStart: vis.start,
+    visEnd: vis.end,
+    winStart: win.start,
+    winEnd: win.end,
+    topSpacer: gap.top,
+    bottomSpacer: gap.bottom,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -320,69 +327,48 @@ describe("windowed rendering", () => {
 
   test("sticky-bottom: window includes the last message", () => {
     const { msgs, parts } = makeTranscript(50)
-    const width = 80
-    const viewH = 24
-    const cumH = buildCumH(msgs, parts, width)
-    const h = span(cumH)
-    const base = cumH[cumH.length - 1]!
-    const total = base + 2
-    // rowOffset=0: scrolled to bottom
-    const scrollTop = scrollTopFromOffset(total, viewH, 0)
-    const { winStart, winEnd } = findWindow(h.top, h.bot, total, scrollTop, viewH)
+    const { winStart, winEnd } = window(msgs, parts, 80, 24, 0)
     expect(winEnd).toBe(50) // buffer extends to message.length
     expect(msgs.slice(winStart, winEnd).some((m) => m.id === msgs[49]!.id)).toBe(true)
   })
 
   test("top-scroll: window includes the first message", () => {
     const { msgs, parts } = makeTranscript(50)
-    const width = 80
-    const viewH = 24
-    const cumH = buildCumH(msgs, parts, width)
-    const h = span(cumH)
-    const base = cumH[cumH.length - 1]!
-    const total = base + 2
-    // rowOffset=max: scrolled to top
-    const maxRowOffset = Math.max(0, total - viewH)
-    const scrollTop = scrollTopFromOffset(total, viewH, maxRowOffset)
-    const { winStart } = findWindow(h.top, h.bot, total, scrollTop, viewH)
+    const total = heights(msgs, parts, 80).reduce((sum, n) => sum + n, 0)
+    const maxRowOffset = Math.max(0, total - 24)
+    const { winStart } = window(msgs, parts, 80, 24, maxRowOffset)
     expect(winStart).toBe(0)
   })
 
   test("spacers preserve total inner-box height", () => {
     const { msgs, parts } = makeTranscript(30)
-    const width = 80
-    const viewH = 24
-    const cumH = buildCumH(msgs, parts, width)
-    const h = span(cumH)
-    const base = cumH[cumH.length - 1]!
-    const total = base + 2
-    // Mid-scroll
-    const maxRowOffset = Math.max(0, total - viewH)
-    const scrollTop = scrollTopFromOffset(total, viewH, Math.floor(maxRowOffset / 2))
-    const { winStart, winEnd, topSpacer, bottomSpacer } = findWindow(h.top, h.bot, total, scrollTop, viewH)
-    const visH = cumH[winEnd]! - cumH[winStart]!
+    const list = heights(msgs, parts, 80)
+    const total = list.reduce((sum, n) => sum + n, 0)
+    const maxRowOffset = Math.max(0, total - 24)
+    const out = window(msgs, parts, 80, 24, Math.floor(maxRowOffset / 2))
+    const visH = (out.offsets[out.winEnd] ?? 0) - (out.offsets[out.winStart] ?? 0)
+    const { topSpacer, bottomSpacer } = out
     expect(topSpacer + visH + bottomSpacer).toBe(total)
   })
 
   test("empty transcript: window is empty with full bottom spacer", () => {
-    const total = 2
-    const { winStart, winEnd, topSpacer, bottomSpacer } = findWindow([], [], total, 0, 24)
+    const offsets = buildOffsets([])
+    const vis = visible(offsets, 0, 24)
+    const win = overscan([], vis)
+    const gap = spacers(offsets, 0, win)
+    const { start: winStart, end: winEnd } = win
+    const { top: topSpacer, bottom: bottomSpacer } = gap
     expect(winStart).toBe(0)
     expect(winEnd).toBe(0)
     expect(topSpacer).toBe(0)
-    expect(bottomSpacer).toBe(2)
+    expect(bottomSpacer).toBe(0)
   })
 
   test("all messages fit in viewport: no spacers", () => {
     // 3 short messages that all fit in a large viewport
     const msgs = [makeMsg("m1", "user"), makeMsg("m2", "user"), makeMsg("m3", "user")]
     const parts: Record<string, Part[]> = {}
-    const cumH = buildCumH(msgs, parts, 80)
-    const h = span(cumH)
-    const base = cumH[3]!
-    const total = base + 2
-    // Very large viewport — all messages visible
-    const { topSpacer, winStart, winEnd } = findWindow(h.top, h.bot, total, 0, 1000)
+    const { topSpacer, winStart, winEnd } = window(msgs, parts, 80, 1000, 0)
     expect(winStart).toBe(0)
     expect(winEnd).toBe(3)
     expect(topSpacer).toBe(0)
@@ -390,14 +376,7 @@ describe("windowed rendering", () => {
 
   test("window shrinks for narrow viewport with many messages", () => {
     const { msgs, parts } = makeTranscript(100)
-    const width = 80
-    const viewH = 24
-    const cumH = buildCumH(msgs, parts, width)
-    const h = span(cumH)
-    const base = cumH[100]!
-    const total = base + 2
-    const scrollTop = scrollTopFromOffset(total, viewH, 0)
-    const { winStart, winEnd } = findWindow(h.top, h.bot, total, scrollTop, viewH)
+    const { winStart, winEnd } = window(msgs, parts, 80, 24, 0)
     // Window should be much smaller than 100
     const rendered = winEnd - winStart
     expect(rendered).toBeLessThan(100)
@@ -406,35 +385,20 @@ describe("windowed rendering", () => {
 
   test("detached scroll: window is centered around scrolled position", () => {
     const { msgs, parts } = makeTranscript(50)
-    const width = 80
-    const viewH = 24
-    const cumH = buildCumH(msgs, parts, width)
-    const h = span(cumH)
-    const base = cumH[50]!
-    const total = base + 2
-    // Scroll to middle
-    const maxRowOffset = Math.max(0, total - viewH)
-    const midOffset = Math.floor(maxRowOffset / 2)
-    const scrollTop = scrollTopFromOffset(total, viewH, midOffset)
-    const { winStart, winEnd } = findWindow(h.top, h.bot, total, scrollTop, viewH)
-    // Neither the first nor the last message should be in the window
+    const total = heights(msgs, parts, 80).reduce((sum, n) => sum + n, 0)
+    const midOffset = Math.floor(Math.max(0, total - 24) / 2)
+    const { visStart, visEnd } = window(msgs, parts, 80, 24, midOffset)
+    // Neither the first nor the last message should be in the visible core
     // (assuming there are enough messages)
     if (msgs.length > 20) {
-      expect(winStart).toBeGreaterThan(0)
-      expect(winEnd).toBeLessThan(msgs.length)
+      expect(visStart).toBeGreaterThan(0)
+      expect(visEnd).toBeLessThan(msgs.length)
     }
   })
 
   test("500-message: window is tiny fraction of total", () => {
     const { msgs, parts } = makeTranscript(500)
-    const width = 80
-    const viewH = 24
-    const cumH = buildCumH(msgs, parts, width)
-    const h = span(cumH)
-    const base = cumH[500]!
-    const total = base + 2
-    const scrollTop = scrollTopFromOffset(total, viewH, 0)
-    const { winStart, winEnd } = findWindow(h.top, h.bot, total, scrollTop, viewH)
+    const { winStart, winEnd } = window(msgs, parts, 80, 24, 0)
     const rendered = winEnd - winStart
     // Should render at most ~20 messages (24 rows / ~5 per message + buffer)
     expect(rendered).toBeLessThan(50)
@@ -443,19 +407,26 @@ describe("windowed rendering", () => {
 
   test("window keeps buffered rows outside the visible core", () => {
     const { msgs, parts } = makeTranscript(50)
-    const width = 80
-    const viewH = 24
-    const cumH = buildCumH(msgs, parts, width)
-    const h = span(cumH)
-    const base = cumH[50]!
-    const total = base + 2
-    const maxRowOffset = Math.max(0, total - viewH)
-    const scrollTop = scrollTopFromOffset(total, viewH, Math.floor(maxRowOffset / 2))
-    const out = findWindow(h.top, h.bot, total, scrollTop, viewH)
+    const total = heights(msgs, parts, 80).reduce((sum, n) => sum + n, 0)
+    const out = window(msgs, parts, 80, 24, Math.floor(Math.max(0, total - 24) / 2))
     expect(out.visStart).toBeGreaterThanOrEqual(out.winStart)
     expect(out.visEnd).toBeLessThanOrEqual(out.winEnd)
     expect(out.winStart).toBeLessThan(out.visStart)
     expect(out.winEnd).toBeGreaterThan(out.visEnd)
+  })
+})
+
+describe("virtual scroll helpers", () => {
+  test("quantize snaps to the nearest quantum", () => {
+    expect(quantize(0)).toBe(0)
+    expect(quantize(19, 40)).toBe(0)
+    expect(quantize(21, 40)).toBe(40)
+    expect(quantize(80, 40)).toBe(80)
+  })
+
+  test("capRange limits overlapping movement but allows disjoint jumps", () => {
+    expect(capRange({ start: 10, end: 20 }, { start: 40, end: 50 }, 5)).toEqual({ start: 40, end: 50 })
+    expect(capRange({ start: 10, end: 20 }, { start: 12, end: 35 }, 5)).toEqual({ start: 12, end: 25 })
   })
 })
 
@@ -472,39 +443,39 @@ describe("pagerOffset", () => {
   })
 
   test("plain pager keys are ignored while sticky at bottom", () => {
-    expect(pagerOffset("j", key(), 0, 100, 24, false)).toBeUndefined()
-    expect(pagerOffset("g", key(), 0, 100, 24, false)).toBeUndefined()
+    expect(pagerOffset("j", key(), 0, 100, 24, false, defaults)).toBeUndefined()
+    expect(pagerOffset("g", key(), 0, 100, 24, false, defaults)).toBeUndefined()
   })
 
   test("g jumps to top and G jumps to bottom when detached", () => {
-    expect(pagerOffset("g", key(), 12, 100, 24, false)).toBe(100)
-    expect(pagerOffset("G", key({ shift: true }), 12, 100, 24, false)).toBe(0)
+    expect(pagerOffset("g", key(), 12, 100, 24, false, defaults)).toBe(100)
+    expect(pagerOffset("G", key({ shift: true }), 12, 100, 24, false, defaults)).toBe(0)
   })
 
   test("j and k move one line at a time when detached", () => {
-    expect(pagerOffset("j", key(), 12, 100, 24, false)).toBe(11)
-    expect(pagerOffset("k", key(), 12, 100, 24, false)).toBe(13)
+    expect(pagerOffset("j", key(), 12, 100, 24, false, defaults)).toBe(11)
+    expect(pagerOffset("k", key(), 12, 100, 24, false, defaults)).toBe(13)
   })
 
   test("ctrl+d and ctrl+u move by half a page", () => {
-    expect(pagerOffset("d", key({ ctrl: true }), 20, 100, 24, false)).toBe(8)
-    expect(pagerOffset("u", key({ ctrl: true }), 20, 100, 24, false)).toBe(32)
+    expect(pagerOffset("d", key({ ctrl: true }), 20, 100, 24, false, defaults)).toBe(8)
+    expect(pagerOffset("u", key({ ctrl: true }), 20, 100, 24, false, defaults)).toBe(32)
   })
 
   test("space and b move by a full page", () => {
-    expect(pagerOffset(" ", key(), 20, 100, 24, false)).toBe(0)
-    expect(pagerOffset("b", key(), 20, 100, 24, false)).toBe(42)
+    expect(pagerOffset(" ", key(), 20, 100, 24, false, defaults)).toBe(0)
+    expect(pagerOffset("b", key(), 20, 100, 24, false, defaults)).toBe(42)
   })
 
   test("q snaps back to bottom", () => {
-    expect(pagerOffset("q", key(), 20, 100, 24, false)).toBe(0)
+    expect(pagerOffset("q", key(), 20, 100, 24, false, defaults)).toBe(0)
   })
 
   test("existing page keys still work", () => {
-    expect(pagerOffset("", key({ pageUp: true }), 20, 100, 24, false)).toBe(25)
-    expect(pagerOffset("", key({ pageDown: true }), 20, 100, 24, false)).toBe(15)
-    expect(pagerOffset("", key({ ctrl: true, upArrow: true }), 20, 100, 24, false)).toBe(100)
-    expect(pagerOffset("", key({ ctrl: true, downArrow: true }), 20, 100, 24, false)).toBe(0)
+    expect(pagerOffset("", key({ pageUp: true }), 20, 100, 24, false, defaults)).toBe(25)
+    expect(pagerOffset("", key({ pageDown: true }), 20, 100, 24, false, defaults)).toBe(15)
+    expect(pagerOffset("", key({ ctrl: true, upArrow: true }), 20, 100, 24, false, defaults)).toBe(100)
+    expect(pagerOffset("", key({ ctrl: true, downArrow: true }), 20, 100, 24, false, defaults)).toBe(0)
   })
 })
 

@@ -16,6 +16,7 @@ import { ThemePickerDialog } from "./ThemePickerDialog"
 import { HelpDialog } from "./HelpDialog"
 import { PermissionPrompt } from "./PermissionPrompt"
 import { QuestionPrompt } from "./QuestionPrompt"
+import { Dialog as ShellDialog } from "./design-system"
 
 const PANELS = new Set(["command-palette", "session-list", "provider", "model-picker", "agent-picker", "mcp", "theme", "help", "alert"])
 
@@ -66,11 +67,11 @@ function AlertPane({ dialog, rows, columns }: { dialog: Extract<Dialog, { type: 
     if (key.escape || input === "q" || key.return) popDialog()
   })
   return (
-    <Box height={rows} width={columns} flexDirection="column" paddingX={2} paddingY={1}>
-      {dialog.title && <Text color={theme.text} bold>{dialog.title}</Text>}
-      <Text color={theme.subtext} wrap="wrap">{dialog.message}</Text>
-      <Box marginTop={1}><Text color={theme.overlay}>enter / esc to close</Text></Box>
-    </Box>
+    <ShellDialog title={dialog.title ?? "Notice"} rows={rows} columns={columns} footer="enter / esc to close">
+      <Text color={theme.subtext} wrap="wrap">
+        {dialog.message}
+      </Text>
+    </ShellDialog>
   )
 }
 

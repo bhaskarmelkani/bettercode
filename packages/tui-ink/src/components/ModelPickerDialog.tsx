@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from "react"
-import { Box, Text, useInput } from "ink"
+import { Text } from "ink"
 import { useAppStore } from "../store"
 import { useTheme } from "../theme-context"
 import * as Frecency from "../frecency"
+import { FuzzyPicker, ListItem } from "./design-system"
 
 interface Props {
   rows: number
@@ -67,89 +68,49 @@ export function ModelPickerDialog({ rows, columns }: Props) {
     })
   }, [providers, providerConnected, currentModel, recentModels, freq, query])
 
-  const total = entries.length
-  const maxVisible = Math.max(1, rows - 8)
-  const safeIdx = Math.min(idx, Math.max(0, total - 1))
-  const start = Math.max(0, safeIdx - Math.floor(maxVisible / 2))
-  const visible = entries.slice(start, start + maxVisible)
-  const prompt = "> "
-  const value = query || "search models..."
-
-  useInput((input, key) => {
-    if (key.escape || (key.ctrl && input === "k")) {
-      popDialog()
-      return
-    }
-    if (key.upArrow) {
-      setIdx((i) => Math.max(0, i - 1))
-      return
-    }
-    if (key.downArrow) {
-      setIdx((i) => Math.min(total - 1, i + 1))
-      return
-    }
-    if (key.return && entries[safeIdx]) {
-      const e = entries[safeIdx]!
-      trackFrecency(`model:${e.providerID}/${e.modelID}`)
-      setCurrentModel({ providerID: e.providerID, modelID: e.modelID })
-      popDialog()
-      return
-    }
-    if (key.backspace || key.delete) {
-      setQuery((v) => v.slice(0, -1))
-      setIdx(0)
-      return
-    }
-    if (key.ctrl || key.meta) return
-    if (input && (input.startsWith("[<") || input.startsWith("[M"))) return
-    if (input) {
-      setQuery((v) => v + input)
-      setIdx(0)
-    }
-  })
-
   return (
-    <Box height={rows} width={columns} flexDirection="column" paddingX={2} paddingY={1}>
-      <Box marginBottom={1}>
-        <Text color={theme.mauve} bold>
-          Model
-        </Text>
-        {currentModel && <Text color={theme.overlay}>{` current: ${currentModel.modelID}`}</Text>}
-      </Box>
-
-      <Box marginBottom={1} flexDirection="row">
-        <Text color={theme.cyan}>{prompt}</Text>
-        <Text color={query ? theme.text : theme.subtext}>{value}</Text>
-        <Text color={theme.cyan}>│</Text>
-      </Box>
-
-      {total === 0 && (
+    <FuzzyPicker
+      title="Model"
+      rows={rows}
+      columns={columns}
+      query={query}
+      idx={idx}
+      items={entries}
+      placeholder="search models..."
+      empty={
         <Text color={theme.overlay}>
           {providers.length === 0
             ? "No providers loaded."
             : "No connected providers. Connect one via Providers dialog."}
         </Text>
+      }
+      meta={currentModel ? <Text color={theme.overlay}>{` current: ${currentModel.modelID}`}</Text> : undefined}
+      footer={<Text color={theme.overlay}>↑↓ navigate · enter select · type filter · esc close</Text>}
+      prompt="> "
+      closeWithPalette={true}
+      setQuery={setQuery}
+      setIdx={setIdx}
+      onPick={(item) => {
+        trackFrecency(`model:${item.providerID}/${item.modelID}`)
+        setCurrentModel({ providerID: item.providerID, modelID: item.modelID })
+        popDialog()
+      }}
+      onClose={popDialog}
+      renderItem={(item, selected) => (
+        <ListItem
+          key={`${item.providerID}/${item.modelID}`}
+          label={item.name}
+          selected={selected}
+          active={item.isCurrent}
+          lead="> "
+          tail={
+            <>
+              <Text color={theme.overlay}>{`  ${item.providerID}`}</Text>
+              {item.isCurrent ? <Text color={theme.green}> ✓</Text> : null}
+            </>
+          }
+        />
       )}
-
-      {visible.map((e, i) => {
-        const real = start + i
-        const selected = real === safeIdx
-        const current = e.isCurrent
-        return (
-          <Box key={`${e.providerID}/${e.modelID}`} flexDirection="row">
-            <Text color={selected ? theme.cyan : theme.overlay}>{selected ? "> " : "  "}</Text>
-            <Text color={current ? theme.green : selected ? theme.text : theme.subtext} bold={selected}>
-              {e.name}
-            </Text>
-            <Text color={theme.overlay}>{`  ${e.providerID}`}</Text>
-            {current && <Text color={theme.green}> ✓</Text>}
-          </Box>
-        )
-      })}
-
-      <Box marginTop={1}>
-        <Text color={theme.overlay}>↑↓ navigate · enter select · type filter · esc close</Text>
-      </Box>
-    </Box>
+    />
   )
 }

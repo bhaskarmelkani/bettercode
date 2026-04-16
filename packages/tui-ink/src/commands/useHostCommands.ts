@@ -1,8 +1,11 @@
 import { useEffect } from "react"
 import { registry } from "./registry"
 import { useAppStore } from "../store"
+import { primaryKey } from "../keybindings"
 
 export function useHostCommands() {
+  const bindings = useAppStore((s) => s.keybindings)
+
   // Stable Zustand actions — only used at call time via getState()
   useEffect(() => {
     const unreg = [
@@ -11,7 +14,7 @@ export function useHostCommands() {
         label: "New Session",
         description: "Start a fresh session",
         category: "Session",
-        keybind: "ctrl+n",
+        keybind: primaryKey(bindings, "newSession", ["global"]),
         slash: "new",
         action: () => useAppStore.getState().navigate({ type: "home" }),
       }),
@@ -20,7 +23,7 @@ export function useHostCommands() {
         label: "Session List",
         description: "Browse and switch sessions",
         category: "Session",
-        keybind: "ctrl+s",
+        keybind: primaryKey(bindings, "sessionList", ["global"]),
         slash: "sessions",
         action: () => useAppStore.getState().pushDialog({ type: "session-list" }),
       }),
@@ -121,7 +124,7 @@ export function useHostCommands() {
         label: "Help / Commands",
         description: "Open the command palette",
         category: "App",
-        keybind: "ctrl+k",
+        keybind: primaryKey(bindings, "commandPalette", ["global"]),
         action: () => useAppStore.getState().pushDialog({ type: "command-palette" }),
       }),
       registry.register({
@@ -137,10 +140,10 @@ export function useHostCommands() {
         label: "Exit",
         description: "Quit bettercode",
         category: "App",
-        keybind: "ctrl+c",
+        keybind: primaryKey(bindings, "exit", ["global"]),
         action: () => process.exit(0),
       }),
     ]
     return () => unreg.forEach((f) => f())
-  }, [])
+  }, [bindings])
 }

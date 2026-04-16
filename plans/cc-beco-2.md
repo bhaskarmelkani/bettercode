@@ -48,9 +48,9 @@ bun test test/   # must be all green
 - [x] M6 — OffscreenFreeze (freeze offscreen children)
 - [x] M7 — Text Selection & Copy (mouse drag, clipboard)
 - [x] M8 — Message Actions (cursor navigation, copy, edit/resubmit)
-- [ ] M9 — True Virtual Scrolling (viewport+overscan, binary search, quantization)
-- [ ] M10 — Configurable Keybindings (keybindings.json, context-based)
-- [ ] M11 — Design System Primitives (Pane, Dialog, FuzzyPicker, ProgressBar)
+- [x] M9 — True Virtual Scrolling (viewport+overscan, binary search, quantization)
+- [x] M10 — Configurable Keybindings (keybindings.json, context-based)
+- [x] M11 — Design System Primitives (Pane, Dialog, FuzzyPicker, ProgressBar)
 - [ ] M12 — Vim Mode (normal/insert, motions, operators, text objects)
 - [ ] M13 — Image Paste (Ctrl+V, image pills, clipboard detection)
 - [ ] M14 — Input Syntax Highlights (/commands blue, @mentions colored)
@@ -807,6 +807,14 @@ Replace all hardcoded key checks across `MessageList.tsx`, `Composer.tsx`,
 2. Create a `keybindings.json` that remaps `scrollUp` to `ctrl+p`. Verify it works.
 3. Invalid or unknown actions in the config file should be silently ignored.
 
+Completed 2026-04-16:
+- Added `packages/tui-ink/src/keybindings/` with a typed context/action schema, default bindings, input normalization, display formatting, resolution helpers, and JSON override loading.
+- Wired keybindings into TUI bootstrap via `readKeybindings()`, loading global `~/.config/opencode/keybindings.json` first and then `OPENCODE_CONFIG_DIR/keybindings.json` as a project override when present.
+- Stored the merged binding map in `useAppStore`, then migrated the main shortcut owners to `resolveAction()`: `app.tsx`, `SessionScreen.tsx`, `Composer.tsx`, `MessageList.tsx`, `SearchBar.tsx`, `HomeScreen.tsx`, and `HelpDialog.tsx`.
+- Updated visible shortcut labels to reflect configured bindings in host commands, status/search/help text, diff hints, and scroll indicators so overrides stay discoverable.
+- Added focused tests in `packages/tui-ink/test/keybindings.test.ts` and updated pager tests to run through the new resolver path.
+- Validation from `packages/tui-ink`: `bun typecheck` ✅, `bun test test/` ✅.
+
 ---
 
 ## M11: Design System Primitives
@@ -885,6 +893,13 @@ After creating primitives, refactor existing components to use them:
 1. Each primitive should render correctly in isolation.
 2. Refactored components should look identical to before.
 3. `bun typecheck` and `bun test test/` pass.
+
+Completed 2026-04-16:
+- Added `packages/tui-ink/src/components/design-system/` primitives for `Pane`, `Dialog`, `FuzzyPicker`, `ProgressBar`, `ListItem`, `Divider`, and `KeyboardShortcutHint`, plus shared exports.
+- Migrated the text-first picker/dialog surfaces onto the new primitives: `CommandPalette.tsx`, `ModelPickerDialog.tsx`, `AgentPickerDialog.tsx`, `ThemePickerDialog.tsx`, `HelpDialog.tsx`, and the dock alert pane.
+- Reused the shared `ProgressBar` utility in `TokenWarning.tsx`, moved status hint rendering onto `KeyboardShortcutHint`, and replaced the unseen-message separator in `MessageList.tsx` with `Divider`.
+- Kept state-heavy permission/question/sidebar flows stable for this milestone instead of widening the refactor beyond the required dialog/picker path.
+- Validation from `packages/tui-ink`: `bun typecheck` ✅, `bun test test/` ✅.
 
 ---
 
@@ -1166,18 +1181,18 @@ Continue the TUI milestone plan in /Users/bhaskar.melkani/Documents/Projects/bha
 Context:
 - Repo: /Users/bhaskar.melkani/Documents/Projects/bhaskar/bettercode
 - Active plan: /Users/bhaskar.melkani/Documents/Projects/bhaskar/bettercode/plans/cc-beco-2.md
-- Completed milestones: M1 Composer Editing Power, M2 Pager Mode Keys, M3 Token & Context Warning, M4 Rich Spinner, M5 Unseen Messages, M6 OffscreenFreeze, M7 Text Selection & Copy, M8 Message Actions
-- Next milestone to implement: M9 True Virtual Scrolling
+- Completed milestones: M1 Composer Editing Power, M2 Pager Mode Keys, M3 Token & Context Warning, M4 Rich Spinner, M5 Unseen Messages, M6 OffscreenFreeze, M7 Text Selection & Copy, M8 Message Actions, M9 True Virtual Scrolling, M10 Configurable Keybindings, M11 Design System Primitives
+- Next milestone to implement: M12 Vim Mode
 
 Execution rules:
 - Implement one milestone only.
-- Do not start M10 until M9 is stable and green.
-- Keep the implementation Ink-native and avoid unnecessary abstractions or render-heavy UI work.
+- Do not start M13 until M12 is stable and green.
+- Keep the implementation Ink-native and avoid unnecessary abstractions or broad rewrites.
 - Be careful around transcript stability, sticky/detached scroll, permission/question flows, session switching, and long transcripts.
 - Work around unrelated local edits; do not revert them.
 
 Required first step:
-- Read the active plan and inspect the current `MessageList.tsx` windowing/height-cache path, `OffscreenFreeze`, and the new M8 cursor logic before editing.
+- Read the active plan and inspect `packages/tui-ink/src/hooks/useTextInput.ts`, `packages/tui-ink/src/components/Composer.tsx`, and any existing mode/key handling before editing.
 
 Required validation:
 - Run from /Users/bhaskar.melkani/Documents/Projects/bhaskar/bettercode/packages/tui-ink only:
@@ -1185,6 +1200,6 @@ Required validation:
   - bun test test/
 
 Before stopping:
-- Mark M9 complete in /Users/bhaskar.melkani/Documents/Projects/bhaskar/bettercode/plans/cc-beco-2.md if it is green.
+- Mark M12 complete in /Users/bhaskar.melkani/Documents/Projects/bhaskar/bettercode/plans/cc-beco-2.md if it is green.
 - End with a compact handoff prompt for the next session.
 ```

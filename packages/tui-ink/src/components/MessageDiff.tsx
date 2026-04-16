@@ -2,6 +2,8 @@ import React from "react"
 import { Box, Text } from "ink"
 import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
 import { useTheme } from "../theme-context"
+import { useAppStore } from "../store"
+import { primaryKey } from "../keybindings"
 
 const PATCH_ROWS = 25
 
@@ -43,10 +45,12 @@ function PatchLines({ patch }: { patch: string }) {
 
 export function MessageDiff({ diffs, open, onToggle }: Props) {
   const theme = useTheme()
+  const bindings = useAppStore((s) => s.keybindings)
   if (diffs.length === 0) return null
 
   const add = diffs.reduce((sum, item) => sum + item.additions, 0)
   const del = diffs.reduce((sum, item) => sum + item.deletions, 0)
+  const toggle = primaryKey(bindings, "toggleDiffs", ["session"]) || "ctrl+g"
 
   return (
     <Box marginTop={1} paddingLeft={3} flexDirection="column">
@@ -57,7 +61,7 @@ export function MessageDiff({ diffs, open, onToggle }: Props) {
         </Text>
         <Text color={theme.green}>{`+${add}`}</Text>
         <Text color={theme.red}>{`-${del}`}</Text>
-        {onToggle && <Text color={theme.overlay}> ctrl+g: expand</Text>}
+        {onToggle && <Text color={theme.overlay}>{` ${toggle}: expand`}</Text>}
       </Box>
 
       {diffs.map((item) => (
