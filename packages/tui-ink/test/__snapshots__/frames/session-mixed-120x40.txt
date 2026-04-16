@@ -2,6 +2,7 @@ bettercode ─ feat/ui-snapshots ─ 2 sessions                                 
 
  ● Can we make the TUI snapshot-friendly so agents can inspect spacing, hierarchy, and prompts?
 
+
      ◆ Yes. We can render deterministic Ink frames and save them as review artifacts.
 
        • capture `80x24` and `120x40`
@@ -9,11 +10,13 @@ bettercode ─ feat/ui-snapshots ─ 2 sessions                                 
        • seed transcript fixtures
 
        • diff plain-text snapshots in CI
+   ────────────────────────────────────────
      ▸ ✓ $ audit transcript rendering                                                                              420ms
 
    build · gpt-5.4 · 1.4s · 2.5k tokens
 
  ● Great. Start with representative screens before we add deeper PTY interaction tests.
+
 
      ◆ This first pass focuses on static frames that expose the main visual structure: header, transcript, dock,
        prompts, and status lane.
@@ -25,9 +28,6 @@ bettercode ─ feat/ui-snapshots ─ 2 sessions                                 
      ~ packages/tui-ink/src/screens/SessionScreen.tsx +2 -1
 
      ~ packages/tui-ink/src/components/StatusBar.tsx +1 -1
-
-
-
 
 
 

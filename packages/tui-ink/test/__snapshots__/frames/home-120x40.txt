@@ -10,19 +10,19 @@ bettercode ─ feat/ui-snapshots ─ 3 sessions                                 
 
 
 
-
                                      bettercode
                                      2 providers · bettercode
 
 
                                      recent sessions
-                                       · Build snapshot harness
-                                       · Tighten transcript hierarchy
-                                       · Refine dock prompts
+                                       1. Build snapshot harness
+                                       2. Tighten transcript hierarchy
+                                       3. Refine dock prompts
+
+                                     press 1-4 to resume a recent session
 
 
                                      start with a prompt or resume a recent session
-
 
 
 

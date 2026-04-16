@@ -50,6 +50,7 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   const generating = session?.type === "busy" || composerStatus === "generating"
   const tone = agent === "plan" ? theme.yellow : theme.blue
   const mode = primaryKey(bindings, "toggleMode", ["chat"]) || "shift+tab"
+  const modeLabel = focusMode ? `${mode} (overview)` : mode
   const focus = primaryKey(bindings, "toggleFocus", ["session"]) || "ctrl+o"
   const next = primaryKey(bindings, "searchNext", ["search"]) || "enter"
   const prev = primaryKey(bindings, "searchPrev", ["search"]) || "ctrl+p"
@@ -60,7 +61,7 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   const snap = primaryKey(bindings, "snapBottom", ["scroll"]) || "ctrl+down"
   const palette = primaryKey(bindings, "commandPalette", ["global"]) || "ctrl+k"
   const items = focusMode
-    ? [{ keys: focus, label: "exit focus" }]
+    ? [{ keys: focus, label: "exit overview" }]
     : searchMode
       ? [
           { keys: next, label: "next" },
@@ -90,10 +91,7 @@ export function StatusBar({ width, sidebarOpen }: Props) {
                   { keys: sidebar, label: "close" },
                 ]
               : generating
-                ? [
-                    { keys: "↑↓ scroll" },
-                    { keys: abort, label: "abort" },
-                  ]
+                ? [{ keys: "↑↓ scroll" }, { keys: abort, label: "abort" }]
                 : edits
                   ? [
                       { keys: diffs, label: "expand/collapse edits" },
@@ -109,7 +107,7 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   const raw = items.map((item) => hintText(item.keys, item.label)).join(" · ")
 
   // fixed = " "(2) + git + " · "(3) + agent + " (" + mode + ")" + " · "(3) + display + " · "(3)
-  const fixed = 2 + 2 + branch.length + 3 + agent.length + 2 + mode.length + 1 + 3 + display.length + 3
+  const fixed = 2 + 2 + branch.length + 3 + agent.length + 2 + modeLabel.length + 1 + 3 + display.length + 3
   const hint = cut(raw, Math.max(0, width - fixed))
   const fill = Math.max(0, width - fixed - hint.length)
 
@@ -124,7 +122,7 @@ export function StatusBar({ width, sidebarOpen }: Props) {
         <Text color={tone} bold>
           {agent}
         </Text>
-        <Text color={theme.overlay}>{` (${mode})`}</Text>
+        <Text color={theme.overlay}>{` (${modeLabel})`}</Text>
         <Text color={theme.overlay}>{" · "}</Text>
         <Text color={theme.subtext}>{display}</Text>
         <Text color={theme.overlay}>{" · "}</Text>

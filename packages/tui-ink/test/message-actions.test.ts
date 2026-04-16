@@ -64,4 +64,14 @@ describe("message actions", () => {
     expect(messageText(msg, parts, true)).toContain("file.ts")
     expect(editText(msg, parts)).toBe("")
   })
+
+  test("messageText includes file names for user searches", () => {
+    const msg = makeMsg("u2", "user")
+    const parts = [
+      makeTextPart("p1", "u2", "fix the parser"),
+      { id: "f1", messageID: "u2", sessionID: "fixture-session", type: "file", filename: "src/parser.ts" } as Part,
+    ]
+
+    expect(messageText(msg, parts, false)).toContain("src/parser.ts")
+  })
 })

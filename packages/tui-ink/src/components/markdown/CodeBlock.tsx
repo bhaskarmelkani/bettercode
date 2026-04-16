@@ -9,19 +9,17 @@ interface Props {
 
 export function CodeBlock({ lang, code }: Props) {
   const theme = useTheme()
+  const label = lang || "text"
 
   return (
     <Box marginTop={1} flexDirection="column" flexShrink={0}>
-      <Box borderStyle="single" borderColor={theme.surface2} flexDirection="column">
-        <Box justifyContent="space-between" paddingX={1}>
-          <Text color={theme.mauve} bold>
-            {lang || "text"}
-          </Text>
-          <Text color={theme.overlay} dimColor>
-            code
+      <Box borderLeft borderColor={theme.surface1} paddingLeft={1} flexDirection="column">
+        <Box marginBottom={1}>
+          <Text backgroundColor={theme.surface1} color={theme.mauve} bold>
+            {` ${label} `}
           </Text>
         </Box>
-        <Box paddingX={1} paddingBottom={1} flexDirection="column">
+        <Box flexDirection="column">
           <Text color={theme.text} wrap="wrap">
             {code}
           </Text>

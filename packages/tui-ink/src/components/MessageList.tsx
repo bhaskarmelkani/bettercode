@@ -17,6 +17,8 @@ import { useVirtualScroll } from "../hooks/useVirtualScroll"
 import { primaryKey, resolveAction } from "../keybindings"
 import type { Keymap } from "../keybindings"
 import { Divider } from "./design-system"
+import { groupIcon, groupOpen, groupParts, groupState, groupTitle } from "../utils/toolGroup"
+import { toolLabel } from "../utils/toolKind"
 
 const EMPTY_MESSAGES: Message[] = []
 const EMPTY_PARTS: Record<string, Part[]> = {}
@@ -63,6 +65,45 @@ function toolHeight(part: Part, width: number, collapsed: Record<string, boolean
     return 2 + crop(part.state.output, cols, 30)
   }
   return 2 + crop(JSON.stringify(part.state.input, null, 2), cols, 30)
+}
+
+function groupHeight(
+  parts: import("@opencode-ai/sdk/v2").ToolPart[],
+  collapsed: Record<string, boolean>,
+  focusMode: boolean,
+) {
+  if (focusMode) return 1
+  if (!groupOpen(parts, collapsed)) return 1
+  return 1 + parts.length
+}
+
+function hasText(parts: Part[]) {
+  return parts.some((part) => part.type === "text" && !part.synthetic && !part.ignored)
+}
+
+function hasTools(parts: Part[]) {
+  return parts.some((part) => part.type === "tool")
+}
+
+function toolSummary(parts: Part[]) {
+  const count = new Map<string, number>()
+  let total = 0
+
+  for (const part of parts) {
+    if (part.type !== "tool") continue
+    if (part.state.status !== "completed") continue
+    const key = toolLabel(part.tool)
+    count.set(key, (count.get(key) ?? 0) + 1)
+    if ("time" in part.state && "end" in part.state.time) total += part.state.time.end - part.state.time.start
+  }
+
+  const text = [...count.entries()]
+    .map(([key, n]) => `${key === "read" ? "◇" : key === "write" ? "✎" : key === "exec" ? "$" : "⬡"} ${n} ${key}`)
+    .join(" · ")
+  if (!text) return ""
+  const time =
+    total > 0 ? ` — ${total < 1000 ? `${total}ms` : `${(total / 1000).toFixed(total < 10_000 ? 1 : 0)}s`}` : ""
+  return `${text}${time}`
 }
 
 function diffHeight(diffs: SnapshotFileDiff[], open: boolean) {
@@ -112,6 +153,20 @@ export function cacheVersion(parts: Part[], diffs: SnapshotFileDiff[] = [], open
 export function clearHeightCache(): void {
   heightCache.clear()
   cacheWidth = -1
+}
+
+function trimCache(ids: string[]) {
+  const keep = new Set(ids)
+  for (const id of heightCache.keys()) {
+    if (!keep.has(id)) heightCache.delete(id)
+  }
+}
+
+function maxCache(ids: string[]) {
+  const keep = new Set(ids.slice(-400))
+  for (const id of heightCache.keys()) {
+    if (!keep.has(id)) heightCache.delete(id)
+  }
 }
 
 function cachedHeight(
@@ -219,8 +274,16 @@ function text(items: Token[]): string {
     .join("")
 }
 
+function strip(text: string) {
+  return text.replace(/\u001b\[[0-?]*[ -\/]*[@-~]/g, "")
+}
+
+function vis(text: string) {
+  return Array.from(strip(text)).length
+}
+
 function lines(input: string, width: number) {
-  return Math.max(1, Math.ceil(Math.max(1, input.length) / Math.max(1, width)))
+  return Math.max(1, Math.ceil(Math.max(1, vis(input)) / Math.max(1, width)))
 }
 
 function fileRows(parts: Part[], width: number) {
@@ -274,17 +337,18 @@ export function estimateHeight(
   const focusMode = opts.focusMode ?? false
   const showThinking = opts.showThinking ?? true
   const isLast = opts.isLast ?? false
-  const lastText = focusMode
-    ? parts.reduce((out, part, i) => (part.type === "text" && !part.synthetic && !part.ignored ? i : out), -1)
-    : -1
-  let h = 1
-  for (const [i, part] of parts.entries()) {
+  const grouped = groupParts(parts)
+  const first = parts.find((part) => part.type === "text" && !part.synthetic && !part.ignored)
+  let h = 1 + (!focusMode && hasText(parts) && hasTools(parts) ? 1 : 0)
+  for (const [i, part] of grouped.entries()) {
     if (part.type === "text") {
       if (part.synthetic || part.ignored) continue
-      if (focusMode && i !== lastText) continue
+      if (focusMode && part.id !== first?.id) continue
       h += Math.max(1, measure(lex(part.text), safeWidth))
     } else if (part.type === "tool") {
-      h += toolHeight(part, safeWidth, collapsed, focusMode)
+      h += toolHeight(part.part, safeWidth, collapsed, focusMode)
+    } else if (part.type === "tool-group") {
+      h += groupHeight(part.parts, collapsed, focusMode)
     } else if (part.type === "compaction") {
       if (focusMode) continue
       h += 2
@@ -294,7 +358,10 @@ export function estimateHeight(
       if (text) h += lines(text, safeWidth) + 2
     }
   }
-  if (focusMode) return Math.max(2, h)
+  if (focusMode) {
+    if (toolSummary(parts)) h += 1
+    return Math.max(2, h)
+  }
   const done = !!item.finish && !["tool-calls", "unknown"].includes(item.finish)
   const aborted = item.error?.name === "MessageAbortedError"
   if (item.error?.name && item.error.name !== "MessageAbortedError") {
@@ -392,7 +459,10 @@ function projectUser(parts: Part[], width: number, isQueued: boolean) {
   const out = [""]
   const item = parts.find((part): part is TextPartType => part.type === "text" && !part.synthetic)
   if (item) out.push(...wrapPlain(item.text, width, " ● ", "   "))
-  const files = parts.filter((part) => part.type === "file").map((part) => `[${part.filename ?? ""}]`).join(" ")
+  const files = parts
+    .filter((part) => part.type === "file")
+    .map((part) => `[${part.filename ?? ""}]`)
+    .join(" ")
   if (files) out.push(...wrapPlain(files, width, "   ", "   "))
   if (isQueued) out.push("   QUEUED")
   return out
@@ -408,12 +478,46 @@ function projectTool(part: Part, width: number, collapsed: Record<string, boolea
   return [...out, ...limitRows(JSON.stringify(state.input, null, 2), width, 30, "     ", "     ")]
 }
 
+function projectGroup(
+  parts: import("@opencode-ai/sdk/v2").ToolPart[],
+  width: number,
+  collapsed: Record<string, boolean>,
+  focusMode: boolean,
+) {
+  const open = groupOpen(parts, collapsed)
+  const state = groupState(parts)
+  const stat = state === "error" ? "✗" : state === "running" ? "◎" : "✓"
+  const icon = groupIcon(parts)
+  const total = parts.reduce((sum, part) => {
+    if (!("time" in part.state)) return sum
+    const end = "end" in part.state.time ? part.state.time.end : Date.now()
+    return sum + (end - part.state.time.start)
+  }, 0)
+  const time = total > 0 ? (total < 1000 ? `${total}ms` : `${(total / 1000).toFixed(total < 10_000 ? 1 : 0)}s`) : ""
+  const out = [
+    lineCap(
+      `   ${focusMode ? " " : open ? "▾" : "▸"} ${stat} ${icon} ${groupTitle(parts)}${time ? ` ${time}` : ""}`,
+      width,
+    ),
+  ]
+  if (!open || focusMode) return out
+  return [
+    ...out,
+    ...parts.map((part) => {
+      const title = "title" in part.state && part.state.title ? part.state.title : part.tool
+      return lineCap(`       ${icon} ${title}`, width)
+    }),
+  ]
+}
+
 function projectDiffs(diffs: SnapshotFileDiff[], open: boolean, width: number) {
   if (diffs.length === 0) return [] as string[]
   const add = diffs.reduce((sum, item) => sum + item.additions, 0)
   const del = diffs.reduce((sum, item) => sum + item.deletions, 0)
   const out = [""]
-  out.push(lineCap(`   ${open ? "▾" : "▸"} edits ${diffs.length} file${diffs.length === 1 ? "" : "s"} +${add} -${del}`, width))
+  out.push(
+    lineCap(`   ${open ? "▾" : "▸"} edits ${diffs.length} file${diffs.length === 1 ? "" : "s"} +${add} -${del}`, width),
+  )
   for (const item of diffs) {
     out.push("")
     out.push(...wrapPlain(`${item.status} ${item.file} +${item.additions} -${item.deletions}`, width, "   ", "   "))
@@ -436,20 +540,23 @@ function projectAssistant(
 ) {
   const out = [""]
   const item = msg as AssistantMsg
-  const lastText = focusMode
-    ? parts.reduce((acc, part, i) => (part.type === "text" && !part.synthetic && !part.ignored ? i : acc), -1)
-    : -1
+  const grouped = groupParts(parts)
+  const first = parts.find((part) => part.type === "text" && !part.synthetic && !part.ignored)
   let lead = true
+  let sep = false
 
-  for (const [i, part] of parts.entries()) {
+  for (const [i, part] of grouped.entries()) {
+    if (focusMode) {
+      if (part.type !== "text" || part.synthetic || part.ignored || part.id !== first?.id) continue
+      out.push(...wrapPlain(part.text, width, "   ◆ ", "     "))
+      continue
+    }
     if (part.type === "text") {
       if (part.synthetic || part.ignored) continue
-      if (focusMode && i !== lastText) continue
       out.push(...wrapPlain(part.text, width, lead ? "   ◆ " : "   ", lead ? "     " : "   "))
       lead = false
       continue
     }
-    if (focusMode && (part.type === "reasoning" || part.type === "compaction")) continue
     if (part.type === "reasoning") {
       if (!showThinking) continue
       const text = part.text.replace("[REDACTED]", "").trim()
@@ -460,13 +567,31 @@ function projectAssistant(
       continue
     }
     if (part.type === "tool") {
-      out.push(...projectTool(part, width, collapsed, focusMode))
+      if (!focusMode && !sep && hasText(parts) && hasTools(parts)) {
+        out.push(lineCap(` ${"─".repeat(Math.max(0, Math.min(40, width - 4)))}`, width))
+        sep = true
+      }
+      out.push(...projectTool(part.part, width, collapsed, focusMode))
+      continue
+    }
+    if (part.type === "tool-group") {
+      if (!focusMode && !sep && hasText(parts) && hasTools(parts)) {
+        out.push(lineCap(` ${"─".repeat(Math.max(0, Math.min(40, width - 4)))}`, width))
+        sep = true
+      }
+      out.push(...projectGroup(part.parts, width, collapsed, focusMode))
       continue
     }
     if (part.type === "compaction") {
       out.push("")
       out.push("   compacted context")
     }
+  }
+
+  if (focusMode) {
+    const tools = toolSummary(parts)
+    if (tools) out.push(lineCap(`   ${tools}`, width))
+    return out
   }
 
   if (!focusMode && item.error && item.error.name !== "MessageAbortedError") {
@@ -629,12 +754,29 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const pending = useMemo(() => messages.findLast((m) => m.role === "assistant" && !m.time.completed)?.id, [messages])
 
   useEffect(() => {
+    const last = new Set<string>()
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i]
+      if (msg?.role !== "assistant") continue
+      const next = messages[i + 1]
+      if (!next || next.role === "user") last.add(msg.id)
+    }
+
     for (const msg of messages) {
       if (msg.role !== "assistant" || !msg.parentID) continue
       if (!msg.time.completed && !msg.error) continue
+      if (!last.has(msg.id)) continue
       loadMessageDiff(sessionID, msg.id, msg.parentID)
     }
   }, [loadMessageDiff, messages, sessionID])
+
+  useEffect(() => {
+    trimCache(messages.map((msg) => msg.id))
+  }, [messages])
+
+  useEffect(() => {
+    maxCache(messages.map((msg) => msg.id))
+  }, [messages.length])
 
   // rowOffset: how many rows from the absolute bottom of all content to scroll up.
   // 0 = stick to bottom (latest), positive = scrolled up.
@@ -671,7 +813,19 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
         )
       )
     })
-  }, [collapsedDiffs, collapsedTools, focusMode, mark.count, mark.split, messageDiff, messages, parts, showThinking, width, pending])
+  }, [
+    collapsedDiffs,
+    collapsedTools,
+    focusMode,
+    mark.count,
+    mark.split,
+    messageDiff,
+    messages,
+    parts,
+    showThinking,
+    width,
+    pending,
+  ])
   const totalHeight = useMemo(() => heights.reduce((sum, n) => sum + n, 0), [heights])
 
   const matches = useMemo(() => {
@@ -679,11 +833,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
     const q = searchQuery.toLowerCase()
     return messages
       .map((msg, i) => {
-        const text = (parts[msg.id] ?? EMPTY_ARRAY)
-          .filter((part): part is TextPartType => part.type === "text" && !part.synthetic && !part.ignored)
-          .map((part) => part.text)
-          .join(" ")
-          .toLowerCase()
+        const text = messageText(msg, parts[msg.id] ?? EMPTY_ARRAY, showThinking).toLowerCase()
         return text.includes(q) ? i : -1
       })
       .filter((i) => i !== -1)
@@ -764,9 +914,8 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
 
   // Restore scroll position when switching sessions
   useEffect(() => {
-    prevTotal.current = totalHeight
     setRowOffset(savedPos)
-  }, [sessionID, savedPos, totalHeight])
+  }, [sessionID, savedPos])
 
   // Persist scroll position changes
   useEffect(() => {
@@ -795,7 +944,12 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
 
   useInput(
     (_input, key) => {
-      const action = resolveAction(bindings, _input, key, cursorIdx !== null ? ["message", "scroll"] : ["scroll", "stream"])
+      const action = resolveAction(
+        bindings,
+        _input,
+        key,
+        cursorIdx !== null ? ["message", "scroll"] : ["scroll", "stream"],
+      )
 
       if (action === "cursorClear" && cursorIdx !== null) {
         setMessageCursor(sessionID, null)
@@ -889,7 +1043,24 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
           showThinking,
           focusMode,
         }),
-      [messages, parts, topH, botH, view.winStart, view.winEnd, scrollTop, height, width, mark, pending, collapsedTools, messageDiff, collapsedDiffs, showThinking, focusMode],
+      [
+        messages,
+        parts,
+        topH,
+        botH,
+        view.winStart,
+        view.winEnd,
+        scrollTop,
+        height,
+        width,
+        mark,
+        pending,
+        collapsedTools,
+        messageDiff,
+        collapsedDiffs,
+        showThinking,
+        focusMode,
+      ],
     ),
     width,
     height,
@@ -907,6 +1078,15 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   }, [sessionID, clampedOffset, searchMode, cursorIdx])
 
   const snap = primaryKey(bindings, "snapBottom", ["scroll"]) || "ctrl+down"
+
+  if (height < 6 || width < 20) {
+    return (
+      <Box height={height} width={width} flexDirection="column" justifyContent="center" alignItems="center">
+        <Text color={theme.yellow}>terminal too small</Text>
+        <Text color={theme.subtext}>resize to continue</Text>
+      </Box>
+    )
+  }
 
   return (
     <Box height={height} overflowY="hidden" flexDirection="column">
@@ -988,7 +1168,6 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
             </OffscreenFreeze>
           )
         })}
-        {view.bottomSpacer > 0 && <Box height={view.bottomSpacer} />}
       </Box>
     </Box>
   )

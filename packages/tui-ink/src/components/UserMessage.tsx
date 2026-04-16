@@ -22,6 +22,7 @@ export const UserMessage = React.memo(function UserMessage({ parts, isQueued, to
   return (
     <Box
       marginTop={1}
+      marginBottom={1}
       paddingLeft={1}
       flexShrink={0}
       borderLeft={true}

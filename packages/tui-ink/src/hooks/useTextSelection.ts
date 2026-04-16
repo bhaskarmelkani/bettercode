@@ -119,6 +119,7 @@ export function useTextSelection(input: Input) {
   const linesRef = useRef(input.lines)
   const activeRef = useRef(input.active)
   const detachedRef = useRef(input.detached)
+  const rangeRef = useRef(range)
   const frameRef = useRef({
     width: input.width,
     height: input.height,
@@ -126,10 +127,13 @@ export function useTextSelection(input: Input) {
     left: input.left ?? 0,
   })
   const tail = useRef("")
+  const copyRef = useRef(input.onCopy)
 
   linesRef.current = input.lines
   activeRef.current = input.active
   detachedRef.current = input.detached
+  rangeRef.current = range
+  copyRef.current = input.onCopy
   frameRef.current = {
     width: input.width,
     height: input.height,
@@ -140,21 +144,23 @@ export function useTextSelection(input: Input) {
   const text = useMemo(() => sliceSelection(input.lines, range?.start, range?.end), [input.lines, range])
   const rows = useMemo(() => selectionRows(input.lines, range?.start, range?.end), [input.lines, range])
 
-  async function copySelection() {
-    const text = sliceSelection(linesRef.current, range?.start, range?.end)
+  async function doCopy() {
+    const r = rangeRef.current
+    const text = sliceSelection(linesRef.current, r?.start, r?.end)
     if (!text) return false
     const ok = await copy(text)
-    input.onCopy?.(text, ok)
+    copyRef.current?.(text, ok)
     return ok
   }
 
   useEffect(() => {
     globalCopy = async () => {
       if (!activeRef.current) return false
-      const text = sliceSelection(linesRef.current, range?.start, range?.end)
+      const r = rangeRef.current
+      const text = sliceSelection(linesRef.current, r?.start, r?.end)
       if (text) {
         const ok = await copy(text)
-        input.onCopy?.(text, ok)
+        copyRef.current?.(text, ok)
         return true
       }
       return detachedRef.current
@@ -162,7 +168,7 @@ export function useTextSelection(input: Input) {
     return () => {
       if (globalCopy) globalCopy = undefined
     }
-  }, [input, range])
+  }, [])
 
   useEffect(() => {
     if (!process.stdin.isTTY) return
@@ -181,21 +187,12 @@ export function useTextSelection(input: Input) {
           x: item.x - left,
           y: item.y - top,
         }
-        const inside =
-          raw.x >= 0 &&
-          raw.x < frameRef.current.width &&
-          raw.y >= 0 &&
-          raw.y < frameRef.current.height
+        const inside = raw.x >= 0 && raw.x < frameRef.current.width && raw.y >= 0 && raw.y < frameRef.current.height
 
         if (!drag.current && !inside) continue
 
         // pos marks the exclusive-end of the selection (includes char under cursor on release)
-        const pos = point(
-          { x: raw.x + 1, y: raw.y },
-          linesRef.current,
-          frameRef.current.width,
-          frameRef.current.height,
-        )
+        const pos = point({ x: raw.x + 1, y: raw.y }, linesRef.current, frameRef.current.width, frameRef.current.height)
 
         if (!item.up && (item.btn & 32) === 0 && (item.btn & 3) === 0 && inside) {
           drag.current = true
@@ -211,14 +208,13 @@ export function useTextSelection(input: Input) {
 
         if (item.up && drag.current) {
           drag.current = false
-          // Bare click (no drag motion): raw position matches start → clear selection
           setRange((prev) => {
             if (!prev) return prev
             if (raw.x === prev.start.x && raw.y === prev.start.y) return undefined
             return { start: prev.start, end: pos }
           })
           queueMicrotask(() => {
-            void copySelection()
+            void doCopy()
           })
         }
       }
@@ -228,13 +224,13 @@ export function useTextSelection(input: Input) {
     return () => {
       process.stdin.off("data", onData)
     }
-  }, [range])
+  }, [])
 
   return {
     active: !!range && !!text,
     rows,
     text,
     clear: () => setRange(undefined),
-    copy: copySelection,
+    copy: doCopy,
   }
 }

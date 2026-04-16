@@ -79,6 +79,9 @@ export function HelpDialog({ rows, columns }: Props) {
           return items
         })}
       </Box>
+      <Box marginTop={1}>
+        <Text color={theme.overlay}>custom keybindings are supported in settings</Text>
+      </Box>
     </Dialog>
   )
 }

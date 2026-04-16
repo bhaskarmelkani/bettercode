@@ -23,8 +23,14 @@ function ToastItem({ toast }: { toast: Toast }) {
 
   return (
     <Box flexDirection="row" gap={1} paddingLeft={1}>
-      <Text color={color} bold>{icon}</Text>
-      {toast.title && <Text color={color} bold>{toast.title}</Text>}
+      <Text color={color} bold>
+        {icon}
+      </Text>
+      {toast.title && (
+        <Text color={color} bold>
+          {toast.title}
+        </Text>
+      )}
       {toast.title && toast.message && <Text color={theme.overlay}>·</Text>}
       {toast.message && <Text color={theme.subtext}>{toast.message}</Text>}
     </Box>
@@ -36,10 +42,12 @@ export function ToastOverlay() {
   if (toasts.length === 0) return null
 
   return (
-    <Box flexDirection="column" flexShrink={0}>
-      {toasts.map((t) => (
-        <ToastItem key={t.id} toast={t} />
-      ))}
+    <Box width="100%" flexDirection="row" justifyContent="flex-end" flexShrink={0}>
+      <Box flexDirection="column" alignItems="flex-end">
+        {toasts.map((t) => (
+          <ToastItem key={t.id} toast={t} />
+        ))}
+      </Box>
     </Box>
   )
 }

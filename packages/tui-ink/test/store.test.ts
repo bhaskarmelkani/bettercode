@@ -41,7 +41,7 @@ function makeAssistant(
       },
       ...(total ? { total } : {}),
     },
-  } as Message
+  } as unknown as Message
 }
 
 function makeProvider(context: number): Provider {
@@ -69,14 +69,18 @@ function makeProvider(context: number): Provider {
         release_date: "2026-01-01",
       },
     },
-  } as Provider
+  } as unknown as Provider
 }
 
 function makePart(id: string, messageID: string, type: string): Part {
   return { id, messageID, type, sessionID: "s1" } as unknown as Part
 }
 
-function makeTool(id: string, messageID: string, status: "pending" | "running" | "completed" | "error" = "completed"): Part {
+function makeTool(
+  id: string,
+  messageID: string,
+  status: "pending" | "running" | "completed" | "error" = "completed",
+): Part {
   return {
     id,
     messageID,
@@ -103,7 +107,13 @@ function makeTool(id: string, messageID: string, status: "pending" | "running" |
 }
 
 function makePermission(id: string, sessionID: string): PermissionRequest {
-  return { id, sessionID, title: "Test permission", description: "Allow?", command: "cmd" } as unknown as PermissionRequest
+  return {
+    id,
+    sessionID,
+    title: "Test permission",
+    description: "Allow?",
+    command: "cmd",
+  } as unknown as PermissionRequest
 }
 
 function makeQuestion(id: string, sessionID: string): QuestionRequest {
@@ -118,6 +128,7 @@ function resetStore() {
     sessions: [],
     sessionStatus: {},
     sessionDiff: {},
+    todos: {},
     messages: {},
     parts: {},
     collapsedTools: {},
@@ -211,7 +222,7 @@ describe("store — messages", () => {
     const m1 = makeMessage("m1", "s1", "user")
     useAppStore.getState().upsertMessage(m1)
     const updated = { ...m1, role: "assistant" as const }
-    useAppStore.getState().upsertMessage(updated)
+    useAppStore.getState().upsertMessage(updated as Message)
     const msgs = useAppStore.getState().messages["s1"] ?? []
     expect(msgs).toHaveLength(1)
     expect(msgs[0]!.role).toBe("assistant")
@@ -332,7 +343,12 @@ describe("store — context usage", () => {
       messages: {
         s1: [
           makeAssistant("m1", "s1", { input: 12_000, output: 3_000 }),
-          makeAssistant("m2", "s1", { input: 40_000, output: 5_000, reasoning: 2_000, cache: { read: 3_000, write: 0 } }),
+          makeAssistant("m2", "s1", {
+            input: 40_000,
+            output: 5_000,
+            reasoning: 2_000,
+            cache: { read: 3_000, write: 0 },
+          }),
         ],
       },
     })
@@ -383,11 +399,11 @@ describe("store — permissions", () => {
   test("upsertPermission updates existing permission", () => {
     const req = makePermission("req1", "s1")
     useAppStore.getState().upsertPermission(req)
-    const updated = { ...req, title: "Updated" }
+    const updated = { ...req, metadata: { note: "Updated" } }
     useAppStore.getState().upsertPermission(updated as PermissionRequest)
     const perms = useAppStore.getState().permissions["s1"] ?? []
     expect(perms).toHaveLength(1)
-    expect(perms[0]!.title).toBe("Updated")
+    expect(perms[0]!.metadata.note).toBe("Updated")
   })
 
   test("removePermission removes the correct permission", () => {
@@ -802,6 +818,11 @@ describe("store — scroll position", () => {
     useAppStore.getState().setMessageCursor("s2", null)
     expect(useAppStore.getState().messageCursor["s1"]).toBe(2)
     expect(useAppStore.getState().messageCursor["s2"]).toBeNull()
+  })
+
+  test("setTodos stores a per-session todo list", () => {
+    useAppStore.getState().setTodos("s1", [{ content: "build", status: "pending", priority: "high" } as never])
+    expect(useAppStore.getState().todos["s1"]).toHaveLength(1)
   })
 
   test("seedComposer primes a replaceable composer draft", () => {

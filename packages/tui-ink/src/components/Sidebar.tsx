@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react"
 import { Box, Text, useInput } from "ink"
 import { useAppStore } from "../store"
 import { useTheme } from "../theme-context"
+import type { Todo } from "@opencode-ai/sdk/v2"
 
 interface Props {
   sessionID: string
@@ -13,14 +14,12 @@ interface Props {
 type Tab = "diff" | "todos" | "lsp" | "mcp" | "caps"
 const TABS: Tab[] = ["diff", "todos", "lsp", "mcp", "caps"]
 
-type TodoItem = { id: string; content: string; status: string; priority?: string }
-
 export function Sidebar({ sessionID, width, height, active }: Props) {
   const theme = useTheme()
   const [tab, setTab] = useState<Tab>("diff")
-  const [todos, setTodos] = useState<TodoItem[]>([])
   const client = useAppStore((s) => s.client)
   const sessionDiff = useAppStore((s) => s.sessionDiff[sessionID] ?? [])
+  const todos = useAppStore((s) => s.todos[sessionID] ?? [])
   const lsp = useAppStore((s) => s.lsp)
   const mcp = useAppStore((s) => s.mcp)
   const skills = useAppStore((s) => s.skills)
@@ -32,7 +31,7 @@ export function Sidebar({ sessionID, width, height, active }: Props) {
     if (tab !== "todos" || !client) return
     client.session
       .todo({ sessionID })
-      .then((r) => setTodos((r.data as TodoItem[]) ?? []))
+      .then((r) => useAppStore.getState().setTodos(sessionID, (r.data as Todo[]) ?? []))
       .catch(() => {})
   }, [tab, sessionID, client])
 
@@ -103,8 +102,8 @@ export function Sidebar({ sessionID, width, height, active }: Props) {
                 No todos
               </Text>
             ) : (
-              todos.map((t) => (
-                <Box key={t.id} flexDirection="row" gap={1}>
+              todos.map((t, i) => (
+                <Box key={`${t.content}-${i}`} flexDirection="row" gap={1}>
                   <Text
                     color={
                       t.status === "completed" ? theme.green : t.status === "in_progress" ? theme.yellow : theme.overlay
@@ -184,7 +183,11 @@ export function Sidebar({ sessionID, width, height, active }: Props) {
               ) : (
                 plugins.slice(0, 4).map((item) => (
                   <Box key={item.id} flexDirection="row" gap={1}>
-                    <Text color={item.source === "npm" ? theme.green : item.source === "file" ? theme.yellow : theme.overlay}>
+                    <Text
+                      color={
+                        item.source === "npm" ? theme.green : item.source === "file" ? theme.yellow : theme.overlay
+                      }
+                    >
                       {item.source === "npm" ? "◉" : item.source === "file" ? "◎" : "○"}
                     </Text>
                     <Text color={theme.subtext} wrap="truncate-end">

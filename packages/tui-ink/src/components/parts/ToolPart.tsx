@@ -4,6 +4,7 @@ import type { ToolPart as ToolPartSDK } from "@opencode-ai/sdk/v2"
 import { useAppStore } from "../../store"
 import { useTheme } from "../../theme-context"
 import type { Theme } from "../../theme"
+import { isWriteTool, toolKind } from "../../utils/toolKind"
 
 interface Props {
   part: ToolPartSDK
@@ -60,21 +61,6 @@ function dur(start: number, end?: number) {
   return `${sec}s`
 }
 
-// 4 kind icons: ◇ read/search/glob/grep, ✎ write/edit, $ bash/execute, ⬡ mcp/other
-function kind(tool: string, theme: Theme) {
-  const t = tool.toLowerCase()
-  if (t.includes("read") || t.includes("glob") || t.includes("grep") || t.includes("search"))
-    return { icon: "◇", color: theme.cyan }
-  if (t.includes("write") || t.includes("edit")) return { icon: "✎", color: theme.yellow }
-  if (t.includes("bash") || t.includes("shell") || t.includes("execute")) return { icon: "$", color: theme.green }
-  return { icon: "⬡", color: theme.pink }
-}
-
-function isWriteTool(tool: string) {
-  const t = tool.toLowerCase()
-  return t.includes("write") || t.includes("edit") || t.includes("patch")
-}
-
 function looksLikeDiff(text: string) {
   return text.includes("@@") || text.startsWith("---") || text.startsWith("diff ")
 }
@@ -107,7 +93,7 @@ export const ToolPart = React.memo(function ToolPart({ part }: Props) {
   const focusMode = useAppStore((s) => s.focusMode)
   const state = part.state
   const stat = STAT[state.status]
-  const kid = kind(part.tool, theme)
+  const kid = toolKind(part.tool, theme)
   const open = focusMode ? false : isOpen(state.status, collapsed)
   const sum = span(state.input)
   const title = "title" in state && state.title ? state.title : sum ? `${part.tool} ${sum}` : part.tool
@@ -121,7 +107,7 @@ export const ToolPart = React.memo(function ToolPart({ part }: Props) {
           <Text color={theme.overlay}>{open ? "▾" : "▸"}</Text>
           <Text color={theme[stat.color]}>{stat.icon}</Text>
           <Text color={kid.color}>{kid.icon}</Text>
-          <Text color={theme.subtext} wrap="truncate-end">
+          <Text color={theme.overlay} wrap="truncate-end">
             {title}
           </Text>
         </Box>

@@ -59,11 +59,21 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
   const isLoading = syncStatus === "loading"
   const isPartial = syncStatus === "partial"
   const recent = sessions.slice(-4).reverse()
+  const resume = (sid: string) => {
+    useAppStore.setState({ currentSessionID: sid })
+    navigate({ type: "session", sessionID: sid })
+  }
 
   useInput(
     (input, key) => {
       const action = resolveAction(bindings, input, key, ["session"])
       if (isPartial && action === "retry") retryBootstrap()
+      if (!isLoading && !isPartial && recent.length > 0 && input.length === 1) {
+        const idx = Number(input)
+        if (Number.isInteger(idx) && idx >= 1 && idx <= recent.length) {
+          resume(recent[idx - 1]!.id)
+        }
+      }
     },
     { isActive: active },
   )
@@ -106,17 +116,26 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
             {recent.length > 0 && (
               <Box marginTop={2} flexDirection="column">
                 <Text color={theme.overlay}>recent sessions</Text>
-                {recent.map((s) => (
+                {recent.map((s, i) => (
                   <Text key={s.id} color={theme.subtext}>
-                    {"  · "}{s.title ?? s.id.slice(0, 8)}
+                    {`  ${i + 1}. `}
+                    {s.title ?? s.id.slice(0, 8)}
                   </Text>
                 ))}
               </Box>
             )}
 
+            {recent.length > 0 && (
+              <Box marginTop={1}>
+                <Text color={theme.overlay}>press 1-4 to resume a recent session</Text>
+              </Box>
+            )}
+
             <Box marginTop={2}>
               <Text color={theme.overlay}>
-                {providers.length === 0 ? `${palette}: commands · /provider: add a provider` : "start with a prompt or resume a recent session"}
+                {providers.length === 0
+                  ? `${palette}: commands · /provider: add a provider`
+                  : "start with a prompt or resume a recent session"}
               </Text>
             </Box>
           </Box>

@@ -29,6 +29,7 @@ function backoff(attempt: number) {
 type DeltaKey = string // `${messageID}:${partID}:${field}`
 const _deltaBuffer = new Map<DeltaKey, string>()
 let _flushTimer: ReturnType<typeof setTimeout> | null = null
+const MAX_DELTAS = 500
 
 function flushDeltas() {
   _flushTimer = null
@@ -48,14 +49,31 @@ function flushDeltas() {
 function bufferDelta(messageID: string, partID: string, field: string, delta: string) {
   const key = `${messageID}:${partID}:${field}`
   _deltaBuffer.set(key, (_deltaBuffer.get(key) ?? "") + delta)
+  if (_deltaBuffer.size > MAX_DELTAS) {
+    const first = _deltaBuffer.keys().next().value as DeltaKey | undefined
+    if (first) _deltaBuffer.delete(first)
+  }
   if (_flushTimer === null) {
     _flushTimer = setTimeout(flushDeltas, 50)
   }
 }
 // ---------------------------------------------------------------------------
 
+async function refreshLsp(client: ReturnType<typeof createOpencodeClient>, directory: string | undefined) {
+  const q = directory ? { directory } : {}
+  const res = await client.lsp.status(q).then((r) => r.data ?? [])
+  useAppStore.setState({ lsp: res })
+}
+
+async function refreshMcp(client: ReturnType<typeof createOpencodeClient>, directory: string | undefined) {
+  const q = directory ? { directory } : {}
+  const res = await client.mcp.status(q).then((r) => r.data ?? {})
+  useAppStore.setState({ mcp: res })
+}
+
 function dispatch(e: Event) {
   const store = useAppStore.getState()
+  const client = store.client
 
   switch (e.type) {
     case "session.created":
@@ -69,6 +87,10 @@ function dispatch(e: Event) {
 
     case "session.status":
       store.setSessionStatus(e.properties.sessionID, e.properties.status)
+      if (e.properties.status.type === "idle") {
+        flushDeltas()
+        store.setComposerStatus("idle")
+      }
       break
 
     case "session.idle": {
@@ -93,6 +115,14 @@ function dispatch(e: Event) {
 
     case "session.diff":
       store.setSessionDiff(e.properties.sessionID, e.properties.diff)
+      break
+
+    case "session.compacted":
+      void store.loadMessages(e.properties.sessionID, true)
+      break
+
+    case "todo.updated":
+      store.setTodos(e.properties.sessionID, e.properties.todos)
       break
 
     case "message.updated":
@@ -140,6 +170,57 @@ function dispatch(e: Event) {
       useAppStore.setState({ vcs: { branch: e.properties.branch } })
       break
 
+    case "lsp.updated":
+    case "lsp.client.diagnostics":
+      if (client) void refreshLsp(client, store.directory)
+      break
+
+    case "mcp.tools.changed":
+      if (client) void refreshMcp(client, store.directory)
+      break
+
+    case "mcp.browser.open.failed":
+      store.addToast({
+        title: "MCP browser failed",
+        message: `${e.properties.mcpName} could not open ${e.properties.url}`,
+        variant: "warning",
+        duration: 4000,
+      })
+      break
+
+    case "workspace.failed":
+      store.addToast({
+        title: "Workspace failed",
+        message: e.properties.message,
+        variant: "error",
+        duration: 5000,
+      })
+      break
+
+    case "installation.update-available":
+      store.addToast({
+        title: "Update available",
+        message: `Version ${e.properties.version} is available.`,
+        variant: "info",
+        duration: 5000,
+      })
+      break
+
+    case "server.connected":
+    case "global.disposed":
+    case "installation.updated":
+    case "file.edited":
+    case "file.watcher.updated":
+    case "workspace.ready":
+    case "workspace.status":
+    case "project.updated":
+    case "command.executed":
+    case "pty.created":
+    case "pty.updated":
+    case "pty.exited":
+    case "pty.deleted":
+      break
+
     case "tui.command.execute":
       registry.trigger(e.properties.command)
       break
@@ -175,19 +256,19 @@ async function bootstrap(client: ReturnType<typeof createOpencodeClient>, direct
   // Parallel non-blocking fetch of all bootstrap data
   const [providerList, agents, commands, capabilities, config, sessions, lsp, mcp, vcs, providerAuth] =
     await Promise.all([
-    client.provider.list(q).then((r) => r.data ?? { all: [], default: {}, connected: [] }),
-    client.app.agents(q).then((r) => r.data ?? []),
-    client.command.list(q).then((r) => r.data ?? []),
-    client.app.capabilities(q).then((r) => r.data ?? { skills: [], plugins: [], hooks: [] }),
-    client.config.get(q).then((r) => r.data ?? {}),
-    client.session
-      .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000 })
-      .then((r) => (r.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id))),
-    client.lsp.status(q).then((r) => r.data ?? []),
-    client.mcp.status(q).then((r) => r.data ?? {}),
-    client.vcs.get(q).then((r) => r.data),
-    client.provider.auth(q).then((r) => r.data ?? {}),
-  ])
+      client.provider.list(q).then((r) => r.data ?? { all: [], default: {}, connected: [] }),
+      client.app.agents(q).then((r) => r.data ?? []),
+      client.command.list(q).then((r) => r.data ?? []),
+      client.app.capabilities(q).then((r) => r.data ?? { skills: [], plugins: [], hooks: [] }),
+      client.config.get(q).then((r) => r.data ?? {}),
+      client.session
+        .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000 })
+        .then((r) => (r.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id))),
+      client.lsp.status(q).then((r) => r.data ?? []),
+      client.mcp.status(q).then((r) => r.data ?? {}),
+      client.vcs.get(q).then((r) => r.data),
+      client.provider.auth(q).then((r) => r.data ?? {}),
+    ])
 
   useAppStore.setState({
     providers: providerList.all,
@@ -273,14 +354,17 @@ export function useSDK({ url, directory, headers }: Opts) {
           const delay = backoff(attempt++)
           await new Promise((r) => setTimeout(r, delay))
 
-          // Re-bootstrap after a disconnect if we haven't succeeded yet
-          if (!bootstrapDone) {
-            try {
-              await bootstrap(client, directory)
-              bootstrapDone = true
-            } catch {
-              // will retry on next loop iteration
+          // Re-bootstrap after a disconnect so the active session catches up.
+          try {
+            await bootstrap(client, directory)
+            bootstrapDone = true
+
+            const sessionID = useAppStore.getState().currentSessionID
+            if (sessionID) {
+              await useAppStore.getState().loadMessages(sessionID, true)
             }
+          } catch {
+            // will retry on next loop iteration
           }
         }
       }
@@ -290,6 +374,6 @@ export function useSDK({ url, directory, headers }: Opts) {
       abort.abort()
       abortRef.current = null
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, directory, reconnectTick])
 }

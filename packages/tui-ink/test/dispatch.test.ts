@@ -40,6 +40,10 @@ function dispatch(e: Event) {
       store.setSessionDiff(e.properties.sessionID, e.properties.diff)
       break
 
+    case "todo.updated":
+      store.setTodos(e.properties.sessionID, e.properties.todos)
+      break
+
     case "message.updated":
       store.upsertMessage(e.properties.info)
       break
@@ -388,5 +392,14 @@ describe("dispatch — UI events", () => {
       properties: {} as any,
     } as any)
     expect(useAppStore.getState().syncStatus).toBe("loading")
+  })
+
+  test("todo.updated stores todos by session", () => {
+    dispatch({
+      type: "todo.updated",
+      properties: { sessionID: "s1", todos: [{ content: "ship it", status: "pending", priority: "high" }] } as any,
+    } as any)
+    expect(useAppStore.getState().todos["s1"]).toHaveLength(1)
+    expect(useAppStore.getState().todos["s1"]?.[0]?.content).toBe("ship it")
   })
 })

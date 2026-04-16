@@ -10,6 +10,9 @@ import { ToolPart } from "./parts/ToolPart"
 import { CompactionPart } from "./parts/CompactionPart"
 import { MessageDiff } from "./MessageDiff"
 import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
+import { ToolGroup } from "./parts/ToolGroup"
+import { groupOpen, groupParts } from "../utils/toolGroup"
+import { toolLabel } from "../utils/toolKind"
 
 interface Props {
   message: Message
@@ -37,6 +40,29 @@ function tok(input: number, output: number) {
   return `${out}k`
 }
 
+function toolSummary(parts: Part[]) {
+  const count = new Map<string, number>()
+  let total = 0
+
+  for (const part of parts) {
+    if (part.type !== "tool") continue
+    if (part.state.status !== "completed") continue
+    const key = toolLabel(part.tool)
+    count.set(key, (count.get(key) ?? 0) + 1)
+    if ("time" in part.state && "end" in part.state.time) {
+      total += part.state.time.end - part.state.time.start
+    }
+  }
+
+  const text = [...count.entries()]
+    .map(([key, n]) => `${key === "read" ? "◇" : key === "write" ? "✎" : key === "exec" ? "$" : "⬡"} ${n} ${key}`)
+    .join(" · ")
+  if (!text) return ""
+  const time =
+    total > 0 ? ` — ${total < 1000 ? `${total}ms` : `${(total / 1000).toFixed(total < 10_000 ? 1 : 0)}s`}` : ""
+  return `${text}${time}`
+}
+
 export const AssistantMessage = React.memo(function AssistantMessage({
   message,
   parts,
@@ -49,15 +75,18 @@ export const AssistantMessage = React.memo(function AssistantMessage({
 }: Props) {
   const theme = useTheme()
   const focusMode = useAppStore((s) => s.focusMode)
+  const collapsed = useAppStore((s) => s.collapsedTools)
   if (message.role !== "assistant") return null
   const msg = message as AssistantMsg
-  const lastText = parts.reduce(
-    (out, part, i) => (part.type === "text" && !part.synthetic && !part.ignored ? i : out),
-    -1,
-  )
+  const first = parts.find((part) => part.type === "text" && !part.synthetic && !part.ignored)
+  const grouped = groupParts(parts)
+  const hasText = parts.some((part) => part.type === "text" && !part.synthetic && !part.ignored)
+  const hasTools = parts.some((part) => part.type === "tool")
+  const tools = toolSummary(parts)
 
   const done = msg.finish && !["tool-calls", "unknown"].includes(msg.finish)
   let lead = true
+  let sep = false
   const doneAt = msg.time?.completed
   const footer = [
     msg.mode ?? "chat",
@@ -69,28 +98,63 @@ export const AssistantMessage = React.memo(function AssistantMessage({
   const border = tone === "cursor" ? theme.cyan : tone === "search" ? theme.yellow : theme.surface2
 
   return (
-    <Box
-      flexDirection="column"
-      marginTop={1}
-      paddingLeft={2}
-      borderLeft={true}
-      borderColor={border}
-      flexShrink={0}
-    >
-      {parts.map((part, idx) => {
+    <Box flexDirection="column" marginTop={1} paddingLeft={2} borderLeft={true} borderColor={border} flexShrink={0}>
+      {grouped.map((part) => {
+        const needSep =
+          !focusMode && !sep && hasText && hasTools && (part.type === "tool" || part.type === "tool-group")
+
+        if (focusMode) {
+          if (part.type !== "text" || !first || part.id !== first.id) return null
+          return <TextPart key={part.id} part={part} lead="◆" />
+        }
+
         if (part.type === "text") {
           if (part.synthetic || part.ignored) return null
-          if (focusMode && idx !== lastText) return null
           const out = <TextPart key={part.id} part={part} lead={lead ? "◆" : undefined} />
           lead = false
           return out
         }
-        if (focusMode && (part.type === "reasoning" || part.type === "compaction")) return null
         if (part.type === "reasoning") return <ReasoningPart key={part.id} part={part} visible={showThinking} />
-        if (part.type === "tool") return <ToolPart key={part.id} part={part} />
         if (part.type === "compaction") return <CompactionPart key={part.id} />
+        if (part.type === "tool") {
+          sep = sep || needSep
+          return (
+            <React.Fragment key={part.part.id}>
+              {needSep && (
+                <Box paddingLeft={1}>
+                  <Text color={theme.surface1}>
+                    {"─".repeat(Math.max(0, Math.min(40, (process.stdout.columns ?? 80) - 4)))}
+                  </Text>
+                </Box>
+              )}
+              <ToolPart part={part.part} />
+            </React.Fragment>
+          )
+        }
+        if (part.type === "tool-group") {
+          const open = groupOpen(part.parts, collapsed)
+          sep = sep || needSep
+          return (
+            <React.Fragment key={part.parts[0]?.id}>
+              {needSep && (
+                <Box paddingLeft={1}>
+                  <Text color={theme.surface1}>
+                    {"─".repeat(Math.max(0, Math.min(40, (process.stdout.columns ?? 80) - 4)))}
+                  </Text>
+                </Box>
+              )}
+              <ToolGroup parts={part.parts} overview={focusMode} open={open} />
+            </React.Fragment>
+          )
+        }
         return null
       })}
+
+      {focusMode && tools && (
+        <Box paddingLeft={3} marginTop={1}>
+          <Text color={theme.overlay}>{tools}</Text>
+        </Box>
+      )}
 
       {!focusMode && msg.error && msg.error.name !== "MessageAbortedError" && (
         <Box

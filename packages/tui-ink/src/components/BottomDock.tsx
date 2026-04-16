@@ -17,10 +17,20 @@ import { HelpDialog } from "./HelpDialog"
 import { PermissionPrompt } from "./PermissionPrompt"
 import { Dialog as ShellDialog } from "./design-system"
 
-const PANELS = new Set(["command-palette", "session-list", "provider", "model-picker", "agent-picker", "mcp", "theme", "help", "alert"])
+const PANELS = new Set([
+  "command-palette",
+  "session-list",
+  "provider",
+  "model-picker",
+  "agent-picker",
+  "mcp",
+  "theme",
+  "help",
+  "alert",
+])
 
 const base = 4
-const perm = 5
+const perm = 9
 const paneRows = 15
 
 export function dockHeight(input: {
@@ -63,7 +73,15 @@ interface Props {
   onClearQueue?: () => void
 }
 
-function AlertPane({ dialog, rows, columns }: { dialog: Extract<Dialog, { type: "alert" }>; rows: number; columns: number }) {
+function AlertPane({
+  dialog,
+  rows,
+  columns,
+}: {
+  dialog: Extract<Dialog, { type: "alert" }>
+  rows: number
+  columns: number
+}) {
   const theme = useTheme()
   const popDialog = useAppStore((s) => s.popDialog)
   useInput((input, key) => {
@@ -109,6 +127,7 @@ export function BottomDock({
   const theme = useTheme()
   const dlg = dialog && PANELS.has(dialog.type) ? dialog : undefined
   const height = rows
+  const blocked = !!permissions?.length
 
   if (dlg) {
     const inner = height - 1
@@ -126,18 +145,13 @@ export function BottomDock({
   return (
     <Box flexDirection="column" height={height} width={columns}>
       {permissions?.length ? <PermissionPrompt request={permissions[0]!} columns={columns} /> : null}
-      {showQueue && (
-        <PromptQueue
-          items={queue!}
-          width={columns}
-        />
-      )}
+      {showQueue && <PromptQueue items={queue!} width={columns} />}
       <Composer
         onSubmit={onSubmit}
         onAbort={onAbort}
         onSteer={onSteer}
         active={active}
-        generating={generating}
+        generating={blocked ? false : generating}
         width={columns}
         question={questions?.[0]}
       />

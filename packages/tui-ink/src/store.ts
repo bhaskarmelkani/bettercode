@@ -20,6 +20,7 @@ import type {
   ProviderAuthAuthorization,
   ApiAuth,
   FilePartInput,
+  Todo,
 } from "@opencode-ai/sdk/v2"
 import { DEFAULT_THEME } from "./theme"
 import * as Frecency from "./frecency"
@@ -99,6 +100,7 @@ export interface AppState {
   sessions: Session[]
   sessionStatus: Record<string, SessionStatus>
   sessionDiff: Record<string, SnapshotFileDiff[]>
+  todos: Record<string, Todo[]>
 
   // Messages + parts (keyed by sessionID / messageID)
   messages: Record<string, Message[]>
@@ -210,6 +212,7 @@ export interface AppState {
   removeSession: (id: string) => void
   setSessionStatus: (id: string, status: SessionStatus) => void
   setSessionDiff: (id: string, diff: SnapshotFileDiff[]) => void
+  setTodos: (sessionID: string, todos: Todo[]) => void
 
   upsertMessage: (msg: Message) => void
   removeMessage: (sessionID: string, messageID: string) => void
@@ -237,7 +240,7 @@ export interface AppState {
   rejectQuestion: (requestID: string) => Promise<void>
 
   // Session management
-  loadMessages: (sessionID: string) => Promise<void>
+  loadMessages: (sessionID: string, force?: boolean) => Promise<void>
   loadMessageDiff: (sessionID: string, messageID: string, parentID?: string) => Promise<void>
   setScrollPos: (sessionID: string, pos: number) => void
   setLastSeen: (sessionID: string, index: number) => void
@@ -314,7 +317,9 @@ export function getContextUsage(
   sessionID: string,
 ): ContextUsage | undefined {
   const msg = state.messages[sessionID] ?? []
-  const last = msg.findLast((item): item is Extract<Message, { role: "assistant" }> => item.role === "assistant" && count(item) > 0)
+  const last = msg.findLast(
+    (item): item is Extract<Message, { role: "assistant" }> => item.role === "assistant" && count(item) > 0,
+  )
   if (!last) return
   const max = state.providers.find((item) => item.id === last.providerID)?.models[last.modelID]?.limit.context
   if (!max) return
@@ -350,6 +355,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sessions: [],
   sessionStatus: {},
   sessionDiff: {},
+  todos: {},
   messages: {},
   parts: {},
   collapsedTools: {},
@@ -458,6 +464,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSessionStatus: (id, status) => set((prev) => ({ sessionStatus: { ...prev.sessionStatus, [id]: status } })),
 
   setSessionDiff: (id, diff) => set((prev) => ({ sessionDiff: { ...prev.sessionDiff, [id]: diff } })),
+
+  setTodos: (sessionID, todos) => set((prev) => ({ todos: { ...prev.todos, [sessionID]: todos } })),
 
   upsertMessage: (msg) =>
     set((prev) => {
@@ -688,20 +696,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  loadMessages: async (sessionID) => {
+  loadMessages: async (sessionID, force = false) => {
     const { client } = get()
     if (!client) return
-    if (get().messagesLoaded[sessionID]) return
-    set((prev) => ({ messagesLoaded: { ...prev.messagesLoaded, [sessionID]: true } }))
+    if (!force && get().messagesLoaded[sessionID]) return
     try {
       const res = await client.session.messages({ sessionID })
-      const items = res.data ?? []
-      for (const item of items) {
-        useAppStore.getState().upsertMessage(item.info)
-        for (const part of item.parts) {
-          useAppStore.getState().upsertPart(part)
+      const items = (res.data ?? []).toSorted((a, b) => a.info.id.localeCompare(b.info.id))
+      set((prev) => {
+        const nextMessages = items.map((item) => item.info)
+        const nextParts: Record<string, Part[]> = { ...prev.parts }
+
+        for (const msg of prev.messages[sessionID] ?? []) delete nextParts[msg.id]
+        for (const item of items) nextParts[item.info.id] = item.parts.toSorted((a, b) => a.id.localeCompare(b.id))
+
+        return {
+          messages: { ...prev.messages, [sessionID]: nextMessages },
+          parts: nextParts,
+          messagesLoaded: { ...prev.messagesLoaded, [sessionID]: true },
         }
-      }
+      })
     } catch {
       set((prev) => {
         const next = { ...prev.messagesLoaded }

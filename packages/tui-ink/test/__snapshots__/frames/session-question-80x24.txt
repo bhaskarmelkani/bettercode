@@ -2,10 +2,10 @@ bettercode ─ feat/ui-snapshots ─ 1 session                                 r
 
  ● Which snapshot should we inspect first?
 
+
      ◆ Choose the surface that best reflects the current UI risk.
 
    build · gpt-5.4 · 1.4s · 2.5k tokens
-
 
 
 
