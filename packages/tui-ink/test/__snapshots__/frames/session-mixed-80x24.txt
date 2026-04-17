@@ -1,5 +1,4 @@
 bettercode ─ ⎇ feat/ui-snapshots                                           ready
-
  ● Great. Start with representative screens before we add deeper PTY interaction
    tests.
 
@@ -20,5 +19,6 @@ bettercode ─ ⎇ feat/ui-snapshots                                           r
   stash: Draft: keep the dock compact on 80x24 (stashed)
 
 ────────────────────────────────────────────────────────────────────────────────
-   Type a message... (/ for commands, @ for files)
+>   Type a message... (/ for commands, @ for files)
+
  build (shift + tab) · gpt-5.4 · ctrl+g: expand/collapse edits · ctrl+b: capabi…

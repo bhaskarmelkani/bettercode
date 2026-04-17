@@ -9,7 +9,6 @@ bettercode ─ ⎇ feat/ui-snapshots                                            
 
 
 
-
                                      bettercode
                                      2 providers · bettercode
 
@@ -36,5 +35,6 @@ bettercode ─ ⎇ feat/ui-snapshots                                            
   stash: Draft: keep the dock compact on 80x24 (stashed)
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   Type a message... (/ for commands, @ for files)
- build (shift + tab) · gpt-5.4 · ctrl+k: commands · /: slash · ctrl+b: capabilities
+>   Type a message... (/ for commands, @ for files)
+
+ build (shift + tab) · gpt-5.4 · ctrl+k: commands · /: slash · ctrl+b: capabilities · ctrl+t: thinking

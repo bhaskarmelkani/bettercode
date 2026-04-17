@@ -58,7 +58,9 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   const abort = primaryKey(bindings, "exit", ["global"]) || "ctrl+c"
   const diffs = primaryKey(bindings, "toggleDiffs", ["session"]) || "ctrl+g"
   const snap = primaryKey(bindings, "snapBottom", ["scroll"]) || "ctrl+down"
+  const halfDown = primaryKey(bindings, "scrollHalfDown", ["scroll"]) || "ctrl+d"
   const palette = primaryKey(bindings, "commandPalette", ["global"]) || "ctrl+k"
+  const thinking = primaryKey(bindings, "toggleThinking", ["session"]) || "ctrl+t"
   const items = focusMode
     ? [{ keys: focus, label: "exit overview" }]
     : searchMode
@@ -97,11 +99,12 @@ export function StatusBar({ width, sidebarOpen }: Props) {
                       { keys: sidebar, label: "capabilities" },
                     ]
                   : scroll > 0
-                    ? [{ keys: snap, label: "snap bottom" }]
+                    ? [{ keys: halfDown, label: "scroll" }, { keys: snap, label: "snap bottom" }]
                     : [
                         { keys: palette, label: "commands" },
                         { keys: "/", label: "slash" },
                         { keys: sidebar, label: "capabilities" },
+                        { keys: thinking, label: "thinking" },
                       ]
   const raw = items.map((item) => hintText(item.keys, item.label)).join(" · ")
 

@@ -170,9 +170,13 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
   }, [composerSeed, value])
 
   // Sync visible line count to store so SessionScreen can adjust dockHeight.
+  // Include stash and attachment rows so the dock is tall enough to show all rows.
   useEffect(() => {
-    setComposerLines(Math.min(MAX_VISIBLE, lineCount(value)))
-  }, [value])
+    const inputLines = Math.min(MAX_VISIBLE, lineCount(value))
+    const stashLine = stash ? 1 : 0
+    const attachLines = mentions.attachments.length > 0 || images.length > 0 ? 1 : 0
+    setComposerLines(inputLines + stashLine + attachLines)
+  }, [value, stash, mentions.attachments.length, images.length])
 
   function buildSubmission(text: string) {
     const trimmed = text.trim()
@@ -904,7 +908,9 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
             const txt = active ? theme.text : theme.subtext
             const glyph = active ? theme.cyan : theme.overlay
             const body = !value ? placeholder : line || " "
-            const fill = Math.max(0, width - LEAD - body.length)
+            // When cursor is at or past end of line, an extra " " is rendered that isn't in body.length.
+            const cursorAtEnd = onLine && col >= line.length
+            const fill = Math.max(0, width - LEAD - body.length - (cursorAtEnd ? 1 : 0))
 
             const modeColor = active ? (agent === "plan" ? theme.yellow : theme.blue) : undefined
             const isPrompt = vi === 0 && viewStart === 0
