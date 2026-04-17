@@ -20,45 +20,43 @@ function backoff(attempt: number) {
 }
 
 // ---------------------------------------------------------------------------
-// Delta batching (M3.5: adaptive flush interval)
+// Delta batching — stable 50 ms flush, ONE store update per flush.
 //
-// Text deltas arrive at LLM streaming speed (~30–100/sec). Applying each one
-// immediately causes a React re-render (and full Ink repaint) per character.
-// Instead, accumulate deltas and flush in batches.
+// Deltas arrive at ~30–100/sec during streaming. Buffering them for 50 ms
+// (≈20 fps) batches many characters into a SINGLE batchAppendDeltas() call,
+// which results in ONE React re-render → ONE Ink repaint per flush cycle.
 //
-// Flush interval:
-//   - 16 ms when the user is at the tail (tail-visible) AND the session is generating
-//     → max ~60 fps, feels instant for live streaming
-//   - 50 ms otherwise (scrolled up, idle, etc.)
+// 16 ms was tried as an "adaptive" rate but caused visible terminal flicker:
+// Ink's repaint cycle (React diff + yoga layout + ANSI write) often takes
+// longer than 16 ms on a busy stream, so writes pile up and the terminal tears.
+// 50 ms is the right balance — streaming looks smooth and the terminal is stable.
 // ---------------------------------------------------------------------------
 type DeltaKey = string // `${messageID}:${partID}:${field}`
 const _deltaBuffer = new Map<DeltaKey, string>()
 let _flushTimer: ReturnType<typeof setTimeout> | null = null
+const FLUSH_MS = 50
 const MAX_DELTAS = 500
-
-// 16 ms for tail-visible generating, 50 ms otherwise.
-function flushInterval() {
-  const state = useAppStore.getState()
-  const sid = state.currentSessionID
-  const tailVisible = (state.scrollPos[sid] ?? 0) === 0
-  const generating =
-    state.sessionStatus[sid]?.type === "busy" || state.composerStatus === "generating"
-  return tailVisible && generating ? 16 : 50
-}
 
 function flushDeltas() {
   _flushTimer = null
   if (_deltaBuffer.size === 0) return
-  const store = useAppStore.getState()
+
+  // Collect all buffered deltas into a plain array.
+  const deltas: Array<{ messageID: string; partID: string; field: string; delta: string }> = []
   for (const [key, text] of _deltaBuffer) {
     const colonA = key.indexOf(":")
     const colonB = key.indexOf(":", colonA + 1)
-    const messageID = key.slice(0, colonA)
-    const partID = key.slice(colonA + 1, colonB)
-    const field = key.slice(colonB + 1)
-    store.appendPartDelta(messageID, partID, field, text)
+    deltas.push({
+      messageID: key.slice(0, colonA),
+      partID: key.slice(colonA + 1, colonB),
+      field: key.slice(colonB + 1),
+      delta: text,
+    })
   }
   _deltaBuffer.clear()
+
+  // ONE store update → ONE React re-render → ONE Ink repaint. No flicker.
+  useAppStore.getState().batchAppendDeltas(deltas)
 }
 
 function bufferDelta(messageID: string, partID: string, field: string, delta: string) {
@@ -69,7 +67,7 @@ function bufferDelta(messageID: string, partID: string, field: string, delta: st
     if (first) _deltaBuffer.delete(first)
   }
   if (_flushTimer === null) {
-    _flushTimer = setTimeout(flushDeltas, flushInterval())
+    _flushTimer = setTimeout(flushDeltas, FLUSH_MS)
   }
 }
 // ---------------------------------------------------------------------------

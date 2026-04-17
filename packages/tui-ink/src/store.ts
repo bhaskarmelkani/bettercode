@@ -258,6 +258,7 @@ export interface AppState {
   upsertPart: (part: Part) => void
   removePart: (messageID: string, partID: string) => void
   appendPartDelta: (messageID: string, partID: string, field: string, delta: string) => void
+  batchAppendDeltas: (deltas: Array<{ messageID: string; partID: string; field: string; delta: string }>) => void
   toggleToolCollapse: (partID: string) => void
   expandAllTools: (sessionID: string) => void
   collapseAllTools: (sessionID: string) => void
@@ -650,6 +651,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       part[field] = (existing ?? "") + delta
       next[index] = part as Part
       return { parts: { ...prev.parts, [messageID]: next } }
+    }),
+
+  // Apply all buffered deltas in ONE store update → ONE React render → no flicker.
+  batchAppendDeltas: (deltas) =>
+    set((prev) => {
+      let parts = prev.parts
+      for (const { messageID, partID, field, delta } of deltas) {
+        const arr = parts[messageID]
+        if (!arr) continue
+        const { found, index } = bsearch(arr, partID, (x) => x.id)
+        if (!found) continue
+        const next = [...arr]
+        const part = { ...next[index] } as Record<string, unknown>
+        part[field] = ((part[field] as string | undefined) ?? "") + delta
+        next[index] = part as Part
+        parts = { ...parts, [messageID]: next }
+      }
+      return { parts }
     }),
 
   toggleToolCollapse: (partID) =>

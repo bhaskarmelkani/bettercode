@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, memo } from "react"
 import { Box, Text, useInput } from "ink"
 import { useAppStore } from "../store"
 import { useTheme } from "../theme-context"
@@ -17,8 +17,8 @@ interface Props {
 type Tab = "diff" | "todos" | "lsp" | "mcp" | "caps" | "context" | "insights"
 const TABS: Tab[] = ["diff", "todos", "lsp", "mcp", "caps", "context", "insights"]
 
-// Session overview band — shows at top of sidebar in all non-collapsed modes.
-function OverviewBand({ sessionID, width }: { sessionID: string; width: number }) {
+// Session overview band — memoized so it only re-renders when context usage/vcs/model changes.
+const OverviewBand = memo(function OverviewBand({ sessionID, width }: { sessionID: string; width: number }) {
   const theme = useTheme()
   const usage = useAppStore((s) => s.contextUsage(sessionID))
   const vcs = useAppStore((s) => s.vcs)
@@ -52,7 +52,7 @@ function OverviewBand({ sessionID, width }: { sessionID: string; width: number }
       )}
     </Box>
   )
-}
+})
 
 // Collapsed mode — icon strip only (4 columns wide).
 function CollapsedStrip({ generating }: { generating: boolean }) {

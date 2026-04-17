@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useDeferredValue } from "react"
 import { Box, Text } from "ink"
 import { useTheme } from "../theme-context"
 import { useAppStore } from "../store"
@@ -45,12 +45,13 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   }, [max, percent, used])
 
   const thinkingLevel = useAppStore((s) => s.thinkingLevel)
-  // Active child agents count (M6.2.d)
-  const activeChildren = useAppStore((s) =>
+  // Active child agents count (M6.2.d) — deferred so it never blocks the main render path.
+  const activeChildrenRaw = useAppStore((s) =>
     s.sessions.filter(
       (sess) => sess.parentID === sid && s.sessionStatus[sess.id]?.type === "busy",
     ).length,
   )
+  const activeChildren = useDeferredValue(activeChildrenRaw)
   const display = cut(model ? model.modelID : "no model", 24)
   const generating = session?.type === "busy" || composerStatus === "generating"
   const tone = agent === "plan" ? theme.yellow : theme.blue
