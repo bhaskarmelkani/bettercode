@@ -30,7 +30,7 @@ const PANELS = new Set([
 ])
 
 const base = 4
-const perm = 9
+const perm = 4  // compact permission prompt: 4 rows (title+pattern+summary+actions) + 2 border = 6 rows total; base handles the composer below
 const paneRows = 15
 
 export function dockHeight(input: {

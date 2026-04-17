@@ -26,7 +26,10 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   const composerStatus = useAppStore((s) => s.composerStatus)
   const session = useAppStore((s) => s.sessionStatus[sid])
   const dlg = useAppStore((s) => s.dialogs.length > 0)
-  const scroll = useAppStore((s) => s.scrollPos[sid] ?? 0)
+  // Boolean subscription: only re-renders when crossing the 0/scrolled boundary,
+  // not on every pixel of scroll. Raw number subscription caused StatusBar to
+  // re-render (and Ink to repaint) on every scroll step — that was the flicker.
+  const scroll = useAppStore((s) => ((s.scrollPos[sid] ?? 0) > 0 ? 1 : 0))
   const perms = useAppStore((s) => (s.permissions[sid]?.length ?? 0) > 0)
   const qs = useAppStore((s) => (s.questions[sid]?.length ?? 0) > 0)
   const autoAccept = useAppStore((s) => s.autoAcceptPermissions)

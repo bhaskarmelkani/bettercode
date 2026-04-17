@@ -51,74 +51,58 @@ function detail(request: PermissionRequest) {
 
   if (p === "edit" || p === "write" || p === "patch") {
     return {
-      summary: first ? `This will change files in ${list}.` : "This will change one or more files in your workspace.",
-      risk: "It can modify code or config. Review the target paths before allowing.",
+      summary: first ? `Change files in ${list}.` : "Change one or more files.",
+      risk: "can modify code or config",
     }
   }
-
   if (p === "delete") {
     return {
-      summary: first ? `This will remove files from ${list}.` : "This will remove files from your workspace.",
-      risk: "This is destructive. Only allow it if you expect those files to be deleted.",
+      summary: first ? `Remove files from ${list}.` : "Remove files from workspace.",
+      risk: "destructive — only allow if expected",
     }
   }
-
   if (p === "read") {
     return {
-      summary: first
-        ? `This will read content from ${first}.`
-        : "This will read a file or directory from your workspace.",
-      risk: "Low risk. It only exposes file contents to the running agent.",
+      summary: first ? `Read ${first}.` : "Read a file from workspace.",
+      risk: "low risk",
     }
   }
-
   if (p === "glob" || p === "grep" || p === "list") {
     return {
-      summary: query ? `This will search your workspace using ${query}.` : "This will search files in your workspace.",
-      risk: "Low risk. It only inspects filenames or file contents.",
+      summary: query ? `Search workspace using ${query}.` : "Search files in workspace.",
+      risk: "low risk",
     }
   }
-
   if (p === "bash" || p === "execute") {
     return {
-      summary:
-        desc || command ? `This will run: ${desc || command}.` : "This will run a shell command in your workspace.",
-      risk: "Medium to high risk. Commands can edit files, install packages, or access the network.",
+      summary: desc || command ? `Run: ${desc || command}.` : "Run a shell command.",
+      risk: "medium to high risk",
     }
   }
-
   if (p === "external_directory") {
     return {
-      summary: first
-        ? `This will access files outside the current project: ${first}.`
-        : "This will access files outside the current project.",
-      risk: "Higher risk. It expands the agent's access beyond the current workspace.",
+      summary: first ? `Access files outside project: ${first}.` : "Access files outside project.",
+      risk: "higher risk — expands workspace access",
     }
   }
-
   if (p === "webfetch" || p === "fetch" || p === "web" || p === "websearch" || p === "codesearch") {
     return {
-      summary: url
-        ? `This will fetch or search remote content for ${url}.`
-        : "This will access content outside the local workspace.",
-      risk: "Low to medium risk. It may send queries to external services and import remote content into context.",
+      summary: url ? `Fetch or search: ${url}.` : "Access content outside workspace.",
+      risk: "low to medium risk",
     }
   }
-
   if (p === "task") {
     return {
-      summary: agent ? `This will launch a ${agent} subagent.` : "This will launch a subagent to continue work.",
-      risk: "The subagent can perform multiple follow-up actions within its allowed permissions.",
+      summary: agent ? `Launch a ${agent} subagent.` : "Launch a subagent.",
+      risk: "subagent can perform follow-up actions",
     }
   }
 
   const raw = request.permission.trim()
   const prose = /\s/.test(raw)
   return {
-    summary: prose ? raw : `This will allow the ${request.permission} capability for the current action.`,
-    risk: prose
-      ? "Review the request details and target paths before approving."
-      : "Review the request details before approving.",
+    summary: prose ? raw : `Allow ${request.permission}.`,
+    risk: "review before approving",
   }
 }
 
@@ -140,81 +124,57 @@ export function PermissionPrompt({ request, columns }: Props) {
   const color = permColor(request.permission, theme)
   const info = detail(request)
 
-  // Metadata entries — exclude "pattern" since we show request.patterns separately
+  const patterns = request.patterns
+    .filter((item): item is string => typeof item === "string" && item.length > 0)
+    .slice(0, 2)
+
+  // Extra metadata entries (exclude "pattern" since patterns are shown separately)
   const meta = Object.entries(request.metadata ?? {}).filter(
     ([k, v]) => k !== "pattern" && typeof v === "string" && v,
   ) as [string, string][]
 
   return (
-    <Box flexDirection="column" width={columns} paddingX={1} flexShrink={0}>
+    <Box flexDirection="column" width={columns} flexShrink={0}>
       <Box flexDirection="column" borderStyle="single" borderColor={color} paddingX={1}>
-        {/* Title */}
-        <Box gap={1}>
-          <Text color={color} bold>
-            {"⚠ Permission"}
-          </Text>
-          <Text backgroundColor={color} color={theme.base}>
-            {` ${permLabel(request.permission)} `}
-          </Text>
+        {/* Title row */}
+        <Box flexDirection="row" gap={1} alignItems="center">
+          <Text color={color} bold>⚠</Text>
+          <Text backgroundColor={color} color={theme.base}>{` ${permLabel(request.permission)} `}</Text>
+          <Text color={theme.overlay} dimColor>{info.risk}</Text>
         </Box>
 
-        {/* Patterns */}
-        {request.patterns.length > 0 && (
-          <Box marginTop={1}>
-            <Text color={theme.text} wrap="truncate-end">
-              {request.patterns.join("\n")}
-            </Text>
-          </Box>
+        {/* Pattern + summary on one line if patterns are short, otherwise separate */}
+        {patterns.length > 0 ? (
+          <Text color={theme.text} wrap="truncate-end">
+            {`${patterns.join(" · ")} — ${info.summary}`}
+          </Text>
+        ) : (
+          <Text color={theme.subtext} wrap="truncate-end">{info.summary}</Text>
         )}
 
-        <Box flexDirection="column" marginTop={1}>
-          <Text color={theme.text} wrap="wrap">
-            {info.summary}
-          </Text>
-          <Text color={theme.subtext} wrap="wrap">
-            {info.risk}
-          </Text>
-        </Box>
-
-        {/* Extra metadata */}
-        {meta.length > 0 && (
-          <Box flexDirection="column" marginTop={1}>
-            {meta.map(([k, v]) => (
-              <Box key={k}>
-                <Text color={theme.overlay}>{k}: </Text>
-                <Text color={theme.subtext} wrap="truncate-end">
-                  {v}
-                </Text>
-              </Box>
-            ))}
+        {/* Extra metadata (path, command, etc.) */}
+        {meta.map(([k, v]) => (
+          <Box key={k} flexDirection="row">
+            <Text color={theme.overlay}>{k}: </Text>
+            <Text color={theme.subtext} wrap="truncate-end">{v}</Text>
           </Box>
-        )}
+        ))}
 
-        {/* Actions */}
-        <Box marginTop={1} gap={2}>
+        {/* Actions — compact inline row */}
+        <Box flexDirection="row" gap={2}>
           <Text>
-            <Text backgroundColor={theme.green} color={theme.base} bold>
-              {" y "}
-            </Text>
+            <Text backgroundColor={theme.green} color={theme.base} bold>{" y "}</Text>
             <Text color={theme.overlay}> allow</Text>
           </Text>
           <Text>
-            <Text backgroundColor={theme.cyan} color={theme.base} bold>
-              {" a "}
-            </Text>
+            <Text backgroundColor={theme.cyan} color={theme.base} bold>{" a "}</Text>
             <Text color={theme.overlay}> always</Text>
           </Text>
           <Text>
-            <Text backgroundColor={theme.red} color={theme.base} bold>
-              {" n "}
-            </Text>
+            <Text backgroundColor={theme.red} color={theme.base} bold>{" n "}</Text>
             <Text color={theme.overlay}> deny</Text>
           </Text>
-          <Text>
-            <Text color={theme.surface2} dimColor>
-              t auto-accept
-            </Text>
-          </Text>
+          <Text color={theme.surface2} dimColor>t auto-accept</Text>
         </Box>
       </Box>
     </Box>

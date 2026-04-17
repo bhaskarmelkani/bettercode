@@ -923,10 +923,21 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
     setRowOffset(savedPos)
   }, [sessionID, savedPos])
 
-  // Persist scroll position changes
+  // Persist scroll position to Zustand — debounced at 150ms so rapid scroll
+  // steps only update local React state and don't cascade through Zustand
+  // subscribers on every pixel. This eliminates the "scroll flicker" where
+  // StatusBar (and other subscribers) re-rendered on every scroll step.
+  const scrollSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    setScrollPos(sessionID, clampedOffset)
-  }, [sessionID, clampedOffset])
+    if (scrollSyncTimer.current) clearTimeout(scrollSyncTimer.current)
+    scrollSyncTimer.current = setTimeout(() => {
+      setScrollPos(sessionID, clampedOffset)
+      scrollSyncTimer.current = null
+    }, 150)
+    return () => {
+      if (scrollSyncTimer.current) clearTimeout(scrollSyncTimer.current)
+    }
+  }, [sessionID, clampedOffset, setScrollPos])
 
   // Sticky: snap back to bottom when new messages arrive while at bottom
   useEffect(() => {
@@ -1089,6 +1100,34 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
         variant: ok ? "success" : "error",
         duration: 1800,
       }),
+    // Map a single click to tool expand/collapse: find which message was clicked
+    // using the cumulative height offsets, then toggle its tool calls.
+    onSingleClick: (_col, row) => {
+      // row is relative to the viewport; convert to absolute transcript row.
+      const contentRow = row + scrollTop
+      let msgIdx = -1
+      for (let i = 0; i < messages.length; i++) {
+        if (contentRow >= (topH[i] ?? 0) && contentRow < (botH[i] ?? 0)) {
+          msgIdx = i
+          break
+        }
+      }
+      if (msgIdx < 0) return
+      const msg = messages[msgIdx]
+      if (!msg || msg.role !== "assistant") return
+      const msgParts = parts[msg.id] ?? EMPTY_ARRAY
+      const hasTools = msgParts.some((p) => p.type === "tool")
+      if (!hasTools) return
+      // If any tools are collapsed (or in default state), expand all; otherwise collapse all.
+      const anyCollapsed = msgParts
+        .filter((p) => p.type === "tool")
+        .some((p) => collapsedTools[p.id] !== false)
+      if (anyCollapsed) {
+        expandMessageTools(msg.id)
+      } else {
+        collapseMessageTools(msg.id)
+      }
+    },
   })
 
   useEffect(() => {

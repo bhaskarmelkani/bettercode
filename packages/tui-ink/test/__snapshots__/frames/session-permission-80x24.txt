@@ -8,17 +8,17 @@ bettercode ─ ⎇ feat/ui-snapshots                                           r
    build · gpt-5.4 · 1.4s · 2.5k tokens
 
 
- ┌────────────────────────────────────────────────────────────────────────────┐
- │ ⚠ Permission   Allow editing files in packages/tui-ink?                    │
- │                                                                            │
- │ packages/tui-ink/src/**                                                    │
- │ packages/tui-ink/test/**                                                   │
- │                                                                            │
- │ Allow editing files in packages/tui-ink?                                   │
- │ Review the request details and target paths before approving.              │
- │                                                                            │
- │  y  allow   a  always   n  deny  t auto-accept                             │
- └────────────────────────────────────────────────────────────────────────────┘
+
+
+
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ⚠   Allow editing files in packages/tui-ink?  review before approving        │
+│ packages/tui-ink/src/** · packages/tui-ink/test/** — Allow editing files in… │
+│  y  allow   a  always   n  deny  t auto-accept                               │
+└──────────────────────────────────────────────────────────────────────────────┘
   stash: Draft: keep the dock compact on 80x24 (stashed)
 
+────────────────────────────────────────────────────────────────────────────────
  build (shift + tab) · gpt-5.4 · y: allow · a: allow all · n: deny

@@ -27,6 +27,8 @@ type Input = {
   top: number
   left?: number
   onCopy?: (text: string, ok: boolean) => void
+  // Called when a single click (no drag) occurs; col/row are relative to the component.
+  onSingleClick?: (col: number, row: number) => void
 }
 
 let globalCopy: (() => Promise<boolean>) | undefined
@@ -104,12 +106,18 @@ export function useTextSelection(input: Input) {
     left: input.left ?? 0,
   })
   const copyRef = useRef(input.onCopy)
+  const singleClickRef = useRef(input.onSingleClick)
+  // Throttle motion updates to ~30fps to avoid flooding React with re-renders
+  // during fast mouse drags. Drops intermediate positions; keeps the latest.
+  const motionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingMotion = useRef<{ pos: Point } | null>(null)
 
   linesRef.current = input.lines
   activeRef.current = input.active
   detachedRef.current = input.detached
   rangeRef.current = range
   copyRef.current = input.onCopy
+  singleClickRef.current = input.onSingleClick
   frameRef.current = {
     width: input.width,
     height: input.height,
@@ -158,7 +166,6 @@ export function useTextSelection(input: Input) {
       const raw = { x: item.x - left, y: item.y - top }
       const inside = raw.x >= 0 && raw.x < width && raw.y >= 0 && raw.y < height
 
-      // pos marks the exclusive-end of the selection.
       const pos = point({ x: raw.x + 1, y: raw.y }, linesRef.current, width, height)
 
       if (!up && isLeftDown(item.btn) && inside) {
@@ -169,20 +176,46 @@ export function useTextSelection(input: Input) {
       }
 
       if (!up && isMotion(item.btn) && drag.current) {
-        setRange((prev) => (prev ? { start: prev.start, end: pos } : prev))
+        // Throttle motion updates: accumulate latest position, flush at ~30fps.
+        pendingMotion.current = { pos }
+        if (!motionTimer.current) {
+          motionTimer.current = setTimeout(() => {
+            const pending = pendingMotion.current
+            if (pending) {
+              setRange((prev) => (prev ? { start: prev.start, end: pending.pos } : prev))
+            }
+            pendingMotion.current = null
+            motionTimer.current = null
+          }, 32)
+        }
         return
       }
 
       if (up && drag.current) {
+        // Cancel any pending throttled motion update.
+        if (motionTimer.current) {
+          clearTimeout(motionTimer.current)
+          motionTimer.current = null
+          pendingMotion.current = null
+        }
         drag.current = false
-        // Cancel drag on resize: SIGWINCH clears stdin data, so raw coords may
-        // map outside bounds. A release that matches the start point clears the range.
-        setRange((prev) => {
-          if (!prev) return prev
-          if (raw.x === prev.start.x && raw.y === prev.start.y) return undefined
-          return { start: prev.start, end: pos }
-        })
-        queueMicrotask(() => { void doCopy() })
+
+        const isSingleClick = rangeRef.current
+          ? raw.x === rangeRef.current.start.x && raw.y === rangeRef.current.start.y
+          : false
+
+        if (isSingleClick) {
+          // Single click (no drag): clear selection and notify caller.
+          setRange(undefined)
+          singleClickRef.current?.(raw.x, raw.y)
+        } else {
+          setRange((prev) => {
+            if (!prev) return prev
+            if (raw.x === prev.start.x && raw.y === prev.start.y) return undefined
+            return { start: prev.start, end: pos }
+          })
+          queueMicrotask(() => { void doCopy() })
+        }
       }
     }
 
@@ -203,6 +236,10 @@ export function useTextSelection(input: Input) {
       mouseStream.off("motion", onMotion)
       mouseStream.off("up", onUp)
       process.off("SIGWINCH", onResize)
+      if (motionTimer.current) {
+        clearTimeout(motionTimer.current)
+        motionTimer.current = null
+      }
     }
   }, [])
 
