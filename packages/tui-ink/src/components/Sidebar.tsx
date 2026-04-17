@@ -92,9 +92,10 @@ export function Sidebar({ sessionID, width, height, active, mode }: Props) {
 
   // Context tab state (M4.5)
   const [contextData, setContextData] = useState<string | null>(null)
-  // Insights tab state (M4.6, M4.7)
-  const [insights, setInsights] = useState<string | null>(null)
-  const [insightsLoading, setInsightsLoading] = useState(false)
+  // Insights tab state (M4.6, M4.7) — driven by store
+  const ins = useAppStore((s) => s.sessionInsights[sessionID])
+  const insights = ins?.summary ?? ins?.quality ?? null
+  const insightsLoading = ins?.loading !== null && ins?.loading !== undefined
 
   const isCompact = mode === "compact"
   const isExpanded = mode === "expanded"

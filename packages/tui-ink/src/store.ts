@@ -35,6 +35,16 @@ export type SidebarMode = "collapsed" | "compact" | "expanded"
 export const SIDEBAR_MODES: SidebarMode[] = ["collapsed", "compact", "expanded"]
 export const SIDEBAR_WIDTHS: Record<SidebarMode, number> = { collapsed: 4, compact: 32, expanded: 56 }
 
+export type SessionInsights = {
+  summary: string | null
+  quality: string | null
+  summaryCallCount: number
+  summaryLastTs: number
+  qualityCallCount: number
+  qualityLastTs: number
+  loading: "summary" | "quality" | null
+}
+
 export type Route =
   | { type: "home" }
   | { type: "session"; sessionID: string }
@@ -51,6 +61,7 @@ export type Dialog =
   | { type: "theme" }
   | { type: "help" }
   | { type: "alert"; message: string; title?: string }
+  | { type: "worktree-picker" }
 
 export type Toast = {
   id: string
@@ -174,6 +185,19 @@ export interface AppState {
   // Parts version — incremented on each delta flush or part finalize for memoization.
   partsVersion: number
   bumpPartsVersion: () => void
+
+  // Session insights: /summarize and /quality outputs with rate-limit tracking (M4.6, M4.7)
+  sessionInsights: Record<string, SessionInsights>
+  setInsights: (sessionID: string, kind: "summary" | "quality", text: string | null) => void
+  setInsightsLoading: (sessionID: string, kind: "summary" | "quality" | null) => void
+  bumpInsightsCall: (sessionID: string, kind: "summary" | "quality") => void
+
+  // Worktrees (M6.1) — list of worktree directories from the server
+  worktrees: string[]
+  setWorktrees: (list: string[]) => void
+
+  // Multi-agent: abort all active child sessions (M6.2.e)
+  abortAllChildren: (parentSessionID: string) => Promise<void>
 
   // Theme
   currentThemeName: string
@@ -399,6 +423,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   mode: "build",
   sidebarMode: "collapsed" as SidebarMode,
   partsVersion: 0,
+  sessionInsights: {},
+  worktrees: [],
   currentThemeName: DEFAULT_THEME,
   toasts: [],
   composerAppend: "",
@@ -471,6 +497,61 @@ export const useAppStore = create<AppState>((set, get) => ({
     return { sidebarMode: next }
   }),
   bumpPartsVersion: () => set((prev) => ({ partsVersion: prev.partsVersion + 1 })),
+  setInsights: (sessionID, kind, text) =>
+    set((prev) => ({
+      sessionInsights: {
+        ...prev.sessionInsights,
+        [sessionID]: {
+          summary: null, quality: null,
+          summaryCallCount: 0, summaryLastTs: 0,
+          qualityCallCount: 0, qualityLastTs: 0,
+          loading: null,
+          ...prev.sessionInsights[sessionID],
+          [kind]: text,
+        },
+      },
+    })),
+  setInsightsLoading: (sessionID, kind) =>
+    set((prev) => {
+      const base = prev.sessionInsights[sessionID] ?? {
+        summary: null, quality: null,
+        summaryCallCount: 0, summaryLastTs: 0,
+        qualityCallCount: 0, qualityLastTs: 0,
+        loading: null,
+      }
+      return {
+        sessionInsights: {
+          ...prev.sessionInsights,
+          [sessionID]: { ...base, loading: kind },
+        },
+      }
+    }),
+  bumpInsightsCall: (sessionID, kind) =>
+    set((prev) => {
+      const ins = prev.sessionInsights[sessionID] ?? {
+        summary: null, quality: null,
+        summaryCallCount: 0, summaryLastTs: 0,
+        qualityCallCount: 0, qualityLastTs: 0,
+        loading: null,
+      }
+      return {
+        sessionInsights: {
+          ...prev.sessionInsights,
+          [sessionID]: {
+            ...ins,
+            ...(kind === "summary"
+              ? { summaryCallCount: ins.summaryCallCount + 1, summaryLastTs: Date.now() }
+              : { qualityCallCount: ins.qualityCallCount + 1, qualityLastTs: Date.now() }),
+          },
+        },
+      }
+    }),
+  setWorktrees: (list) => set({ worktrees: list }),
+  abortAllChildren: async (parentSessionID) => {
+    const { sessions, abortSession } = get()
+    const children = sessions.filter((s) => s.parentID === parentSessionID)
+    await Promise.all(children.map((c) => abortSession(c.id)))
+  },
 
   navigate: (r) => set({ route: r }),
   pushDialog: (d) => set((prev) => ({ dialogs: [...prev.dialogs, d] })),

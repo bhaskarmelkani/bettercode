@@ -45,6 +45,12 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   }, [max, percent, used])
 
   const thinkingLevel = useAppStore((s) => s.thinkingLevel)
+  // Active child agents count (M6.2.d)
+  const activeChildren = useAppStore((s) =>
+    s.sessions.filter(
+      (sess) => sess.parentID === sid && s.sessionStatus[sess.id]?.type === "busy",
+    ).length,
+  )
   const display = cut(model ? model.modelID : "no model", 24)
   const generating = session?.type === "busy" || composerStatus === "generating"
   const tone = agent === "plan" ? theme.yellow : theme.blue
@@ -138,6 +144,12 @@ export function StatusBar({ width, sidebarOpen }: Props) {
         {sidebarLabel && (
           <>
             <Text color={theme.cyan}>{sidebarLabel}</Text>
+            <Text color={theme.overlay}>{" · "}</Text>
+          </>
+        )}
+        {activeChildren > 0 && (
+          <>
+            <Text color={theme.yellow}>{`${activeChildren} agent${activeChildren > 1 ? "s" : ""}`}</Text>
             <Text color={theme.overlay}>{" · "}</Text>
           </>
         )}

@@ -1,22 +1,129 @@
-# BetterCode TUI
+# BetterCode
 
-A feature-rich terminal UI for BetterCode, built with [Ink](https://github.com/vadimdemedes/ink) (React for terminals).
+A calm, fast terminal UI for the [opencode](https://github.com/opencode-ai/opencode) AI coding assistant, built with [Ink](https://github.com/vadimdemedes/ink) (React for terminals).
 
-## Quick Start
+## Install
+
+```bash
+npm install -g bettercode
+# or
+bun add -g bettercode
+```
+
+Then start an opencode server and run:
+
+```bash
+bettercode
+```
+
+## Development quick start
 
 ```bash
 # From the repo root
 bun install
 
-# Run the TUI
-bun run dev
+# Run the TUI (requires a running opencode server)
+./packages/opencode/bin/bettercode
 
-# Type-check
+# Type-check (from packages/tui-ink)
 bun typecheck
 
-# Run tests
+# Run tests (from packages/tui-ink)
 bun test test/
 ```
+
+## Environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `BETTERCODE_URL` | `http://localhost:4096` | opencode server URL |
+| `BETTERCODE_DIR` | cwd | Working directory |
+| `BETTERCODE_SESSION` | — | Initial session ID |
+| `BETTERCODE_PASSWORD` | — | Server password (Basic auth) |
+| `BETTERCODE_DEBUG` | off | Set `=1` to enable debug log |
+| `BETTERCODE_PERF_HUD` | off | Set `=1` to show perf overlay |
+| `BETTERCODE_TELEMETRY` | off | Set `=1` to opt in to telemetry (no-op in v1.0) |
+
+Legacy aliases `OPENCODE_TUI_URL`, `OPENCODE_TUI_DIR`, `OPENCODE_TUI_SESSION`, `OPENCODE_TUI_DEBUG` are still accepted.
+
+## Slash commands
+
+| Command | Purpose |
+|---|---|
+| `/new` | Start a new session |
+| `/sessions` | Browse and switch sessions |
+| `/compact` | Summarize and compress the session context |
+| `/context` | Open the context pane with a local usage breakdown |
+| `/summarize` | AI summary of the session into the insights tab |
+| `/quality` | Session quality heuristics + AI evaluation |
+| `/worktree` | Switch to a different git worktree |
+| `/worktree` | Switch between git worktrees |
+| `/interrupt` | Abort the current generation |
+| `/undo` | Revert the last user turn |
+| `/help` | Show keyboard shortcuts |
+
+## Key keybindings
+
+| Key | Context | Action |
+|---|---|---|
+| `Ctrl+K` | global | Command palette |
+| `Ctrl+N` | global | New session |
+| `Ctrl+S` | global | Session list |
+| `Ctrl+B` | session | Toggle sidebar (cycle modes) |
+| `Ctrl+]` | session | Sidebar: next mode (collapsed→compact→expanded) |
+| `Ctrl+[` | session | Sidebar: previous mode |
+| `Ctrl+F` | session | Search transcript |
+| `Ctrl+T` | session | Cycle thinking level |
+| `Ctrl+O` | session | Toggle focus/overview mode |
+| `Ctrl+C` | global | Exit |
+| `↑↓` | scroll | Scroll transcript |
+| `Ctrl+D` | scroll | Scroll half page down |
+| `Ctrl+U` | scroll | Scroll half page up |
+| `Shift+Tab` | chat | Toggle plan/build mode |
+
+## Troubleshooting
+
+**Terminal left in mouse mode after crash**
+```bash
+reset
+```
+
+**Debug log** (enabled with `BETTERCODE_DEBUG=1`):
+- macOS: `~/Library/Logs/bettercode/tui.log`
+- Linux: `~/.local/state/bettercode/tui.log`
+
+**Nested tmux caveats**: BetterCode uses the alternate screen buffer. In a nested tmux session, `C-b d` (detach) and reattach should work correctly. If the screen is corrupted, run `reset`.
+
+**Supported terminal emulators** (tested):
+iTerm2, Terminal.app, Alacritty, Kitty, Ghostty, tmux, WezTerm
+
+## Platform support
+
+- macOS ✓
+- Linux ✓
+- **Windows**: not supported in v1.0 — tracked for v1.1.
+
+## Stability
+
+The following interfaces are **stable** in v1.0 (semver promise):
+- The `bettercode` binary (positional args, env vars, exit codes documented above).
+- The `startTuiInk({ url, directory, headers, sessionID })` export from `src/index.tsx`.
+
+Everything else (React components, hooks, store internals) is **internal** and may change in minor releases.
+
+## Telemetry
+
+BetterCode sends **no telemetry** in v1.0. The `BETTERCODE_TELEMETRY=1` flag exists for future opt-in; it is a no-op today.
+
+## Accessibility
+
+v1.0 is a best-effort implementation for screen readers and high-contrast themes. Known limitations:
+- No ARIA-equivalent for Ink elements.
+- Color is used for meaning in some places (context bar, status indicators).
+
+Feedback and improvement PRs are welcome.
+
+## Quick Start
 
 ---
 
@@ -314,7 +421,10 @@ bun test test/       # 306 tests — must be all green
 
 | Feature | macOS | Linux (X11) | Linux (Wayland) | Windows |
 |---------|-------|-------------|-----------------|---------|
-| Image paste | ✅ native | ✅ requires `xclip` | ⚠️ not supported | — |
-| Clipboard copy | ✅ `pbcopy` | ✅ `xclip` | ✅ `wl-copy` | — |
-| External editor | ✅ | ✅ | ✅ | — |
-| Vim mode | ✅ | ✅ | ✅ | — |
+| Image paste | ✅ native | ✅ requires `xclip` | ⚠️ not supported | ❌ v1.1 |
+| Clipboard copy | ✅ `pbcopy` | ✅ `xclip` | ✅ `wl-copy` | ❌ v1.1 |
+| External editor | ✅ | ✅ | ✅ | ❌ v1.1 |
+| Vim mode | ✅ | ✅ | ✅ | ❌ v1.1 |
+| Mouse drag-to-select | ✅ | ✅ | ✅ | ❌ v1.1 |
+
+Windows support is explicitly out of scope for v1.0 and tracked for v1.1.

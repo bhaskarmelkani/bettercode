@@ -11,6 +11,7 @@ import { AgentPickerDialog } from "./AgentPickerDialog"
 import { McpDialog } from "./McpDialog"
 import { ThemePickerDialog } from "./ThemePickerDialog"
 import { HelpDialog } from "./HelpDialog"
+import { WorktreePickerDialog } from "./WorktreePickerDialog"
 
 interface Props {
   dialog: Dialog
@@ -135,6 +136,9 @@ export function DialogOverlay({ dialog, rows, columns }: Props) {
   }
   if (dialog.type === "alert") {
     return <AlertDialog rows={rows} columns={columns} title={dialog.title} message={dialog.message} />
+  }
+  if (dialog.type === "worktree-picker") {
+    return <WorktreePickerDialog rows={rows} columns={columns} />
   }
   return null
 }
