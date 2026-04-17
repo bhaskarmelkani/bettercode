@@ -4,6 +4,7 @@ import type { Event } from "@opencode-ai/sdk/v2"
 import { useAppStore } from "../store"
 import { registry } from "../commands/registry"
 import { resolve } from "../model"
+import { debugLog } from "../debugLog"
 
 interface Opts {
   url: string
@@ -19,17 +20,31 @@ function backoff(attempt: number) {
 }
 
 // ---------------------------------------------------------------------------
-// Delta batching
+// Delta batching (M3.5: adaptive flush interval)
 //
 // Text deltas arrive at LLM streaming speed (~30–100/sec). Applying each one
 // immediately causes a React re-render (and full Ink repaint) per character.
-// Instead, accumulate deltas for 50 ms and flush them in a single store
-// update, capping repaints at ~20/sec without losing any content.
+// Instead, accumulate deltas and flush in batches.
+//
+// Flush interval:
+//   - 16 ms when the user is at the tail (tail-visible) AND the session is generating
+//     → max ~60 fps, feels instant for live streaming
+//   - 50 ms otherwise (scrolled up, idle, etc.)
 // ---------------------------------------------------------------------------
 type DeltaKey = string // `${messageID}:${partID}:${field}`
 const _deltaBuffer = new Map<DeltaKey, string>()
 let _flushTimer: ReturnType<typeof setTimeout> | null = null
 const MAX_DELTAS = 500
+
+// 16 ms for tail-visible generating, 50 ms otherwise.
+function flushInterval() {
+  const state = useAppStore.getState()
+  const sid = state.currentSessionID
+  const tailVisible = (state.scrollPos[sid] ?? 0) === 0
+  const generating =
+    state.sessionStatus[sid]?.type === "busy" || state.composerStatus === "generating"
+  return tailVisible && generating ? 16 : 50
+}
 
 function flushDeltas() {
   _flushTimer = null
@@ -54,7 +69,7 @@ function bufferDelta(messageID: string, partID: string, field: string, delta: st
     if (first) _deltaBuffer.delete(first)
   }
   if (_flushTimer === null) {
-    _flushTimer = setTimeout(flushDeltas, 50)
+    _flushTimer = setTimeout(flushDeltas, flushInterval())
   }
 }
 // ---------------------------------------------------------------------------
@@ -335,34 +350,59 @@ export function useSDK({ url, directory, headers }: Opts) {
         bootstrapDone = true
       } catch (err) {
         if (abort.signal.aborted) return
-        console.error("[tui-ink] bootstrap failed", err)
+        debugLog.error("bootstrap failed", { err: String(err) })
         setSyncStatus("partial")
       }
 
-      // Stream events with exponential backoff on drop
+      // Stream events with exponential backoff on drop (M2.4)
       let attempt = 0
+      let reconnectToastId: string | null = null
+
+      // Show "Reconnecting…" toast after 2s of degraded state.
+      const showReconnectingToast = () => {
+        if (reconnectToastId) return
+        const id = `reconnect-${Date.now()}`
+        reconnectToastId = id
+        useAppStore.getState().addToast({
+          title: "Reconnecting…",
+          message: "Lost connection to server. Reconnecting…",
+          variant: "warning",
+          duration: 60_000,
+        })
+      }
+      const clearReconnectToast = () => {
+        if (!reconnectToastId) return
+        useAppStore.getState().removeToast(reconnectToastId)
+        reconnectToastId = null
+      }
+
       while (!abort.signal.aborted) {
         try {
           const res = await client.global.event({ signal: abort.signal })
-          attempt = 0 // reset on success
+          attempt = 0
+          clearReconnectToast()
           for await (const event of res.stream) {
             if (abort.signal.aborted) break
             dispatch(event.payload)
           }
         } catch {
           if (abort.signal.aborted) break
+          debugLog.warn("SSE disconnect, reconnecting", { attempt })
           const delay = backoff(attempt++)
-          await new Promise((r) => setTimeout(r, delay))
 
-          // Re-bootstrap after a disconnect so the active session catches up.
+          // Show toast after 2s of being disconnected.
+          const toastTimer = setTimeout(showReconnectingToast, 2000)
+
+          await new Promise((r) => setTimeout(r, delay))
+          clearTimeout(toastTimer)
+
+          // Re-bootstrap after disconnect so the active session catches up.
           try {
             await bootstrap(client, directory)
             bootstrapDone = true
-
             const sessionID = useAppStore.getState().currentSessionID
-            if (sessionID) {
-              await useAppStore.getState().loadMessages(sessionID, true)
-            }
+            if (sessionID) await useAppStore.getState().loadMessages(sessionID, true)
+            clearReconnectToast()
           } catch {
             // will retry on next loop iteration
           }

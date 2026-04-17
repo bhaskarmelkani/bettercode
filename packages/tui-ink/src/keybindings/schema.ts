@@ -64,6 +64,10 @@ export const ACTIONS = [
   "searchNext",
   "searchPrev",
   "searchClose",
+  "sidebarModeNext",
+  "sidebarModePrev",
+  "abortChild",
+  "abortAll",
 ] as const
 
 export type Action = (typeof ACTIONS)[number]

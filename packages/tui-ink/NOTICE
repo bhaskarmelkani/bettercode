@@ -1,0 +1,15 @@
+BetterCode — Third-party attributions
+======================================
+
+This package depends on the following open-source libraries:
+
+| Package         | License | URL                                          |
+|-----------------|---------|----------------------------------------------|
+| ink             | MIT     | https://github.com/vadimdemedes/ink          |
+| react           | MIT     | https://github.com/facebook/react            |
+| zustand         | MIT     | https://github.com/pmndrs/zustand            |
+| marked          | MIT     | https://github.com/markedjs/marked           |
+| @inkjs/ui       | MIT     | https://github.com/nickvdyck/inkjs           |
+
+All dependencies are MIT-licensed. Full license texts are available in each
+package's directory under `node_modules/`.

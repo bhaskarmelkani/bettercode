@@ -143,6 +143,67 @@ export function useHostCommands() {
         keybind: primaryKey(bindings, "exit", ["global"]),
         action: () => process.exit(0),
       }),
+      // Context pane commands (M4)
+      registry.register({
+        id: "context.show",
+        label: "Show Context Breakdown",
+        description: "Open the context tab with a breakdown of token usage and recent turns",
+        category: "Context",
+        slash: "context",
+        action: () => {
+          const s = useAppStore.getState()
+          if (s.sidebarMode === "collapsed") s.setSidebarMode("compact")
+        },
+      }),
+      registry.register({
+        id: "context.summarize",
+        label: "Summarize Session",
+        description: "Generate an AI summary of the current session into the insights tab",
+        category: "Context",
+        slash: "summarize",
+        action: () => {
+          const s = useAppStore.getState()
+          if (s.sidebarMode === "collapsed") s.setSidebarMode("compact")
+          s.addToast({
+            title: "Summarize",
+            message: "Run /summarize from the composer to generate a session summary.",
+            variant: "info",
+            duration: 3000,
+          })
+        },
+      }),
+      registry.register({
+        id: "context.quality",
+        label: "Session Quality",
+        description: "Evaluate session quality with heuristics and AI",
+        category: "Context",
+        slash: "quality",
+        action: () => {
+          const s = useAppStore.getState()
+          if (s.sidebarMode === "collapsed") s.setSidebarMode("compact")
+          s.addToast({
+            title: "Quality",
+            message: "Run /quality from the composer to evaluate session quality.",
+            variant: "info",
+            duration: 3000,
+          })
+        },
+      }),
+      registry.register({
+        id: "worktree.switch",
+        label: "Switch Worktree",
+        description: "Switch between git worktrees",
+        category: "Session",
+        slash: "worktree",
+        action: () => {
+          useAppStore.getState().addToast({
+            title: "Worktree",
+            message: "Worktree switching coming in v1.0 — run git worktree list to see available worktrees.",
+            variant: "info",
+            duration: 4000,
+          })
+        },
+      }),
     ]
     return () => unreg.forEach((f) => f())
   }, [bindings])

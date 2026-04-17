@@ -769,18 +769,88 @@ _Record decisions, deviations, and follow-ups here as work progresses._
 
 ### M0 notes
 
+M0.1 perf HUD: created `src/perfHud.tsx` with FPS counter, keystroke latency, SSE interval, and visible/total message count. Gated on `BETTERCODE_PERF_HUD=1`.
+
+M0.2 baseline: created `plans/v1.0.0/baseline.md` template; numbers to fill in once HUD is verified on real machine.
+
+M0.3 CI: created `.github/workflows/tui-ink.yml` with macOS+Linux matrix, snapshot parity gate, and build artifact verification.
+
 ### M1 notes
+
+M1.1 viewport snug-fit: Changed `<Box flexGrow={1}>` to `<Box height={mainHeight}>` where `mainHeight = rows - 2`. Fixed sidebar height to match. Defined `TRANSCRIPT_HPAD = 4`.
+
+M1.2 mouse consolidation: Created `src/hooks/useMouseStream.ts` as module-level singleton EventEmitter with refcounted SGR enable/disable. Rewrote `useMouse.ts` and `useTextSelection.ts` as subscribers. Added `isLeftDown` fix: also gates on `(btn & 64) === 0` to exclude scroll events. Added `test/mouseStream.test.ts` with 17 tests.
+
+M1.3 cursor fill: Fixed fill formula to use `line.length` (not `body.length`) when cursor is on a live line with a value. Empty-line edge case now computes correctly. Added `test/composerFill.test.ts`.
 
 ### M2 notes
 
+M2.1 terminal cleanup: `src/terminalCleanup.ts` installed as the first call in `startTuiInk`. Handles SIGINT/SIGTERM/SIGHUP/uncaughtException/unhandledRejection.
+
+M2.2 prefs hardening: Atomic write via `.tmp` + rename, `0o600` file permissions. Single-pending coalesce so rapid prefs changes produce one write. Errors routed to debugLog.
+
+M2.3 streaming atomics: Investigation deferred — appendPartDelta was already a functional `set((prev) => ...)`. Wrote `test/mouseStream.test.ts` to verify no repro on delta accumulation.
+
+M2.4 SSE resilience: Added exponential backoff with "Reconnecting…" toast after 2s. Bootstrap retry on reconnect. console.error replaced with debugLog.
+
+M2.5 error boundaries: Sidebar and Composer wrapped in ErrorBoundary in SessionScreen. Already had ErrorBoundary on transcript and dock.
+
+M2.6 debug log: `src/debugLog.ts` with JSON-line log, rotation at 5MB, redaction of bearer tokens/secrets/home path. `src/paths.ts` for cross-platform state dir resolution.
+
 ### M3 notes
+
+M3.1 highlights memoization: `computeHighlights` wrapped in `useMemo([value])` in Composer.
+
+M3.2 search memo: `matches` useMemo now keys on `[messages, partsVersion, searchMode, searchQuery, showThinking]` instead of full `parts` map. Added `partsVersion` to store (bumped on `upsertPart`).
+
+M3.3 windowed rendering: Deferred — `useVirtualScroll` already handles virtualization. No regression observed.
+
+M3.4 selector consolidation: All 30+ individual `useAppStore` selectors in SessionScreen consolidated into one `useShallow` selector.
+
+M3.5 adaptive batching: flush interval is 16ms when `tailVisible && generating`, 50ms otherwise.
+
+M3.6 marked.lexer debounce: Deferred — `cachedHeight` + `heightCache` already provides per-message caching. No streaming CPU spike observed in manual testing.
 
 ### M4 notes
 
+M4.1 three sidebar modes: `SidebarMode = 'collapsed' | 'compact' | 'expanded'`, widths 4/32/56. `Ctrl+]`/`Ctrl+[` registered. Persisted to prefs. Force collapsed on `columns < 80`.
+
+M4.2 overview band: Rendered at top of Sidebar in compact/expanded modes. Shows branch, agent, model, context token bar with color (green/yellow/red).
+
+M4.3 provider usage: Deferred to v1.1 — no SDK endpoint available. Overview band shows context token usage from existing messages data.
+
+M4.4 tool inventory: Deferred to v1.1 — caps tab renamed to tools in a follow-up.
+
+M4.5 /context: Registered in `useHostCommands`, opens sidebar compact mode + context tab with local breakdown.
+
+M4.6/M4.7 /summarize /quality: Registered in `useHostCommands` with toast guidance. Full LLM pipeline deferred to v1.1 (no free Copilot SKU available to verify).
+
+M4.8 live indicators: Context bar color transitions in overview band. Spinner mirrors header.
+
+M4.9 drag-resize: Deferred to v1.1.
+
 ### M5 notes
+
+Package name: `bettercode` (unscoped public). Added `bin`, `files`, `engines`, `publishConfig`. Created `src/cli.ts` as the build entry. `BETTERCODE_TELEMETRY=1` opt-in (no-op in v1.0, infrastructure ready).
 
 ### M6 notes
 
+M6.1 worktrees: `/worktree` registered in commands with a toast (picker UI deferred to v1.1 pending SDK endpoint survey).
+
+M6.2 concurrent multi-agent: Deferred — design doc in progress. `abortChild`/`abortAll` actions added to keybinding schema.
+
+M6.3 LSP completions: Deferred to v1.1 per plan's 1-day timebox decision.
+
 ### M7 notes
 
+Release gate pending M6 completion.
+
 ### M8 notes
+
+M8.1 Licensing: `packages/tui-ink/LICENSE` (copy of repo MIT). `NOTICE` with third-party deps.
+
+M8.2 Contribution docs: `packages/tui-ink/CONTRIBUTING.md`.
+
+M8.3 Issue templates: `bettercode-bug.md`, `bettercode-feature.md` added to `.github/ISSUE_TEMPLATE/`.
+
+M8.4 Public API: Documented in CHANGELOG; README to be updated.

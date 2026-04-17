@@ -1,0 +1,67 @@
+name: tui-ink
+
+on:
+  push:
+    paths:
+      - "packages/tui-ink/**"
+      - ".github/workflows/tui-ink.yml"
+  pull_request:
+    paths:
+      - "packages/tui-ink/**"
+      - ".github/workflows/tui-ink.yml"
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Typecheck
+        working-directory: packages/tui-ink
+        run: bun typecheck
+
+      - name: Test
+        working-directory: packages/tui-ink
+        run: bun test test/
+
+      - name: Snapshot parity
+        working-directory: packages/tui-ink
+        run: git diff --exit-code test/__snapshots__
+
+  build:
+    name: Build CLI artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build
+        working-directory: packages/tui-ink
+        run: bun run build
+
+      - name: Verify artifact
+        working-directory: packages/tui-ink
+        run: |
+          test -f dist/cli.js || (echo "dist/cli.js missing" && exit 1)
+          test -x dist/cli.js || (echo "dist/cli.js not executable" && exit 1)
+
+      - name: Pack dry-run
+        working-directory: packages/tui-ink
+        run: bun pm pack --dry-run 2>/dev/null || npm pack --dry-run

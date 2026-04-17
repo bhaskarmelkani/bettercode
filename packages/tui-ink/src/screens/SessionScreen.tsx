@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react"
 import { Box, Text, useInput } from "ink"
 import type { ToolPart as ToolPartType } from "@opencode-ai/sdk/v2"
 import { useShallow } from "zustand/shallow"
-import { useAppStore } from "../store"
+import { useAppStore, SIDEBAR_WIDTHS } from "../store"
 import { Header } from "../components/Header"
 import { MessageList } from "../components/MessageList"
 import { SearchBar } from "../components/SearchBar"
@@ -25,44 +25,69 @@ interface Props {
 
 const HINTS = ["Thinking…", "Working…", "Processing…", "Reasoning…"]
 
+// Minimum terminal width to show a non-collapsed sidebar.
+const SIDEBAR_MIN = 80
+// Space consumed by transcript paddingX={2} on each side.
+const TRANSCRIPT_HPAD = 4 // 2 (left) + 2 (right)
+
 export function SessionScreen({ sessionID, rows, columns, active, dialog }: Props) {
   const theme = useTheme()
-  const syncStatus = useAppStore((s) => s.syncStatus)
-  const sessions = useAppStore((s) => s.sessions)
-  const vcs = useAppStore((s) => s.vcs)
-  const sendPrompt = useAppStore((s) => s.sendPrompt)
-  const abortSession = useAppStore((s) => s.abortSession)
-  const enqueuePrompt = useAppStore((s) => s.enqueuePrompt)
-  const dequeuePrompt = useAppStore((s) => s.dequeuePrompt)
-  const clearQueue = useAppStore((s) => s.clearQueue)
+
+  // Consolidate all store subscriptions into one shallow selector (M3.4).
+  const {
+    syncStatus,
+    sessions,
+    vcs,
+    sendPrompt,
+    abortSession,
+    enqueuePrompt,
+    dequeuePrompt,
+    clearQueue,
+    dir,
+    status,
+    composerStatus,
+    loadMessages,
+    toggleDiffCollapse,
+    retryBootstrap,
+    openSearch,
+    searchMode,
+    searchMatchCount,
+    scrolled,
+    bindings,
+    sidebarMode,
+    cycleSidebarMode,
+    setSidebarMode,
+  } = useAppStore(
+    useShallow((s) => ({
+      syncStatus: s.syncStatus,
+      sessions: s.sessions,
+      vcs: s.vcs,
+      sendPrompt: s.sendPrompt,
+      abortSession: s.abortSession,
+      enqueuePrompt: s.enqueuePrompt,
+      dequeuePrompt: s.dequeuePrompt,
+      clearQueue: s.clearQueue,
+      dir: s.directory,
+      status: s.sessionStatus[sessionID],
+      composerStatus: s.composerStatus,
+      loadMessages: s.loadMessages,
+      toggleDiffCollapse: s.toggleDiffCollapse,
+      retryBootstrap: s.retryBootstrap,
+      openSearch: s.openSearch,
+      searchMode: s.searchMode,
+      searchMatchCount: s.searchMatchCount,
+      scrolled: (s.scrollPos[sessionID] ?? 0) > 0,
+      bindings: s.keybindings,
+      sidebarMode: s.sidebarMode,
+      cycleSidebarMode: s.cycleSidebarMode,
+      setSidebarMode: s.setSidebarMode,
+    })),
+  )
+
   const queue = useAppStore(useShallow((s) => s.promptQueue[sessionID] ?? []))
-  const dir = useAppStore((s) => s.directory)
-  const status = useAppStore((s) => s.sessionStatus[sessionID])
-  const composerStatus = useAppStore((s) => s.composerStatus)
-  const loadMessages = useAppStore((s) => s.loadMessages)
-  const toggleDiffCollapse = useAppStore((s) => s.toggleDiffCollapse)
-  const retryBootstrap = useAppStore((s) => s.retryBootstrap)
-  const openSearch = useAppStore((s) => s.openSearch)
-  const searchMode = useAppStore((s) => s.searchMode)
-  const searchMatchCount = useAppStore((s) => s.searchMatchCount)
-  const scrolled = useAppStore((s) => (s.scrollPos[sessionID] ?? 0) > 0)
-  const bindings = useAppStore((s) => s.keybindings)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const composerLines = useAppStore((s) => s.composerLines)
 
-  // Lazy-load messages when this session becomes active
-  useEffect(() => {
-    loadMessages(sessionID)
-  }, [sessionID])
-
-  useEffect(() => {
-    useAppStore.getState().closeSearch()
-    if (useAppStore.getState().focusMode) useAppStore.getState().toggleFocusMode()
-  }, [sessionID])
-
-  // Permissions and questions for this session (and child sessions).
-  // useShallow prevents "Maximum update depth exceeded": without it, the spread
-  // operator creates a new array on every store update, causing an infinite
-  // re-render loop via useSyncExternalStore.
+  // Permissions and questions for this session and child sessions.
   const permissions = useAppStore(
     useShallow((s) => {
       const perms = s.permissions[sessionID] ?? []
@@ -83,8 +108,6 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
     }),
   )
 
-  // Derive generating from session status. composerStatus adds the brief
-  // "optimistic" window between sendPrompt() and the first server event.
   const generating = status?.type === "busy" || composerStatus === "generating"
   const hint = useAppStore((s) => {
     if (!generating) return undefined
@@ -104,12 +127,15 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
   }, [generating])
 
   const spinnerHint = hint ?? HINTS[verbIdx]!
-  // Error is only meaningful via composerStatus — session status doesn't carry error visibility.
   const isError = composerStatus === "error"
-  const composerLines = useAppStore((s) => s.composerLines)
 
-  const SIDEBAR_WIDTH = 32
-  const SIDEBAR_MIN = 80
+  // Derived sidebar state.
+  const sidebarWidth = SIDEBAR_WIDTHS[sidebarMode]
+  const sidebarOpen = sidebarMode !== "collapsed"
+
+  // Viewport math (M1.1).
+  // Header occupies 1 row; StatusBar occupies 1 row.
+  const mainHeight = Math.max(1, rows - 2)
 
   const dockRows = dockHeight({
     rows,
@@ -120,17 +146,27 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
     queueLength: queue.length,
   })
   const searchRows = searchMode ? 1 : 0
-  const listHeight = Math.max(1, rows - 2 - dockRows - searchRows)
-  const mainWidth = Math.max(1, sidebarOpen ? columns - SIDEBAR_WIDTH : columns)
+  const listHeight = Math.max(1, mainHeight - dockRows - searchRows)
+  const mainWidth = Math.max(1, columns - (sidebarOpen ? sidebarWidth : 0))
 
   const project = dir?.split("/").pop() ?? "bettercode"
   const branch = vcs?.branch ?? "—"
-  const inputActive =
-    active && !dialog && !sidebarOpen && !searchMode && permissions.length === 0
+  const inputActive = active && !dialog && !sidebarOpen && !searchMode && permissions.length === 0
+
+  // Lazy-load messages when this session becomes active.
+  useEffect(() => {
+    loadMessages(sessionID)
+  }, [sessionID])
 
   useEffect(() => {
-    if (sidebarOpen && columns < SIDEBAR_MIN) setSidebarOpen(false)
-  }, [columns, sidebarOpen])
+    useAppStore.getState().closeSearch()
+    if (useAppStore.getState().focusMode) useAppStore.getState().toggleFocusMode()
+  }, [sessionID])
+
+  // Force collapsed on narrow terminals.
+  useEffect(() => {
+    if (columns < SIDEBAR_MIN && sidebarMode !== "collapsed") setSidebarMode("collapsed")
+  }, [columns, sidebarMode])
 
   useInput(
     (_input, key) => {
@@ -138,7 +174,15 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
 
       if (action === "toggleSidebar") {
         if (scrolled) return
-        if (columns >= SIDEBAR_MIN) setSidebarOpen((v) => !v)
+        if (columns >= SIDEBAR_MIN) cycleSidebarMode(1)
+        return
+      }
+      if (action === "sidebarModeNext") {
+        if (columns >= SIDEBAR_MIN) cycleSidebarMode(1)
+        return
+      }
+      if (action === "sidebarModePrev") {
+        if (columns >= SIDEBAR_MIN) cycleSidebarMode(-1)
         return
       }
       if (action === "toggleFocus") {
@@ -160,8 +204,6 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
         return
       }
       if (action === "toggleDiffs") {
-        // Cycle through all assistant messages that have diffs, toggling one at a time.
-        // If all are collapsed, expand the most recent; otherwise collapse all.
         const state = useAppStore.getState()
         const withDiffs = (state.messages[sessionID] ?? []).filter(
           (msg) => msg.role === "assistant" && (state.messageDiff[msg.id]?.length ?? 0) > 0,
@@ -169,11 +211,9 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
         if (withDiffs.length === 0) return
         const allCollapsed = withDiffs.every((msg) => state.collapsedDiffs[msg.id] !== false)
         if (allCollapsed) {
-          // Expand only the most recent
           const last = withDiffs[withDiffs.length - 1]
           if (last) toggleDiffCollapse(last.id)
         } else {
-          // Collapse all that are open
           for (const msg of withDiffs) {
             if (state.collapsedDiffs[msg.id] === false) toggleDiffCollapse(msg.id)
           }
@@ -226,14 +266,14 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
         width={columns}
         hint={generating ? spinnerHint : undefined}
       />
-      <Box flexDirection="row" flexGrow={1}>
+      <Box flexDirection="row" height={mainHeight}>
         <Box flexDirection="column" width={mainWidth}>
           {searchMode && <SearchBar matchCount={searchMatchCount} active={active && searchMode} />}
           <ErrorBoundary label="transcript">
             <MessageList
               sessionID={sessionID}
               height={listHeight}
-              width={Math.max(1, mainWidth - 4)}
+              width={Math.max(1, mainWidth - TRANSCRIPT_HPAD)}
               active={inputActive}
               generating={generating}
             />
@@ -261,7 +301,15 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
         </Box>
 
         {sidebarOpen && (
-          <Sidebar sessionID={sessionID} width={SIDEBAR_WIDTH} height={rows - 3} active={active && sidebarOpen} />
+          <ErrorBoundary label="sidebar">
+            <Sidebar
+              sessionID={sessionID}
+              width={sidebarWidth}
+              height={mainHeight}
+              active={active && sidebarOpen}
+              mode={sidebarMode}
+            />
+          </ErrorBoundary>
         )}
       </Box>
 

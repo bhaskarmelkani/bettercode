@@ -1,11 +1,14 @@
 import React from "react"
 import { render } from "ink"
-import { readFile, writeFile, mkdir } from "fs/promises"
-import { dirname, join } from "path"
+import { readFile, writeFile, mkdir, rename } from "fs/promises"
+import { dirname } from "path"
 import { App } from "./app"
 import { useAppStore } from "./store"
 import { read as readModel } from "./model"
 import { readKeybindings } from "./keybindings"
+import { installTerminalCleanup } from "./terminalCleanup"
+import { debugLog } from "./debugLog"
+import { paths } from "./paths"
 
 export interface TuiInkOptions {
   url: string
@@ -14,28 +17,50 @@ export interface TuiInkOptions {
   sessionID?: string
 }
 
-const PREFS_PATH = join(process.env.HOME ?? process.env.USERPROFILE ?? "~", ".config", "bettercode", "prefs.json")
+// Prefs write hardening (M2.2): serialize writes with a single-pending coalesce.
+let _writing = false
+let _pending: Record<string, unknown> | undefined
+
+async function flushPrefs() {
+  if (_writing || !_pending) return
+  _writing = true
+  const prefs = _pending
+  _pending = undefined
+  const tmp = `${paths.prefsFile}.tmp`
+  try {
+    await mkdir(dirname(paths.prefsFile), { recursive: true })
+    await writeFile(tmp, JSON.stringify(prefs, null, 2), { mode: 0o600 })
+    await rename(tmp, paths.prefsFile)
+  } catch (err) {
+    debugLog.error("prefs write failed", { err: String(err) })
+  } finally {
+    _writing = false
+    if (_pending) void flushPrefs()
+  }
+}
+
+function schedulePrefsWrite(prefs: Record<string, unknown>) {
+  _pending = prefs
+  if (!_writing) void flushPrefs()
+}
 
 async function readPrefs(): Promise<Record<string, unknown>> {
   try {
-    const text = await readFile(PREFS_PATH, "utf8")
+    const text = await readFile(paths.prefsFile, "utf8")
     return JSON.parse(text) as Record<string, unknown>
   } catch {
     return {}
   }
 }
 
-async function writePrefs(prefs: Record<string, unknown>): Promise<void> {
-  try {
-    await mkdir(dirname(PREFS_PATH), { recursive: true })
-    await writeFile(PREFS_PATH, JSON.stringify(prefs, null, 2))
-  } catch {
-    // best-effort
-  }
-}
-
 export async function startTuiInk(opts: TuiInkOptions): Promise<void> {
-  const prefs = await readPrefs()
+  // M2.1: install terminal cleanup before anything else
+  installTerminalCleanup()
+
+  const prefs = await readPrefs().catch((err) => {
+    debugLog.error("prefs read failed", { err: String(err) })
+    return {} as Record<string, unknown>
+  })
   const keybindings = await readKeybindings()
   const currentModel = readModel(prefs.currentModel)
   const recentModels = Array.isArray(prefs.recentModels)
@@ -58,9 +83,13 @@ export async function startTuiInk(opts: TuiInkOptions): Promise<void> {
     ...(prefs.frecency && typeof prefs.frecency === "object"
       ? { frecency: prefs.frecency as Record<string, { score: number; last: number }> }
       : {}),
+    ...(typeof prefs.sidebarMode === "string" &&
+    ["collapsed", "compact", "expanded"].includes(prefs.sidebarMode)
+      ? { sidebarMode: prefs.sidebarMode as "collapsed" | "compact" | "expanded" }
+      : {}),
   })
 
-  // Persist theme + prompt history + stash + model state to disk on change
+  // Persist state to disk on change (M2.2: atomic write via schedulePrefsWrite)
   const unsub = useAppStore.subscribe((state, prev) => {
     const changed =
       state.currentThemeName !== prev.currentThemeName ||
@@ -68,19 +97,23 @@ export async function startTuiInk(opts: TuiInkOptions): Promise<void> {
       state.promptStash !== prev.promptStash ||
       state.frecency !== prev.frecency ||
       state.currentModel !== prev.currentModel ||
-      state.recentModels !== prev.recentModels
+      state.recentModels !== prev.recentModels ||
+      state.sidebarMode !== prev.sidebarMode
     if (changed) {
-      readPrefs().then((p) =>
-        writePrefs({
-          ...p,
-          theme: state.currentThemeName,
-          promptHistory: state.promptHistory,
-          promptStash: state.promptStash,
-          frecency: state.frecency,
-          currentModel: state.currentModel,
-          recentModels: state.recentModels,
-        }),
-      )
+      readPrefs()
+        .then((p) =>
+          schedulePrefsWrite({
+            ...p,
+            theme: state.currentThemeName,
+            promptHistory: state.promptHistory,
+            promptStash: state.promptStash,
+            frecency: state.frecency,
+            currentModel: state.currentModel,
+            recentModels: state.recentModels,
+            sidebarMode: state.sidebarMode,
+          }),
+        )
+        .catch((err) => debugLog.error("prefs subscribe read failed", { err: String(err) }))
     }
   })
 
@@ -95,20 +128,10 @@ export async function startTuiInk(opts: TuiInkOptions): Promise<void> {
       />,
       { exitOnCtrlC: false },
     )
-
-    process.on("SIGINT", () => {
-      unsub()
-      unmount()
-      resolve()
-    })
   })
 }
 
-// Entry point when spawned as a standalone bun process by the CLI command.
-// import.meta.main is true only when this file is the direct entrypoint passed
-// to `bun run` — it is false when the module is imported by another file.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-if ((import.meta as any).main) {
+export async function main() {
   const url = process.env.BETTERCODE_URL ?? process.env.OPENCODE_TUI_URL ?? "http://localhost:4096"
   const directory = process.env.BETTERCODE_DIR || process.env.OPENCODE_TUI_DIR || undefined
   const sessionID = process.env.BETTERCODE_SESSION || process.env.OPENCODE_TUI_SESSION || undefined
@@ -118,7 +141,13 @@ if ((import.meta as any).main) {
     ? { Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}` }
     : undefined
 
-  startTuiInk({ url, directory, headers, sessionID })
+  await startTuiInk({ url, directory, headers, sessionID })
+}
+
+// Entry point when spawned as a standalone bun process by the CLI command.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+if ((import.meta as any).main) {
+  main()
     .then(() => process.exit(0))
     .catch((e) => {
       console.error(e)

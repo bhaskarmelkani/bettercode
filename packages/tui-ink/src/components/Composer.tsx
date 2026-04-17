@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { Box, Text, useInput } from "ink"
 import { useTheme } from "../theme-context"
 import { SlashMenu } from "./SlashMenu"
@@ -725,7 +725,8 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
     { isActive: active && !generating && !busy },
   )
 
-  const highlights = computeHighlights(value)
+  // Memoize highlight computation — recompute only when value changes (M3.1).
+  const highlights = useMemo(() => computeHighlights(value), [value])
 
   // Split a text substring (starting at absStart in `value`) into styled segments.
   function renderHighlighted(text: string, absStart: number, baseColor: string, bgColor: string | undefined): React.ReactNode {
@@ -908,9 +909,12 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
             const txt = active ? theme.text : theme.subtext
             const glyph = active ? theme.cyan : theme.overlay
             const body = !value ? placeholder : line || " "
-            // When cursor is at or past end of line, an extra " " is rendered that isn't in body.length.
+            // Caret adds 1 column only when at/past end of line (renders " " instead of a body char).
+            // When value exists and cursor is on this line, use line.length (not body.length) so that
+            // an empty cursor line ("") doesn't double-count the " " sentinel in body.
+            // When !value, the placeholder renders alongside the caret so body.length is correct.
             const cursorAtEnd = onLine && col >= line.length
-            const fill = Math.max(0, width - LEAD - body.length - (cursorAtEnd ? 1 : 0))
+            const fill = Math.max(0, width - LEAD - (onLine && value ? line.length : body.length) - (cursorAtEnd ? 1 : 0))
 
             const modeColor = active ? (agent === "plan" ? theme.yellow : theme.blue) : undefined
             const isPrompt = vi === 0 && viewStart === 0

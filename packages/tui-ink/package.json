@@ -1,14 +1,29 @@
 {
-  "name": "@opencode-ai/tui-ink",
-  "version": "0.0.1",
+  "name": "bettercode",
+  "version": "1.0.0",
   "type": "module",
   "main": "./src/index.tsx",
+  "bin": {
+    "bettercode": "./dist/cli.js"
+  },
   "exports": {
     ".": "./src/index.tsx"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "bun": ">=1.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "bun run src/index.tsx",
-    "build": "bun build src/index.tsx --outdir dist --target bun",
+    "build": "bun build src/cli.ts --outdir dist --target bun --sourcemap external && chmod +x dist/cli.js",
     "snapshots": "bun run script/snapshot.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test test/",

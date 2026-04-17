@@ -751,6 +751,7 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const collapseMessageTools = useAppStore((s) => s.collapseMessageTools)
   const addToast = useAppStore((s) => s.addToast)
   const bindings = useAppStore((s) => s.keybindings)
+  const partsVersion = useAppStore((s) => s.partsVersion)
   const activeRef = useRef(active)
 
   const pending = useMemo(() => messages.findLast((m) => m.role === "assistant" && !m.time.completed)?.id, [messages])
@@ -830,6 +831,8 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   ])
   const totalHeight = useMemo(() => heights.reduce((sum, n) => sum + n, 0), [heights])
 
+  // M3.2: key on partsVersion rather than the full parts map to avoid recomputing
+  // every delta. partsVersion is bumped on each upsertPart call.
   const matches = useMemo(() => {
     if (!searchMode || !searchQuery.trim()) return []
     const q = searchQuery.toLowerCase()
@@ -839,7 +842,8 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
         return text.includes(q) ? i : -1
       })
       .filter((i) => i !== -1)
-  }, [messages, parts, searchMode, searchQuery])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, partsVersion, searchMode, searchQuery, showThinking])
 
   // Max rows we can scroll up before reaching the very top
   const maxRowOffset = Math.max(0, totalHeight - height)

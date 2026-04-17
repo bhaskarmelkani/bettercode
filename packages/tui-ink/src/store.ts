@@ -31,6 +31,10 @@ import type { Keymap } from "./keybindings"
 
 export type SyncStatus = "loading" | "partial" | "complete"
 
+export type SidebarMode = "collapsed" | "compact" | "expanded"
+export const SIDEBAR_MODES: SidebarMode[] = ["collapsed", "compact", "expanded"]
+export const SIDEBAR_WIDTHS: Record<SidebarMode, number> = { collapsed: 4, compact: 32, expanded: 56 }
+
 export type Route =
   | { type: "home" }
   | { type: "session"; sessionID: string }
@@ -161,6 +165,15 @@ export interface AppState {
   // Active primary agent
   mode: "plan" | "build"
   setMode: (mode: "plan" | "build") => void
+
+  // Sidebar mode (persisted)
+  sidebarMode: SidebarMode
+  setSidebarMode: (mode: SidebarMode) => void
+  cycleSidebarMode: (dir: 1 | -1) => void
+
+  // Parts version — incremented on each delta flush or part finalize for memoization.
+  partsVersion: number
+  bumpPartsVersion: () => void
 
   // Theme
   currentThemeName: string
@@ -384,6 +397,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   autoAcceptPermissions: false,
   reconnectTick: 0,
   mode: "build",
+  sidebarMode: "collapsed" as SidebarMode,
+  partsVersion: 0,
   currentThemeName: DEFAULT_THEME,
   toasts: [],
   composerAppend: "",
@@ -449,6 +464,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
   setCurrentAgent: (a) => set({ currentAgent: a }),
   setMode: (m) => set({ mode: m }),
+  setSidebarMode: (mode) => set({ sidebarMode: mode }),
+  cycleSidebarMode: (dir) => set((prev) => {
+    const idx = SIDEBAR_MODES.indexOf(prev.sidebarMode)
+    const next = SIDEBAR_MODES[(idx + dir + SIDEBAR_MODES.length) % SIDEBAR_MODES.length]!
+    return { sidebarMode: next }
+  }),
+  bumpPartsVersion: () => set((prev) => ({ partsVersion: prev.partsVersion + 1 })),
 
   navigate: (r) => set({ route: r }),
   pushDialog: (d) => set((prev) => ({ dialogs: [...prev.dialogs, d] })),
@@ -522,7 +544,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (old?.type !== "tool" || part.type !== "tool") delete nextCollapsed[part.id]
       if (found) arr[index] = part
       else arr.splice(index, 0, part)
-      return { parts: { ...prev.parts, [part.messageID]: arr }, collapsedTools: nextCollapsed }
+      return { parts: { ...prev.parts, [part.messageID]: arr }, collapsedTools: nextCollapsed, partsVersion: prev.partsVersion + 1 }
     }),
 
   removePart: (messageID, partID) =>
@@ -539,7 +561,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((prev) => {
       const arr = prev.parts[messageID]
       if (!arr) return prev
-      const { found, index } = bsearch([...arr], partID, (x) => x.id)
+      const { found, index } = bsearch(arr, partID, (x) => x.id)
       if (!found) return prev
       const next = [...arr]
       const part = { ...next[index] } as Record<string, unknown>

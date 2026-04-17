@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { copy } from "../utils/clipboard"
+import { mouseStream, useMouseStream, isLeftDown, isMotion, type MouseEvent } from "./useMouseStream"
 
 export type Point = {
   x: number
@@ -27,15 +28,6 @@ type Input = {
   left?: number
   onCopy?: (text: string, ok: boolean) => void
 }
-
-type Mouse = {
-  btn: number
-  x: number
-  y: number
-  up: boolean
-}
-
-const SGR_RE = /\u001b\[<(\d+);(\d+);(\d+)([Mm])/g
 
 let globalCopy: (() => Promise<boolean>) | undefined
 
@@ -98,21 +90,6 @@ export async function handleGlobalCopy() {
   return globalCopy ? globalCopy() : false
 }
 
-function parseMouse(data: string) {
-  const list: Mouse[] = []
-  for (const item of data.matchAll(SGR_RE)) {
-    const btn = Number(item[1] ?? 0)
-    if (btn === 64 || btn === 65) continue
-    list.push({
-      btn,
-      x: Number(item[2] ?? 1) - 1,
-      y: Number(item[3] ?? 1) - 1,
-      up: item[4] === "m",
-    })
-  }
-  return list
-}
-
 export function useTextSelection(input: Input) {
   const [range, setRange] = useState<Range>()
   const drag = useRef(false)
@@ -126,7 +103,6 @@ export function useTextSelection(input: Input) {
     top: input.top,
     left: input.left ?? 0,
   })
-  const tail = useRef("")
   const copyRef = useRef(input.onCopy)
 
   linesRef.current = input.lines
@@ -170,59 +146,63 @@ export function useTextSelection(input: Input) {
     }
   }, [])
 
+  // Subscribe to the shared mouseStream instead of attaching a second stdin listener.
+  useMouseStream()
+
   useEffect(() => {
     if (!process.stdin.isTTY) return
 
-    const onData = (buf: Buffer) => {
-      const head = `${tail.current}${buf.toString("binary")}`
-      const last = head.lastIndexOf("\u001b[<")
-      const done = last === -1 || /[Mm]/.test(head.slice(last)) ? head : head.slice(0, last)
-      tail.current = done === head ? "" : head.slice(last)
+    const handle = (item: MouseEvent, up: boolean) => {
+      if (!activeRef.current) return
+      const { top, left, width, height } = frameRef.current
+      const raw = { x: item.x - left, y: item.y - top }
+      const inside = raw.x >= 0 && raw.x < width && raw.y >= 0 && raw.y < height
 
-      for (const item of parseMouse(done)) {
-        if (!activeRef.current) continue
-        const top = frameRef.current.top
-        const left = frameRef.current.left
-        const raw = {
-          x: item.x - left,
-          y: item.y - top,
-        }
-        const inside = raw.x >= 0 && raw.x < frameRef.current.width && raw.y >= 0 && raw.y < frameRef.current.height
+      // pos marks the exclusive-end of the selection.
+      const pos = point({ x: raw.x + 1, y: raw.y }, linesRef.current, width, height)
 
-        if (!drag.current && !inside) continue
+      if (!up && isLeftDown(item.btn) && inside) {
+        drag.current = true
+        const start = point(raw, linesRef.current, width, height)
+        setRange({ start, end: start })
+        return
+      }
 
-        // pos marks the exclusive-end of the selection (includes char under cursor on release)
-        const pos = point({ x: raw.x + 1, y: raw.y }, linesRef.current, frameRef.current.width, frameRef.current.height)
+      if (!up && isMotion(item.btn) && drag.current) {
+        setRange((prev) => (prev ? { start: prev.start, end: pos } : prev))
+        return
+      }
 
-        if (!item.up && (item.btn & 32) === 0 && (item.btn & 3) === 0 && inside) {
-          drag.current = true
-          const start = point(raw, linesRef.current, frameRef.current.width, frameRef.current.height)
-          setRange({ start, end: start })
-          continue
-        }
-
-        if (!item.up && drag.current && (item.btn & 32) !== 0) {
-          setRange((prev) => (prev ? { start: prev.start, end: pos } : prev))
-          continue
-        }
-
-        if (item.up && drag.current) {
-          drag.current = false
-          setRange((prev) => {
-            if (!prev) return prev
-            if (raw.x === prev.start.x && raw.y === prev.start.y) return undefined
-            return { start: prev.start, end: pos }
-          })
-          queueMicrotask(() => {
-            void doCopy()
-          })
-        }
+      if (up && drag.current) {
+        drag.current = false
+        // Cancel drag on resize: SIGWINCH clears stdin data, so raw coords may
+        // map outside bounds. A release that matches the start point clears the range.
+        setRange((prev) => {
+          if (!prev) return prev
+          if (raw.x === prev.start.x && raw.y === prev.start.y) return undefined
+          return { start: prev.start, end: pos }
+        })
+        queueMicrotask(() => { void doCopy() })
       }
     }
 
-    process.stdin.on("data", onData)
+    const onDown = (ev: MouseEvent) => handle(ev, false)
+    const onMotion = (ev: MouseEvent) => handle(ev, false)
+    const onUp = (ev: MouseEvent) => handle(ev, true)
+
+    mouseStream.on("down", onDown)
+    mouseStream.on("motion", onMotion)
+    mouseStream.on("up", onUp)
+
+    // Cancel drag on SIGWINCH so there's no stuck highlight.
+    const onResize = () => { if (drag.current) { drag.current = false; setRange(undefined) } }
+    process.on("SIGWINCH", onResize)
+
     return () => {
-      process.stdin.off("data", onData)
+      mouseStream.off("down", onDown)
+      mouseStream.off("motion", onMotion)
+      mouseStream.off("up", onUp)
+      process.off("SIGWINCH", onResize)
     }
   }, [])
 

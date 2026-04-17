@@ -139,4 +139,8 @@ export const defaults: Keymap = {
   ],
   searchPrev: [{ context: "search", key: "ctrl+p" }],
   searchClose: [{ context: "search", key: "escape" }],
+  sidebarModeNext: [{ context: "session", key: "ctrl+]" }],
+  sidebarModePrev: [{ context: "session", key: "ctrl+[" }],
+  abortChild: [],
+  abortAll: [],
 }
