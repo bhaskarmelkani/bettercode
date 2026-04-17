@@ -747,6 +747,8 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
   const collapsedTools = useAppStore((s) => s.collapsedTools)
   const expandAllTools = useAppStore((s) => s.expandAllTools)
   const collapseAllTools = useAppStore((s) => s.collapseAllTools)
+  const expandMessageTools = useAppStore((s) => s.expandMessageTools)
+  const collapseMessageTools = useAppStore((s) => s.collapseMessageTools)
   const addToast = useAppStore((s) => s.addToast)
   const bindings = useAppStore((s) => s.keybindings)
   const activeRef = useRef(active)
@@ -998,17 +1000,29 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
         return
       }
 
-      if (action === "messageEdit" && generating) {
-        const msg = [...messages].reverse().find((m) => m.role === "assistant")
-        if (!msg) return
-        const tools = (parts[msg.id] ?? EMPTY_ARRAY).filter((p) => p.type === "tool")
+      if (action === "messageEdit") {
+        // When cursor is on a specific message: toggle that message's tools
+        // When generating with no cursor: toggle the last assistant message's tools
+        const target =
+          cursorIdx !== null
+            ? messages[cursorIdx]
+            : generating
+              ? [...messages].reverse().find((m) => m.role === "assistant")
+              : null
+        if (!target || target.role !== "assistant") return
+        const tools = (parts[target.id] ?? EMPTY_ARRAY).filter((p) => p.type === "tool")
         if (tools.length === 0) return
-        const all = tools.every((part) => {
-          const collapsed = collapsedTools[part.id]
-          return collapsed ?? part.state.status === "completed"
+        const allCollapsed = tools.every((part) => {
+          const c = collapsedTools[part.id]
+          return c ?? part.state.status === "completed"
         })
-        if (all) expandAllTools(sessionID)
-        else collapseAllTools(sessionID)
+        if (cursorIdx !== null) {
+          if (allCollapsed) expandMessageTools(target.id)
+          else collapseMessageTools(target.id)
+        } else {
+          if (allCollapsed) expandAllTools(sessionID)
+          else collapseAllTools(sessionID)
+        }
         return
       }
       setRowOffset((o) => pagerOffset(_input, key, o, maxRowOffset, height, generating, bindings) ?? o)
@@ -1111,11 +1125,16 @@ export const MessageList = React.memo(function MessageList({ sessionID, height, 
           <Text color={theme.cyan} inverse>{` ↓ ${mark.count} new ↓ `}</Text>
         </Box>
       )}
-      {selection.rows.map((row) => (
-        <Box key={`${row.y}-${row.x}-${row.text.length}`} position="absolute" marginTop={row.y} paddingLeft={row.x}>
-          <Text inverse>{row.text}</Text>
-        </Box>
-      ))}
+      {selection.rows.map((row) => {
+        const trimmed = row.text.trimEnd()
+        if (!trimmed) return null
+        const leading = trimmed.length - trimmed.trimStart().length
+        return (
+          <Box key={`${row.y}-${row.x}-${row.text.length}`} position="absolute" marginTop={row.y} paddingLeft={row.x + leading}>
+            <Text inverse>{trimmed.trimStart()}</Text>
+          </Box>
+        )
+      })}
 
       {/* Content box — negative marginTop slides content up, overflowY clips it.
           absoluteTop is negative when rowOffset=0 (stick to bottom), 0 when at top.

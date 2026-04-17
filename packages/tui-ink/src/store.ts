@@ -135,6 +135,7 @@ export interface AppState {
   vimEnabled: boolean
 
   // Display toggles
+  thinkingLevel: "off" | "low" | "medium" | "high" | "xhigh"
   showThinking: boolean
   focusMode: boolean
   searchMode: boolean
@@ -199,6 +200,7 @@ export interface AppState {
   setSyncStatus: (s: SyncStatus) => void
   setComposerStatus: (s: AppState["composerStatus"]) => void
   setShowThinking: (v: boolean) => void
+  cycleThinkingLevel: () => void
   setCurrentModel: (m: { providerID: string; modelID: string } | undefined) => void
   setCurrentAgent: (a: string | undefined) => void
   setTheme: (name: string) => void
@@ -222,6 +224,8 @@ export interface AppState {
   toggleToolCollapse: (partID: string) => void
   expandAllTools: (sessionID: string) => void
   collapseAllTools: (sessionID: string) => void
+  expandMessageTools: (messageID: string) => void
+  collapseMessageTools: (messageID: string) => void
   toggleDiffCollapse: (messageID: string) => void
 
   upsertPermission: (req: PermissionRequest) => void
@@ -370,6 +374,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   questions: {},
   composerStatus: "idle",
   promptQueue: {},
+  thinkingLevel: "off" as const,
   showThinking: false,
   focusMode: false,
   searchMode: false,
@@ -400,7 +405,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   setClient: (c) => set({ client: c }),
   setSyncStatus: (s) => set({ syncStatus: s }),
   setComposerStatus: (s) => set({ composerStatus: s }),
-  setShowThinking: (v) => set({ showThinking: v }),
+  setShowThinking: (v) => set({ showThinking: v, thinkingLevel: v ? "medium" : "off" }),
+  cycleThinkingLevel: () => set((prev) => {
+    const order = ["off", "low", "medium", "high", "xhigh"] as const
+    const next = order[(order.indexOf(prev.thinkingLevel) + 1) % order.length]!
+    return { thinkingLevel: next, showThinking: next !== "off" }
+  }),
   toggleFocusMode: () => set((prev) => ({ focusMode: !prev.focusMode })),
   openSearch: () => set({ searchMode: true, searchQuery: "", searchMatchIdx: 0, searchMatchCount: 0 }),
   closeSearch: () => set({ searchMode: false, searchQuery: "", searchMatchIdx: 0, searchMatchCount: 0 }),
@@ -565,6 +575,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       const msg = [...(prev.messages[sessionID] ?? [])].reverse().find((m) => m.role === "assistant")
       if (!msg) return prev
       const tools = (prev.parts[msg.id] ?? []).filter((p): p is ToolPartType => p.type === "tool")
+      if (tools.length === 0) return prev
+      const next = { ...prev.collapsedTools }
+      for (const part of tools) next[part.id] = true
+      return { collapsedTools: next }
+    }),
+
+  expandMessageTools: (messageID) =>
+    set((prev) => {
+      const tools = (prev.parts[messageID] ?? []).filter((p): p is ToolPartType => p.type === "tool")
+      if (tools.length === 0) return prev
+      const next = { ...prev.collapsedTools }
+      for (const part of tools) next[part.id] = false
+      return { collapsedTools: next }
+    }),
+
+  collapseMessageTools: (messageID) =>
+    set((prev) => {
+      const tools = (prev.parts[messageID] ?? []).filter((p): p is ToolPartType => p.type === "tool")
       if (tools.length === 0) return prev
       const next = { ...prev.collapsedTools }
       for (const part of tools) next[part.id] = true

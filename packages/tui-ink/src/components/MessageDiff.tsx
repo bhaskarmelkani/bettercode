@@ -61,10 +61,10 @@ export function MessageDiff({ diffs, open, onToggle }: Props) {
         </Text>
         <Text color={theme.green}>{`+${add}`}</Text>
         <Text color={theme.red}>{`-${del}`}</Text>
-        {onToggle && <Text color={theme.overlay}>{` ${toggle}: expand`}</Text>}
+        {onToggle && !open && <Text color={theme.overlay}>{`  ${toggle}: expand`}</Text>}
       </Box>
 
-      {diffs.map((item) => (
+      {open && diffs.map((item) => (
         <Box key={item.file} marginTop={1} flexDirection="column">
           <Box flexDirection="row" gap={1}>
             <Text
@@ -79,11 +79,9 @@ export function MessageDiff({ diffs, open, onToggle }: Props) {
             <Text color={theme.red}>{`-${item.deletions}`}</Text>
           </Box>
 
-          {open && (
-            <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.surface0} flexDirection="column">
-              <PatchLines patch={item.patch} />
-            </Box>
-          )}
+          <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.surface0} flexDirection="column">
+            <PatchLines patch={item.patch} />
+          </Box>
         </Box>
       ))}
     </Box>

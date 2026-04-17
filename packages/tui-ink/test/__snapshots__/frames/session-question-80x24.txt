@@ -1,4 +1,4 @@
-bettercode ─ feat/ui-snapshots ─ 1 session                                 ready
+bettercode ─ ⎇ feat/ui-snapshots                                           ready
 
  ● Which snapshot should we inspect first?
 
@@ -21,4 +21,4 @@ bettercode ─ feat/ui-snapshots ─ 1 session                                 r
 ────────────────────────────────────────────────────────────────────────────────
   ↑↓ select · enter confirm · esc reject
 
- ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · ↑↓: navigate · enter: s…
+ build (shift + tab) · gpt-5.4 · ↑↓: navigate · enter: select · esc: reject

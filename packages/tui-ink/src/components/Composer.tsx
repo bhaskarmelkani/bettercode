@@ -642,6 +642,11 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         return
       }
 
+      if (key.ctrl && input === "d" && mentions.attachments.length > 0) {
+        mentions.setAttachments((a) => a.slice(0, -1))
+        return
+      }
+
       if (action === "backspace") {
         // Compute cursor-aware next value for mention tracking before mutating state
         const next = textDelAt(value, cursor)[0]
@@ -768,7 +773,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
     <Box flexDirection="column" flexShrink={0} position="relative">
       {(mentions.attachments.length > 0 || images.length > 0) && (
         <Box flexDirection="row" gap={1} flexWrap="wrap" marginBottom={0} paddingLeft={2}>
-          {mentions.attachments.map((a) => (
+          {[...new Set(mentions.attachments)].map((a) => (
             <Box key={a} flexDirection="row">
               <Text backgroundColor={theme.mauve} color={theme.base}>
                 {" "}
@@ -880,7 +885,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
         {/* Input area — always live (supports typing while generating for queue/steer) */}
         {search.active ? (
           <Box flexDirection="row">
-            <Text color={theme.cyan}>{">  "}</Text>
+            <Text bold color={theme.cyan}>{"❯  "}</Text>
             <Text color={theme.text} wrap="truncate-end">
               {`(reverse-i-search)\`${search.query}': ${search.match || ""}`}
             </Text>
@@ -901,10 +906,12 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
             const body = !value ? placeholder : line || " "
             const fill = Math.max(0, width - LEAD - body.length)
 
+            const modeColor = active ? (agent === "plan" ? theme.yellow : theme.blue) : undefined
+            const isPrompt = vi === 0 && viewStart === 0
             return (
               <Box key={absIdx} flexDirection="row">
-                <Text color={glyph} backgroundColor={field}>
-                  {vi === 0 && viewStart === 0 ? ">" : " "}
+                <Text backgroundColor={isPrompt && active ? modeColor : field} color={isPrompt && active ? theme.base : glyph}>
+                  {isPrompt ? ">" : " "}
                 </Text>
                 <Text backgroundColor={field}>{"  "}</Text>
                 {onLine ? (
@@ -936,6 +943,7 @@ export function Composer({ onSubmit, onAbort, onSteer, active, generating, width
           </Box>
         )}
       </Box>
+      <Text>{" "}</Text>
     </Box>
   )
 }

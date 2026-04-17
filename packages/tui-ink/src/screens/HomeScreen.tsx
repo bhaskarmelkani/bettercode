@@ -83,7 +83,7 @@ export function HomeScreen({ rows, columns, active, dialog }: Props) {
 
   return (
     <Box height={rows} width={columns} flexDirection="column">
-      <Header projectName={project} gitBranch={branch} sessionCount={sessions.length} status="idle" width={columns} />
+      <Header projectName={project} gitBranch={branch} status="idle" width={columns} />
 
       <Box height={mainRows} flexDirection="column" justifyContent="center" alignItems="center">
         {isLoading && <Spinner label=" connecting to server..." />}

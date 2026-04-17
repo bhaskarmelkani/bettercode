@@ -9,7 +9,6 @@ import { useAppStore } from "../store"
 interface HeaderProps {
   projectName: string
   gitBranch: string
-  sessionCount: number
   status: "idle" | "generating" | "error"
   width: number
   hint?: string
@@ -22,12 +21,11 @@ function cut(text: string, max: number) {
   return `${text.slice(0, max - 1)}…`
 }
 
-export function Header({ projectName, gitBranch, sessionCount, status, width, hint }: HeaderProps) {
+export function Header({ projectName, gitBranch, status, width, hint }: HeaderProps) {
   const theme = useTheme()
   const statusColor = status === "generating" ? theme.yellow : status === "error" ? theme.red : theme.green
   const project = cut(projectName, 24)
   const branch = cut(gitBranch, 24)
-  const count = `${sessionCount} session${sessionCount === 1 ? "" : "s"}`
   const spinnerLabel = status === "generating" ? ` ${hint ?? "generating"}` : undefined
   const live = useAppStore(
     useShallow((s) => {
@@ -70,9 +68,8 @@ export function Header({ projectName, gitBranch, sessionCount, status, width, hi
         {project}
       </Text>
       <Text color={theme.overlay}> ─ </Text>
+      <Text color={theme.cyan}>⎇ </Text>
       <Text color={theme.subtext}>{branch}</Text>
-      <Text color={theme.overlay}> ─ </Text>
-      <Text color={theme.subtext}>{count}</Text>
       <Box flexGrow={1} />
       {status === "generating" ? (
         <Spinner label={spinnerLabel} pulse={pulse} thinkingSince={since} />

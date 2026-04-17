@@ -11,6 +11,7 @@ export const defaults: Keymap = {
   openSearch: [{ context: "session", key: "ctrl+f" }],
   retry: [{ context: "session", key: "r" }],
   toggleDiffs: [{ context: "session", key: "ctrl+g" }],
+  toggleThinking: [{ context: "session", key: "ctrl+t" }],
   submit: [
     { context: "chat", key: "return" },
     { context: "stream", key: "return" },

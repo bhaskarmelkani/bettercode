@@ -1,4 +1,4 @@
-bettercode ─ feat/ui-snapshots ─ 3 sessions                                                                        ready
+bettercode ─ ⎇ feat/ui-snapshots                                                                                   ready
 
 
 
@@ -37,4 +37,4 @@ bettercode ─ feat/ui-snapshots ─ 3 sessions                                 
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
    Type a message... (/ for commands, @ for files)
- ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · ctrl+k: commands · /: slash · ctrl+b: capabilities
+ build (shift + tab) · gpt-5.4 · ctrl+k: commands · /: slash · ctrl+b: capabilities

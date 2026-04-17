@@ -155,6 +155,10 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
         retryBootstrap()
         return
       }
+      if (action === "toggleThinking") {
+        useAppStore.getState().cycleThinkingLevel()
+        return
+      }
       if (action === "toggleDiffs") {
         // Cycle through all assistant messages that have diffs, toggling one at a time.
         // If all are collapsed, expand the most recent; otherwise collapse all.
@@ -218,7 +222,6 @@ export function SessionScreen({ sessionID, rows, columns, active, dialog }: Prop
       <Header
         projectName={project}
         gitBranch={branch}
-        sessionCount={sessions.length}
         status={isError ? "error" : generating ? "generating" : "idle"}
         width={columns}
         hint={generating ? spinnerHint : undefined}

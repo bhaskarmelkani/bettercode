@@ -22,7 +22,6 @@ export function StatusBar({ width, sidebarOpen }: Props) {
   const theme = useTheme()
   const model = useAppStore((s) => s.currentModel)
   const agent = useAppStore((s) => s.mode)
-  const vcs = useAppStore((s) => s.vcs)
   const sid = useAppStore((s) => s.currentSessionID)
   const composerStatus = useAppStore((s) => s.composerStatus)
   const session = useAppStore((s) => s.sessionStatus[sid])
@@ -45,7 +44,7 @@ export function StatusBar({ width, sidebarOpen }: Props) {
     return { used, max, percent }
   }, [max, percent, used])
 
-  const branch = cut(vcs?.branch ?? "—", 28)
+  const thinkingLevel = useAppStore((s) => s.thinkingLevel)
   const display = cut(model ? model.modelID : "no model", 24)
   const generating = session?.type === "busy" || composerStatus === "generating"
   const tone = agent === "plan" ? theme.yellow : theme.blue
@@ -106,8 +105,12 @@ export function StatusBar({ width, sidebarOpen }: Props) {
                       ]
   const raw = items.map((item) => hintText(item.keys, item.label)).join(" · ")
 
-  // fixed = " "(2) + git + " · "(3) + agent + " (" + mode + ")" + " · "(3) + display + " · "(3)
-  const fixed = 2 + 2 + branch.length + 3 + agent.length + 2 + modeLabel.length + 1 + 3 + display.length + 3
+  const thinkingLabel = thinkingLevel !== "off" ? thinkingLevel : null
+  const sidebarLabel = sidebarOpen ? " sidebar" : null
+  // fixed = " "(1) + agent + " (" + mode + ")" + " · "(3) + display + " · "(3) + [level + " · "(3)] + [sidebar + " · "(3)]
+  const fixed = 1 + agent.length + 2 + modeLabel.length + 1 + 3 + display.length + 3 +
+    (thinkingLabel ? thinkingLabel.length + 3 : 0) +
+    (sidebarLabel ? sidebarLabel.length + 3 : 0)
   const hint = cut(raw, Math.max(0, width - fixed))
   const fill = Math.max(0, width - fixed - hint.length)
 
@@ -116,16 +119,25 @@ export function StatusBar({ width, sidebarOpen }: Props) {
       {usage ? <TokenWarning width={width} usage={usage} /> : null}
       <Box height={1} flexDirection="row">
         <Text color={theme.overlay}> </Text>
-        <Text color={theme.overlay}>{"⎇ "}</Text>
-        <Text color={theme.cyan}>{branch}</Text>
-        <Text color={theme.overlay}>{" · "}</Text>
         <Text color={tone} bold>
           {agent}
         </Text>
         <Text color={theme.overlay}>{` (${modeLabel})`}</Text>
         <Text color={theme.overlay}>{" · "}</Text>
-        <Text color={theme.subtext}>{display}</Text>
+        <Text color={theme.text}>{display}</Text>
         <Text color={theme.overlay}>{" · "}</Text>
+        {thinkingLabel && (
+          <>
+            <Text color={theme.yellow} bold>{thinkingLabel}</Text>
+            <Text color={theme.overlay}>{" · "}</Text>
+          </>
+        )}
+        {sidebarLabel && (
+          <>
+            <Text color={theme.cyan}>{sidebarLabel}</Text>
+            <Text color={theme.overlay}>{" · "}</Text>
+          </>
+        )}
         {hint === raw ? (
           items.map((item, i) => (
             <React.Fragment key={`${item.keys}-${item.label ?? i}`}>

@@ -1,4 +1,4 @@
-bettercode ─ feat/ui-snapshots ─ 2 sessions                                ready
+bettercode ─ ⎇ feat/ui-snapshots                                           ready
 
  ● Great. Start with representative screens before we add deeper PTY interaction
    tests.
@@ -9,11 +9,11 @@ bettercode ─ feat/ui-snapshots ─ 2 sessions                                r
 
    build · gpt-5.4 · 1.4s · 2.5k tokens
 
-     ▸ edits 2 files +3 -2  ctrl+g: expand
+     ▸ edits 2 files +3 -2   ctrl+g: expand
 
-     ~ packages/tui-ink/src/screens/SessionScreen.tsx +2 -1
 
-     ~ packages/tui-ink/src/components/StatusBar.tsx +1 -1
+
+
 
 
 
@@ -21,4 +21,4 @@ bettercode ─ feat/ui-snapshots ─ 2 sessions                                r
 
 ────────────────────────────────────────────────────────────────────────────────
    Type a message... (/ for commands, @ for files)
- ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · ctrl+g: expand/collapse…
+ build (shift + tab) · gpt-5.4 · ctrl+g: expand/collapse edits · ctrl+b: capabi…

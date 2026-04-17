@@ -22,6 +22,7 @@ export const ACTIONS = [
   "openSearch",
   "retry",
   "toggleDiffs",
+  "toggleThinking",
   "submit",
   "steer",
   "clearInput",

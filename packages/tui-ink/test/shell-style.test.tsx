@@ -39,12 +39,12 @@ describe("shell style regressions", () => {
     reset()
     const frame = await capture(
       <ThemeProvider>
-        <Header projectName="bettercode" gitBranch="bhaskar/ui-3.0" sessionCount={33} status="idle" width={80} />
+        <Header projectName="bettercode" gitBranch="bhaskar/ui-3.0" status="idle" width={80} />
       </ThemeProvider>,
       { columns: 80, rows: 1 },
     )
 
-    expect(frame.text).toContain("bettercode ─ bhaskar/ui-3.0 ─ 33 sessions")
+    expect(frame.text).toContain("bettercode ─ ⎇ bhaskar/ui-3.0")
     expect(frame.text).toContain("ready")
   })
 
@@ -64,7 +64,7 @@ describe("shell style regressions", () => {
       { columns: 100, rows: 1 },
     )
 
-    expect(frame.text).toContain("⎇ bhaskar/ui-3.0 · build (shift + tab) · gpt-5-mini")
+    expect(frame.text).toContain("build (shift + tab) · gpt-5-mini")
     expect(frame.text).toContain("ctrl+k: commands · /: slash")
   })
 

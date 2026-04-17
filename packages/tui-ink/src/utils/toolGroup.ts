@@ -42,8 +42,15 @@ export function groupParts(parts: Part[]) {
       i++
     }
 
-    if (run.length === 1) out.push({ type: "tool", part: run[0]! })
-    else out.push({ type: "tool-group", parts: run })
+    // Write tools are never grouped — MessageDiff at the bottom already provides
+    // the "edits N files" aggregate view. Grouping writes would duplicate it.
+    if (label === "write") {
+      for (const p of run) out.push({ type: "tool", part: p })
+    } else if (run.length === 1) {
+      out.push({ type: "tool", part: run[0]! })
+    } else {
+      out.push({ type: "tool-group", parts: run })
+    }
   }
 
   return out

@@ -1,4 +1,4 @@
-bettercode ─ feat/ui-snapshots ─ 1 session                                 ready
+bettercode ─ ⎇ feat/ui-snapshots                                           ready
 
  ● Please update the snapshot harness and save the results.
 
@@ -21,4 +21,4 @@ bettercode ─ feat/ui-snapshots ─ 1 session                                 r
  └────────────────────────────────────────────────────────────────────────────┘
   stash: Draft: keep the dock compact on 80x24 (stashed)
 
- ⎇ feat/ui-snapshots · build (shift + tab) · gpt-5.4 · y: allow · a: allow all…─
+ build (shift + tab) · gpt-5.4 · y: allow · a: allow all · n: deny
