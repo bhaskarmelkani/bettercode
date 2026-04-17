@@ -5,7 +5,7 @@ bettercode ─ ⎇ feat/ui-snapshots                                           r
 
      ◆ Choose the surface that best reflects the current UI risk.
 
-   build · gpt-5.4 · 1.4s · 2.5k tokens
+   build · gpt-5.4                                            1.4s · 2.5k tokens
 
 
 

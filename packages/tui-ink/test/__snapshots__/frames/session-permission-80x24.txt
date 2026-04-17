@@ -5,7 +5,7 @@ bettercode ─ ⎇ feat/ui-snapshots                                           r
 
      ◆ I need permission before writing new test artifacts.
 
-   build · gpt-5.4 · 1.4s · 2.5k tokens
+   build · gpt-5.4                                            1.4s · 2.5k tokens
 
 
 

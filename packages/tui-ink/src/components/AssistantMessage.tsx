@@ -88,13 +88,13 @@ export const AssistantMessage = React.memo(function AssistantMessage({
   let lead = true
   let sep = false
   const doneAt = msg.time?.completed
-  const footer = [
-    msg.mode ?? "chat",
-    msg.modelID,
+  // Footer split: context info (left) vs measurements (right).
+  const footerLeft = [msg.mode ?? "chat", msg.modelID].filter(Boolean).join(" · ")
+  const footerRight = [
     doneAt ? dur(msg.time?.created, doneAt) : "",
     doneAt ? `${tok(msg.tokens.input, msg.tokens.output)} tokens` : "",
     msg.error?.name === "MessageAbortedError" ? "interrupted" : "",
-  ].filter((v): v is string => !!v)
+  ].filter(Boolean).join(" · ")
   const border = tone === "cursor" ? theme.cyan : tone === "search" ? theme.yellow : theme.surface2
 
   return (
@@ -120,13 +120,7 @@ export const AssistantMessage = React.memo(function AssistantMessage({
           sep = sep || needSep
           return (
             <React.Fragment key={part.part.id}>
-              {needSep && (
-                <Box paddingLeft={1}>
-                  <Text color={theme.surface1}>
-                    {"─".repeat(Math.max(0, Math.min(40, (process.stdout.columns ?? 80) - 4)))}
-                  </Text>
-                </Box>
-              )}
+              {needSep && <Box height={1} />}
               <ToolPart part={part.part} />
             </React.Fragment>
           )
@@ -136,13 +130,7 @@ export const AssistantMessage = React.memo(function AssistantMessage({
           sep = sep || needSep
           return (
             <React.Fragment key={part.parts[0]?.id}>
-              {needSep && (
-                <Box paddingLeft={1}>
-                  <Text color={theme.surface1}>
-                    {"─".repeat(Math.max(0, Math.min(40, (process.stdout.columns ?? 80) - 4)))}
-                  </Text>
-                </Box>
-              )}
+              {needSep && <Box height={1} />}
               <ToolGroup parts={part.parts} overview={focusMode} open={open} />
             </React.Fragment>
           )
@@ -182,8 +170,10 @@ export const AssistantMessage = React.memo(function AssistantMessage({
       )}
 
       {!focusMode && (isLast || done || msg.error?.name === "MessageAbortedError") && (
-        <Box paddingLeft={1} marginTop={1}>
-          <Text color={theme.overlay}>{footer.join(" · ")}</Text>
+        <Box paddingLeft={1} marginTop={1} flexDirection="row">
+          <Text color={theme.overlay}>{footerLeft}</Text>
+          <Box flexGrow={1} />
+          {footerRight ? <Text color={theme.overlay}>{footerRight}</Text> : null}
         </Box>
       )}
 

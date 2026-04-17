@@ -13,32 +13,42 @@ interface Props {
   onToggle?: () => void
 }
 
+// Gutter-style diff: symbol in its own column, content starts clean.
+// +/- lines pop; context lines recede to overlay; headers are quiet.
 function PatchLines({ patch }: { patch: string }) {
   const theme = useTheme()
   const all = patch.split(/\r?\n/)
   const visible =
     all.length > PATCH_ROWS ? [...all.slice(0, PATCH_ROWS), `… ${all.length - PATCH_ROWS} more lines`] : all
+
   return (
     <>
-      {visible.map((ln, i) => (
-        <Text
-          key={i}
-          color={
-            ln.startsWith("+++") || ln.startsWith("---")
-              ? theme.subtext
-              : ln.startsWith("+")
-                ? theme.green
-                : ln.startsWith("-")
-                  ? theme.red
-                  : ln.startsWith("@@")
-                    ? theme.cyan
-                    : theme.overlay
-          }
-          wrap="wrap"
-        >
-          {ln}
-        </Text>
-      ))}
+      {visible.map((ln, i) => {
+        if (ln.startsWith("+++") || ln.startsWith("---")) {
+          return <Text key={i} color={theme.overlay} dimColor wrap="truncate-end">{ln}</Text>
+        }
+        if (ln.startsWith("@@")) {
+          return <Text key={i} color={theme.cyan} dimColor wrap="truncate-end">{ln}</Text>
+        }
+        if (ln.startsWith("+")) {
+          return (
+            <Box key={i} flexDirection="row">
+              <Text color={theme.green} bold>{"+"}</Text>
+              <Text color={theme.green} wrap="truncate-end">{ln.slice(1)}</Text>
+            </Box>
+          )
+        }
+        if (ln.startsWith("-")) {
+          return (
+            <Box key={i} flexDirection="row">
+              <Text color={theme.red} bold>{"-"}</Text>
+              <Text color={theme.red} wrap="truncate-end">{ln.slice(1)}</Text>
+            </Box>
+          )
+        }
+        // Context lines: very dimmed so +/- stand out
+        return <Text key={i} color={theme.overlay} wrap="truncate-end">{ln}</Text>
+      })}
     </>
   )
 }

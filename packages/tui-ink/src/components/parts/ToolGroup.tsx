@@ -4,6 +4,7 @@ import type { ToolPart as ToolPartSDK } from "@opencode-ai/sdk/v2"
 import { useTheme } from "../../theme-context"
 import { toolKind } from "../../utils/toolKind"
 import { groupState, groupTitle } from "../../utils/toolGroup"
+import { shortPath } from "./ToolPart"
 
 interface Props {
   parts: ToolPartSDK[]
@@ -24,7 +25,12 @@ export const ToolGroup = React.memo(function ToolGroup({ parts, open, overview }
   const kid = toolKind(first.tool, theme)
   const state = groupState(parts)
   const icon = state === "error" ? "✗" : state === "running" ? "◎" : "✓"
-  const color = state === "error" ? theme.red : state === "running" ? theme.yellow : theme.green
+  // Kind color while running; green on completion; red on error.
+  const iconColor =
+    state === "completed" ? theme.green :
+    state === "error" ? theme.red :
+    kid.color
+
   const total = parts.reduce((sum, part) => {
     if (!("time" in part.state)) return sum
     const end = "end" in part.state.time ? part.state.time.end : Date.now()
@@ -36,10 +42,9 @@ export const ToolGroup = React.memo(function ToolGroup({ parts, open, overview }
       <Box flexDirection="row" justifyContent="space-between">
         <Box flexDirection="row" gap={1} flexShrink={1}>
           <Text color={theme.overlay}>{overview ? " " : open ? "▾" : "▸"}</Text>
-          <Text color={color}>{icon}</Text>
-          <Text color={kid.color}>{kid.icon}</Text>
+          <Text color={iconColor}>{icon}</Text>
           <Text color={theme.overlay} wrap="truncate-end">
-            {groupTitle(parts)}
+            {shortPath(groupTitle(parts))}
           </Text>
         </Box>
         <Text color={theme.overlay}>{total > 0 ? dur(total) : ""}</Text>
@@ -47,29 +52,24 @@ export const ToolGroup = React.memo(function ToolGroup({ parts, open, overview }
       {!overview && open && (
         <Box paddingLeft={4} flexDirection="column">
           {parts.map((part) => {
-            const state = part.state.status
-            const icon = state === "error" ? "✗" : state === "running" ? "◎" : state === "completed" ? "✓" : "◌"
-            const color =
-              state === "error"
-                ? theme.red
-                : state === "running"
-                  ? theme.yellow
-                  : state === "completed"
-                    ? theme.green
-                    : theme.overlay
+            const s = part.state.status
+            const icon = s === "error" ? "✗" : s === "running" ? "◎" : s === "completed" ? "✓" : "◌"
+            const iconColor =
+              s === "completed" ? theme.green :
+              s === "error" ? theme.red :
+              kid.color
             const time =
               "time" in part.state
                 ? dur(("end" in part.state.time ? part.state.time.end : Date.now()) - part.state.time.start)
                 : ""
-            const title = "title" in part.state && part.state.title ? part.state.title : part.tool
+            const rawTitle = "title" in part.state && part.state.title ? part.state.title : part.tool
 
             return (
               <Box key={part.id} flexDirection="row" justifyContent="space-between">
                 <Box flexDirection="row" gap={1} flexShrink={1}>
-                  <Text color={color}>{icon}</Text>
-                  <Text color={kid.color}>{kid.icon}</Text>
+                  <Text color={iconColor}>{icon}</Text>
                   <Text color={theme.overlay} wrap="truncate-end">
-                    {title}
+                    {shortPath(rawTitle)}
                   </Text>
                 </Box>
                 <Text color={theme.overlay}>{time}</Text>

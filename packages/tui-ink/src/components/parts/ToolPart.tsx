@@ -10,12 +10,15 @@ interface Props {
   part: ToolPartSDK
 }
 
-const STAT = {
-  pending: { icon: "◌", color: "overlay" },
-  running: { icon: "◎", color: "yellow" },
-  completed: { icon: "✓", color: "green" },
-  error: { icon: "✗", color: "red" },
-} as const
+// Status icon — letter is fixed, color comes from the tool kind so one glyph
+// communicates both what it does (color) and what state it's in (symbol).
+// Completed tools override to green regardless of kind.
+const STAT_ICON: Record<string, string> = {
+  pending: "◌",
+  running: "◎",
+  completed: "✓",
+  error: "✗",
+}
 
 function cut(text: string, max: number) {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`
@@ -65,17 +68,48 @@ function looksLikeDiff(text: string) {
   return text.includes("@@") || text.startsWith("---") || text.startsWith("diff ")
 }
 
+// Shorten absolute paths with 3+ segments to …/last/two for readability.
+// "/Users/bhaskar/proj/src/index.ts" → "/…/src/index.ts"
+export function shortPath(s: string): string {
+  return s.replace(/\/[^\s,;|]+/g, (path) => {
+    const parts = path.split("/").filter(Boolean)
+    if (parts.length <= 2) return path
+    return `/…/${parts.slice(-2).join("/")}`
+  })
+}
+
 interface DiffLineProps {
   row: string
   theme: Theme
 }
 
+// Gutter-style diff rendering: symbol in its own column, content starts clean.
+// Context lines recede (overlay), additions pop (green), deletions pop (red).
 function DiffLine({ row, theme }: DiffLineProps) {
-  if (row.startsWith("+") && !row.startsWith("+++")) return <Text color={theme.green}>{row}</Text>
-  if (row.startsWith("-") && !row.startsWith("---")) return <Text color={theme.red}>{row}</Text>
-  if (row.startsWith("@@")) return <Text color={theme.cyan}>{row}</Text>
-  if (row.startsWith("---") || row.startsWith("+++")) return <Text color={theme.overlay}>{row}</Text>
-  return <Text color={theme.subtext}>{row}</Text>
+  if (row.startsWith("+++") || row.startsWith("---")) {
+    return <Text color={theme.overlay} dimColor wrap="truncate-end">{row}</Text>
+  }
+  if (row.startsWith("@@")) {
+    return <Text color={theme.cyan} dimColor wrap="truncate-end">{row}</Text>
+  }
+  if (row.startsWith("+")) {
+    return (
+      <Box flexDirection="row">
+        <Text color={theme.green} bold>{"+"}</Text>
+        <Text color={theme.green} wrap="truncate-end">{row.slice(1)}</Text>
+      </Box>
+    )
+  }
+  if (row.startsWith("-")) {
+    return (
+      <Box flexDirection="row">
+        <Text color={theme.red} bold>{"-"}</Text>
+        <Text color={theme.red} wrap="truncate-end">{row.slice(1)}</Text>
+      </Box>
+    )
+  }
+  // Context line: very dimmed so +/- lines visually pop
+  return <Text color={theme.overlay} wrap="truncate-end">{row}</Text>
 }
 
 // Pure helper: expanded when user explicitly opened (collapsed=false), or auto-expanded
@@ -92,24 +126,29 @@ export const ToolPart = React.memo(function ToolPart({ part }: Props) {
   const collapsed = useAppStore((s) => s.collapsedTools[part.id])
   const focusMode = useAppStore((s) => s.focusMode)
   const state = part.state
-  const stat = STAT[state.status]
+  const icon = STAT_ICON[state.status] ?? "◌"
   const kid = toolKind(part.tool, theme)
   const open = focusMode ? false : isOpen(state.status, collapsed)
   const sum = span(state.input)
-  const title = "title" in state && state.title ? state.title : sum ? `${part.tool} ${sum}` : part.tool
+  const rawTitle = "title" in state && state.title ? state.title : sum ? `${part.tool} ${sum}` : part.tool
+  const title = shortPath(rawTitle)
   const time = "time" in state ? dur(state.time.start, "end" in state.time ? state.time.end : undefined) : ""
   const maxCols = Math.max(40, (process.stdout.columns ?? 120) - 6)
+
+  // Status icon color: kind color while running/pending (communicates what it's doing),
+  // green on success, red on error (completion state overrides).
+  const iconColor =
+    state.status === "completed" ? theme.green :
+    state.status === "error" ? theme.red :
+    kid.color
 
   return (
     <Box marginTop={0} paddingLeft={3} flexDirection="column" flexShrink={0}>
       <Box flexDirection="row" justifyContent="space-between">
         <Box flexDirection="row" gap={1} flexShrink={1}>
           <Text color={theme.overlay}>{open ? "▾" : "▸"}</Text>
-          <Text color={theme[stat.color]}>{stat.icon}</Text>
-          <Text color={kid.color}>{kid.icon}</Text>
-          <Text color={theme.overlay} wrap="truncate-end">
-            {title}
-          </Text>
+          <Text color={iconColor}>{icon}</Text>
+          <Text color={theme.overlay} wrap="truncate-end">{title}</Text>
         </Box>
         <Text color={theme.overlay}>{time}</Text>
       </Box>
@@ -117,7 +156,8 @@ export const ToolPart = React.memo(function ToolPart({ part }: Props) {
         (state.status === "error" ? (
           <Box marginTop={1} paddingLeft={1} borderLeft={true} borderColor={theme.red} flexDirection="column">
             <Text wrap="wrap" color={theme.subtext}>
-              {truncLines(state.error, maxCols, 30)}
+              {/* Errors: 3 lines max — enough to diagnose, doesn't dominate */}
+              {truncLines(state.error, maxCols, 3)}
             </Text>
           </Box>
         ) : state.status === "completed" ? (
@@ -137,7 +177,7 @@ export const ToolPart = React.memo(function ToolPart({ part }: Props) {
                   {visible.map((row, i) => (
                     <DiffLine key={i} row={row} theme={theme} />
                   ))}
-                  {extra > 0 && <Text color={theme.overlay}>… {extra} more lines</Text>}
+                  {extra > 0 && <Text color={theme.overlay} dimColor>… {extra} more lines</Text>}
                 </Box>
               )
             }

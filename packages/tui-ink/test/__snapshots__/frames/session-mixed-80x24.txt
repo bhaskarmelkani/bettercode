@@ -6,7 +6,7 @@ bettercode ─ ⎇ feat/ui-snapshots                                           r
      ◆ This first pass focuses on static frames that expose the main visual
        structure: header, transcript, dock, prompts, and status lane.
 
-   build · gpt-5.4 · 1.4s · 2.5k tokens
+   build · gpt-5.4                                            1.4s · 2.5k tokens
 
      ▸ edits 2 files +3 -2   ctrl+g: expand
 

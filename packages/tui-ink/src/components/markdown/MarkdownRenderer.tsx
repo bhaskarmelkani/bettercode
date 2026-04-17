@@ -92,7 +92,7 @@ export function MarkdownRenderer({ text, bold }: Props) {
         out.push(
           <Box key={id} marginTop={1} flexDirection="column" flexShrink={0}>
             {items.map((item, idx) => {
-              const mark = tok.ordered ? `${idx + 1}.` : "•"
+              const mark = tok.ordered ? `${idx + 1}.` : "·"
               const body = item.tokens?.length ? (
                 <Text color={theme.text} wrap="wrap">
                   <InlineText tokens={item.tokens} />
